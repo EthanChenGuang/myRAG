@@ -12,7 +12,7 @@
    `cached_gist` use a second copy of the base model as guide; `--matryoshka` wraps the loss with the recipe's dims.
 4. Writes into <modeldir>: the model, training-config.json (the effective TrainingRunConfig), training-report.json
    (TrainingRunReport; training_config_sha256 is the sha256 of training-config.json) and probe.json (ProbeSet: the three
-   fixed probe texts embedded with the trained model and the query prompt, unit length).
+   fixed probe texts embedded with the trained model, each with the prompt of its PROBE_ROLES role, unit length).
 
 Names and parameters are those of sentence-transformers 6.2.0 (check_signatures verifies them against the installed
 library). Exit codes: 0 done, 1 kit integrity, 2 usage or host mismatch, 3 training failed. Output carries ids, counts and
@@ -35,6 +35,7 @@ from typing import Any, TextIO
 import numpy as np
 from rag_sidecar.contracts.finetune import (
     FINETUNE_DIMS,
+    PROBE_ROLES,
     PROBE_TEXTS,
     BaseModelSpec,
     FinetunePair,
@@ -395,17 +396,23 @@ def detect_device() -> tuple[str, bool]:
 
 
 def probe_set(model: Any, base: BaseModelSpec) -> ProbeSet:
-    vectors = model.encode(
-        list(PROBE_TEXTS),
-        prompt=base.query_prompt or None,
-        normalize_embeddings=True,
-        convert_to_numpy=True,
-        show_progress_bar=False,
-    )
-    matrix = np.asarray(vectors, dtype=np.float64)
+    """Each probe text embedded with the prompt of its PROBE_ROLES role, as the slot provider's probe check sends it (D-24)."""
+    prompts = {"query": base.query_prompt, "document": base.document_prompt}
+    rows = [
+        model.encode(
+            [text],
+            prompt=prompts[role],
+            normalize_embeddings=True,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )[0]
+        for role, text in zip(PROBE_ROLES, PROBE_TEXTS, strict=True)
+    ]
+    matrix = np.asarray(rows, dtype=np.float64)
     matrix = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
     return ProbeSet(
         texts=list(PROBE_TEXTS),
+        roles=PROBE_ROLES,
         query_prompt=base.query_prompt,
         document_prompt=base.document_prompt,
         vectors=[[float(x) for x in row] for row in matrix],

@@ -14,7 +14,7 @@ const PROBE_DIMS = 1024;
 const UNIT_TOLERANCE = 1e-3;
 
 export const FINETUNE_OFF_MESSAGE =
-  'RAG_FINETUNE is off: the fine-tune commands refuse (only ft-consent list and ft-models list run); set RAG_FINETUNE=on to use them.';
+  'RAG_FINETUNE is off: the fine-tune commands refuse (only ft-consent list, ft-models list and ft-consent revoke run); set RAG_FINETUNE=on to use them.';
 
 export function isFinetuneEnabled(): boolean {
   return env.RAG_FINETUNE === 'on';

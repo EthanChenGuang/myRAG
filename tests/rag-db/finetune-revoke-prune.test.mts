@@ -58,7 +58,7 @@ function card(id: string, tenantKeys: string[]): Record<string, unknown> {
     document_prompt: DOCUMENT_PROMPT,
     offline: { passed: true, noise_band: 0.01, reasons: [], deltas: [], models: { base: model, production: model, finetuned: model } },
     status: 'candidate',
-    probe: { texts: PROBE_TEXTS, query_prompt: QUERY_PROMPT, document_prompt: DOCUMENT_PROMPT, vectors },
+    probe: { texts: PROBE_TEXTS, roles: [...ROLES], query_prompt: QUERY_PROMPT, document_prompt: DOCUMENT_PROMPT, vectors },
     artifact_uri: `s3://models-bucket/${id}`,
   };
 }

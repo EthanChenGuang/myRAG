@@ -5682,6 +5682,12 @@
         "near_duplicate": 1,
         "verbatim_copy": 2
       },
+      "dropped_by_language": {
+        "en": {
+          "near_duplicate": 1,
+          "verbatim_copy": 2
+        }
+      },
       "judge_skipped": false,
       "kept": 24,
       "round_trip": "not_applied"
@@ -8049,6 +8055,11 @@
       "probe": {
         "document_prompt": "passage: ",
         "query_prompt": "query: ",
+        "roles": [
+          "query",
+          "document",
+          "query"
+        ],
         "texts": [
           "Probe sentence one: a short neutral statement used to verify the embedding endpoint.",
           "探针句二：用于核对向量接口的一句中性短文。",
@@ -12214,6 +12225,11 @@
     "ProbeSet": {
       "document_prompt": "passage: ",
       "query_prompt": "query: ",
+      "roles": [
+        "query",
+        "document",
+        "query"
+      ],
       "texts": [
         "Probe sentence one: a short neutral statement used to verify the embedding endpoint.",
         "探针句二：用于核对向量接口的一句中性短文。",

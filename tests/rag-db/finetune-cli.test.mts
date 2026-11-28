@@ -46,7 +46,7 @@ function card(id: string, scope: 'deployment' | 'tenant', tenantKeys: string[], 
     document_prompt: DOCUMENT_PROMPT,
     offline: metrics(),
     status: 'candidate',
-    probe: { texts: PROBE_TEXTS, query_prompt: QUERY_PROMPT, document_prompt: DOCUMENT_PROMPT, vectors },
+    probe: { texts: PROBE_TEXTS, roles: [...ROLES], query_prompt: QUERY_PROMPT, document_prompt: DOCUMENT_PROMPT, vectors },
     artifact_uri: `s3://models-bucket/${id}`,
     ...overrides,
   };
@@ -174,7 +174,8 @@ describe('rag:embedding ft-* commands over the fine-tune registry', () => {
     await fixture.db.query("UPDATE embedding_profiles SET eval_evidence = '{}'::jsonb, status = 'active' WHERE id = $1", [SLOT_A]);
     try {
       const revoked = await run('ft-consent', 'revoke', TENANT_A);
-      assert.equal(revoked.code, 0, revoked.text);
+      assert.notEqual(revoked.code, 0, `a tainted ACTIVE slot fails the revoke: ${revoked.text}`);
+      assert.equal((await versionRow(VERSION_A))?.status, 'tainted', 'the revoke and the taint are still recorded');
       assert.match(revoked.text, /ACTIVE/);
       const rollback = revoked.text.indexOf('npm run rag:embedding -- rollback');
       const clear = revoked.text.indexOf(`npm run rag:embedding -- ft-clear ${SLOT_A}`);
@@ -182,6 +183,21 @@ describe('rag:embedding ft-* commands over the fine-tune registry', () => {
     } finally {
       await fixture.db.query("UPDATE embedding_profiles SET status = 'available' WHERE id = $1", [SLOT_A]);
       await fixture.db.query("UPDATE embedding_profiles SET status = 'active' WHERE id = 'openai-3-small-1536'");
+    }
+  });
+
+  test('with RAG_FINETUNE off revoke still records the revocation and taints the versions', async () => {
+    await registerAndBind();
+    switchOn = false;
+    try {
+      const revoked = await run('ft-consent', 'revoke', TENANT_A);
+      assert.equal(revoked.code, 0, revoked.text);
+      assert.doesNotMatch(revoked.text, /RAG_FINETUNE is off/);
+      assert.match(revoked.text, new RegExp(`tainted.*${VERSION_A}`));
+      assert.equal((await versionRow(VERSION_A))?.status, 'tainted');
+      assert.equal((await rows('SELECT scope FROM rag_finetune_consent WHERE tenant_key = $1', [TENANT_A]))[0]?.scope, 'none');
+    } finally {
+      switchOn = true;
     }
   });
 
@@ -217,7 +233,7 @@ describe('rag:embedding ft-* commands over the fine-tune registry', () => {
       card('ft-widget-model-u3', 'deployment', [TENANT_A], { artifact_uri: 's3://models-bucket/x#frag' }),
       card('ft-widget-model-u4', 'deployment', [TENANT_A], { dims: 768 }),
       card('ft-widget-model-u5', 'tenant', [TENANT_A, TENANT_B]),
-      card('ft-widget-model-u6', 'deployment', [TENANT_A], { probe: { texts: PROBE_TEXTS, query_prompt: 'other: ', document_prompt: DOCUMENT_PROMPT, vectors: [[1], [1], [1]] } }),
+      card('ft-widget-model-u6', 'deployment', [TENANT_A], { probe: { texts: PROBE_TEXTS, roles: [...ROLES], query_prompt: 'other: ', document_prompt: DOCUMENT_PROMPT, vectors: [[1], [1], [1]] } }),
     ]) {
       const result = await run('ft-models', 'register', writeCard(bad));
       assert.equal(result.code, 2, `${String(bad.id)}: ${result.text}`);
@@ -320,11 +336,10 @@ describe('rag:embedding ft-* commands over the fine-tune registry', () => {
     assert.match(other.text, /probe failed: unconfigured/);
   });
 
-  test('with RAG_FINETUNE off every ft-* command except the two lists refuses before any RPC', async () => {
+  test('with RAG_FINETUNE off every ft-* command except the two lists and revoke refuses before any RPC', async () => {
     switchOn = false;
     for (const argv of [
       ['ft-consent', 'grant', TENANT_A, '--ref', 'TICKET-1006'],
-      ['ft-consent', 'revoke', TENANT_A],
       ['ft-models', 'register', writeCard(card('ft-widget-model-off', 'deployment', [TENANT_A]))],
       ['ft-models', 'retire', VERSION_A],
       ['ft-bind', SLOT_A, VERSION_A],

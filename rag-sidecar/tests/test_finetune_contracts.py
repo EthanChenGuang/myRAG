@@ -49,6 +49,7 @@ def _offline(passed: bool = True) -> dict:
 def _probe() -> dict:
     return {
         "texts": list(ft.PROBE_TEXTS),
+        "roles": list(ft.PROBE_ROLES),
         "query_prompt": "query: ",
         "document_prompt": "passage: ",
         "vectors": [UNIT, UNIT, UNIT],
@@ -349,6 +350,17 @@ def test_probe_set_shape():
         ft.ProbeSet.model_validate({**_probe(), "vectors": [UNIT, UNIT, [0.5] + [0.0] * 1023]})
 
 
+def test_probe_roles_are_fixed_and_required():
+    assert ft.PROBE_ROLES == ("query", "document", "query")
+    for roles in (["query", "query", "query"], ["document", "query", "query"], ["query", "document"]):
+        with pytest.raises(ValidationError):
+            ft.ProbeSet.model_validate({**_probe(), "roles": roles})
+    without = _probe()
+    del without["roles"]
+    with pytest.raises(ValidationError):
+        ft.ProbeSet.model_validate(without)
+
+
 def test_probe_texts_are_the_fixed_strings():
     assert len(ft.PROBE_TEXTS) == 3
     with pytest.raises(ValidationError):
@@ -364,17 +376,28 @@ def test_filter_report():
             "kept": 5,
             "dropped": {"verbatim_copy": 2, "not_answerable": 1},
             "by_language": {"en": {"kept": 5, "dropped": 3}},
+            "dropped_by_language": {"en": {"verbatim_copy": 2, "not_answerable": 1}},
             "round_trip": "not_applied",
             "judge_skipped": False,
         }
     )
     assert report.dropped["verbatim_copy"] == 2
+    assert report.dropped_by_language["en"]["not_answerable"] == 1
+    base = report.model_dump(mode="json")
+    for bad in (
+        {"en": {"verbatim_copy": 1, "not_answerable": 1}},
+        {"en": {"verbatim_copy": 2, "not_answerable": 1}, "zh": {"shape": 0}},
+        {"en": {"verbatim_copy": 3}},
+    ):
+        with pytest.raises(ValidationError):
+            ft.FilterReport.model_validate({**base, "dropped_by_language": bad})
     with pytest.raises(ValidationError):
         ft.FilterReport.model_validate(
             {
                 "kept": 0,
                 "dropped": {"made_up_reason": 1},
                 "by_language": {},
+                "dropped_by_language": {},
                 "round_trip": "not_applied",
                 "judge_skipped": True,
             }
