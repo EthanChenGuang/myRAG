@@ -110,7 +110,7 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-27T22:59:31Z",
+  "generated_at": "2026-11-28T00:39:15Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
@@ -134,7 +134,7 @@
     },
     {
       "path": "config/rag/language-packs.json",
-      "sha256": "63dcc385901612163225bb09264cfa57848acee914cb929815d49f31d1f80852"
+      "sha256": "57a2d55903e6f0cc71cd4d68f4b168e73bbfd30750e4940e9ac64ef7f706ee72"
     }
   ],
   "length_buckets": {
