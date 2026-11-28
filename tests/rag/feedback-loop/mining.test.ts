@@ -143,6 +143,9 @@ describe('runMining (D-13, D-15)', () => {
         zero_results: 0,
         low_score: 2,
         no_source_opened: 1,
+        claim_unsupported: 0,
+        calc_mismatch: 0,
+        calc_unverified: 0,
       },
     });
     expect(byHash.get(tenantHash(TENANT_B))?.inserted).toBe(1);
@@ -154,6 +157,18 @@ describe('runMining (D-13, D-15)', () => {
       expect(text).not.toContain(key.slice(2));
     }
     expect(lines.filter((line) => line.startsWith('[Feedback Loop] mining'))).toHaveLength(1);
+  });
+
+  it('counts the answer-check reasons the newest mining function (0984) emits instead of failing with unexpected_result', async () => {
+    const fake = fakeClient([
+      { tenant_key: TENANT_A, reason: 'claim_unsupported', inserted: 1, tenant_inserted: 4 },
+      { tenant_key: TENANT_A, reason: 'calc_mismatch', inserted: 2, tenant_inserted: 4 },
+      { tenant_key: TENANT_A, reason: 'calc_unverified', inserted: 1, tenant_inserted: 4 },
+    ]);
+    const result = await runMining({}, { client: fake.client, env: ENABLED, now: () => NOW, log: () => {} });
+    expect(MiningRunResultSchema.safeParse(result).success).toBe(true);
+    expect(result.total_inserted).toBe(4);
+    expect(result.tenants?.[0].by_reason).toMatchObject({ claim_unsupported: 1, calc_mismatch: 2, calc_unverified: 1, feedback_negative: 0 });
   });
 
   it('hashes a tenant key to a sha256 prefix', () => {
