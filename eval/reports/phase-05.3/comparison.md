@@ -41,7 +41,7 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 | overall | 1.0000 | 1.0000 | 30 |
 | tag:link_injection | 1.0000 | 1.0000 | 12 |
 
-Recall@5 0.6709, Recall@10 0.6709, MRR 0.6399, correct refusal 1.0000, false refusal 0.2462, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.6843, Recall@10 0.6843, MRR 0.6480, correct refusal 1.0000, false refusal 0.2373, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -53,12 +53,12 @@ Recall@5 0.6709, Recall@10 0.6709, MRR 0.6399, correct refusal 1.0000, false ref
 |---|---|---|
 | latency_budget | analyze.p95_ms | 1.0000 |
 | latency_budget | assemble.p95_ms | 1.0000 |
-| latency_budget | embed.p95_ms | 3.0000 |
-| latency_budget | generation.p95_ms | 1.0000 |
+| latency_budget | embed.p95_ms | 6.0000 |
+| latency_budget | generation.p95_ms | 2.0000 |
 | latency_budget | legacy_rank.p95_ms | 0.0000 |
-| latency_budget | post_filter.p95_ms | 3.0000 |
-| latency_budget | retrieval_total.p95_ms | 17.0000 |
-| latency_budget | search.p95_ms | 12.0000 |
+| latency_budget | post_filter.p95_ms | 7.0000 |
+| latency_budget | retrieval_total.p95_ms | 36.0000 |
+| latency_budget | search.p95_ms | 27.0000 |
 
 ### off-ingest
 
@@ -87,7 +87,7 @@ Injection (all_off, report_only): 30 item(s), rules false positives 0.
 | overall | 1.0000 | 1.0000 | 30 |
 | tag:link_injection | 1.0000 | 1.0000 | 12 |
 
-Recall@5 0.7704, Recall@10 0.7790, MRR 0.6924, correct refusal 1.0000, false refusal 0.1459, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.7195, Recall@10 0.7256, MRR 0.6512, correct refusal 1.0000, false refusal 0.1921, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -99,15 +99,17 @@ Recall@5 0.7704, Recall@10 0.7790, MRR 0.6924, correct refusal 1.0000, false ref
 |---|---|---|
 | latency_budget | analyze.p95_ms | 1.0000 |
 | latency_budget | assemble.p95_ms | 1.0000 |
-| latency_budget | embed.p95_ms | 3.0000 |
-| latency_budget | exact_id_lookup.p95_ms | 11.0000 |
+| latency_budget | embed.p95_ms | 5.0000 |
+| latency_budget | exact_id_lookup.p95_ms | 23.0000 |
 | latency_budget | generation.p95_ms | 1.0000 |
 | latency_budget | legacy_rank.p95_ms | 0.0000 |
-| latency_budget | post_filter.p95_ms | 3.0000 |
-| latency_budget | retrieval_total.p95_ms | 28.0000 |
-| latency_budget | search.p95_ms | 14.0000 |
+| latency_budget | post_filter.p95_ms | 5.0000 |
+| latency_budget | retrieval_total.p95_ms | 55.0000 |
+| latency_budget | search.p95_ms | 28.0000 |
 
 ## Phase 5.3 gate state (plan 05.3-48)
+
+Recorded by plan 05.3-48 at its own commit, before train 40; the tables above were regenerated on train 40 (`rag_eval.phase_compare`, PASS) on a larger fixture set, so the item counts below are the 05.3-48 ones.
 
 Recorded from the CI-shaped runs of plan 05.3-48 on the same commit; the table numbers are read from each run's gate.json, nothing is edited by hand.
 
