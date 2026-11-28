@@ -10,6 +10,7 @@ import {
     type SyncRecordRow,
 } from '../source-deletions';
 import type { NangoFileRecord, SyncStats } from '../types';
+import { purgeTombstoneCheck, skipByTombstone } from '../purge-tombstone';
 import { isSharePointProvider, sharePointIntegrationKey, type SharePointProvider } from './config';
 import {
     GraphDeltaFeed,
@@ -286,6 +287,9 @@ async function ingestFile(
         stats.skipped++;
         return true;
     }
+    // D-35: an admin-purged file is not downloaded again; a failed lookup skips it and keeps the link uncommitted.
+    const tombstone = await purgeTombstoneCheck(userId, connectionId)(change.fileId);
+    if (skipByTombstone(tombstone, stats)) return tombstone === 'withdrawn';
     const metadata: Record<string, unknown> = {
         drive_id: change.driveId,
         ...(change.siteId ? { site_id: change.siteId } : {}),

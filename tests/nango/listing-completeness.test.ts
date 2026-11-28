@@ -53,6 +53,8 @@ vi.mock('@/lib/rag', async () => {
   const ingestScope = await vi.importActual<typeof import('@/lib/rag/tenant/ingest-scope')>('@/lib/rag/tenant/ingest-scope');
   const scopeModule = await vi.importActual<typeof import('@/lib/rag/tenant/scope')>('@/lib/rag/tenant/scope');
   return {
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: 'multi-tenant' }),
     scopeKey: scopeModule.scopeKey,
