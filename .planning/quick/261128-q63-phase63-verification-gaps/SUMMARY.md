@@ -121,7 +121,7 @@ migration was edited.
 | Gate | Result |
 |---|---|
 | `npx next typegen && npx tsc --noEmit -p tsconfig.json` | 0 errors (re-run after the last code change) |
-| `npx vitest run` (full: contracts.generated.ts and the rag index changed) | in progress at commit time; result recorded in the follow-up commit |
+| `npx vitest run` (full: contracts.generated.ts and the rag index changed) | pass, run in 4 foreground shards after a container restart lost the single run: 951 files, 17495 passed, 155 skipped, 0 failed |
 | vitest targeted: tests/nango/ (29 files), monitor-stale-index-drop, monitor-rules, feedback-loop/, agents-guide, access/connector-map-routes | all pass |
 | check-rag-boundary, check-config, check-language-literals, check-settings-classification, check-zod-isolation, check-migration-numbers | all 0 |
 | `npm run gen:schemas` then `git status` | no diff |
