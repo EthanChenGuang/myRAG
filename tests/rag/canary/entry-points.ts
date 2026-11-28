@@ -188,6 +188,19 @@ export async function embedRequest(
   return { refused: null, ...(await retrieve(resolved.scope, 'embed', question, config, { channel: 'embed' })) };
 }
 
+/**
+ * 07-39: one retrieval for a scope an entry point already resolved (tenant and, while RAG_DOC_ACCESS_GROUPS is on, access through
+ * resolveAccessScope as the routes do), through the same seam as the drivers above.
+ */
+export async function resolvedRequest(
+  scope: TenantScope,
+  profile: 'voice' | 'embed' | 'chat',
+  question: string,
+  config: EntryConfig,
+): Promise<EntryOutcome> {
+  return { refused: null, ...(await retrieve(scope, profile, question, config, profile === 'embed' ? { channel: 'embed' } : {})) };
+}
+
 /** The chat profile through the same seam, for the selection comparison with voice. */
 export async function chatRequest(scope: TenantScope, question: string, config: EntryConfig): Promise<EntryOutcome> {
   return { refused: null, ...(await retrieve(scope, 'chat', question, config)) };
