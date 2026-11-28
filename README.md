@@ -1,7 +1,7 @@
 # <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle;"> myRAG - Production-Ready AI Chatbot Platform
 
 <div align="center">
-  <h3>Build Unlimited RAG-Powered AI Chatbots in Minutes</h3>
+  <h3>Build Unlimited RAG-Powered AI Chatbots</h3>
 
   [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org)
   [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev)
@@ -62,7 +62,7 @@
 **Features:**
 - ✅ Shared knowledge base
 - ✅ User-isolated chats
-- ✅ Simple setup (~10 minutes)
+- ✅ Simple setup
 - ✅ Lower complexity
 
 [→ Setup Single-Tenant](#single-tenant-setup)
@@ -134,7 +134,6 @@ Are you building a SaaS product with multiple customers?
 | **Storage Quotas** | ❌ No | ✅ Per-organization |
 | **Subscriptions** | User-level | Organization-level |
 | **Team Invitations** | ❌ No | ✅ Email-based |
-| **Setup Time** | ~10 minutes | ~20 minutes |
 | **Database Tables** | 14 tables | 18 tables |
 | **Best For** | Single product/service | SaaS platforms |
 
@@ -149,7 +148,7 @@ Are you building a SaaS product with multiple customers?
 - **🖼️ Image RAG** - Upload images to your knowledge base with AI-generated captions for semantic retrieval
 - **🎯 RAG Behavior Modes** - Control how strictly the AI follows your knowledge base: Strict (KB only), Balanced (KB + supplements), Flexible (natural blend), or Bypass (disable RAG entirely)
 - **🔗 Nango Document Sync** - Connect Google Drive, Dropbox, and Notion via [Nango](https://nango.dev/docs) with automatic syncing, admin controls, and visual configuration
-- **🕷️ Web Scraping (Firecrawl)** - Scrape websites and automatically index content into RAG with intelligent document titling and instant tooltips
+- **🕷️ Web Scraping (Firecrawl)** - Scrape websites and automatically index content into RAG with intelligent document titling and tooltips
 - **📋 Configurable Source Citations** - Toggle source citation display in AI responses through the config UI
 
 ## <img src="./public/myRAG-logo.png" alt="myRAG" width="30" style="vertical-align: middle; margin-right: 8px;">Why myRAG?
@@ -158,9 +157,9 @@ Are you building a SaaS product with multiple customers?
 <tr>
 <td width="33%" align="center">
 
-**🚀 Ship in Minutes**
+**🚀 Ship with a Visual Config UI**
 
-Visual config UI lets you launch a production-ready chatbot in under 10 minutes
+Deploy with a few commands
 
 </td>
 <td width="33%" align="center">
@@ -213,7 +212,7 @@ Build unlimited chatbots for yourself or clients with full white-label support
 
 ### 📚 RAG System
 
-**HNSW-Optimized Vector Search** - Lightning-fast semantic search
+**HNSW-Optimized Vector Search** - Semantic search
 
 | Feature | Description |
 |:--------|:------------|
@@ -793,11 +792,11 @@ Built with amazing technologies:
 
 <div align="center">
   <h3><img src="./public/myRAG-logo.png" alt="myRAG" width="25" style="vertical-align: middle;"> Ready to Build Your AI Chatbot?</h3>
-  <p><strong>Get started in minutes with our visual configuration UI</strong></p>
+  <p><strong>Get started with our visual configuration UI</strong></p>
 
   [📖 Read Docs](#-documentation) • [🚀 Quick Start](#-quick-start)
 
   <br>
 
-  **Built with 🧡 for developers who ship fast**
+  **Built with 🧡 for developers who ship**
 </div>
