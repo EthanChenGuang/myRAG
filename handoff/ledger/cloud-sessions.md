@@ -1227,3 +1227,11 @@ Signatures were NOT covered by this; they are asked for separately.
 - 07:56Z p52-band DONE (exec/quick-41-p52-band 2f85de79). Not yet in t44: 4 pre-existing FixtureFloorMismatchError failures (tracer subset), and the same session is fixing them. OWNER DECISION 07:56Z (in person): accept the new floor and re-record the voice baseline (FR 0.004->0.038, zh R@5 0.960->0.918 from the eval-only floor refit); record it in 04.1 CONTEXT.
 - 08:57Z OWNER DECISION (in person, orchestrator session): "同意 都按你的建议" covers three items: (1) voice gate mode option 1, so voice entry runs in report mode and changes no threshold or metric (applied by session_01X342smYNpwSVSE1WndmTVc on debug/062-voice-far); (2) D-06 revision, where the query-layer refusal floor uses max(standalone, translated) behind an off switch, gated on unanswerable cross_lingual FAR, then a refusal recalibration (planner session_01X342smQJQDYvTa2xTftcoj -> exec/plan-d06-revision); (3) delete the orphan objects under chat-attachments/extracted-images/, EVAL first, then prod after the train-44 app deploy, list before delete, "跑" per project (owner desk queue item). Unsigned threats are NOT covered by this approval.
 - 08:4xZ Merged #143 (README, cfc738a6) and #144 (t43, 28db7a7b). Train 44 received: quick-44-t09, the 6 verify/* signature branches, 04.4-20, 06.2-30, quick-63-hardening (1015), p52 (edeec92d), UI fixes (76cccb63), deferred batch (d888192b), mustkeep (c429cb3b), 04.4-21 (0906). 04.4-22 is running, with its local-stats baselines held until after t44.
+
+## 2026-11-28 11:33Z — owner decision (in person, "按建议") — t44 #145 fixture floor
+- en-off-topic-context-002: revert D-30 relabel → above_threshold (train-43 band); tools only (golden bump, floor refit, baselines, characterizations).
+- XLG-01: pin its own explicit floor in the test run options; gate/global floor unchanged.
+- zh-implicit-condition-003 refused→answered (from p52): accepted.
+- Sent to t44 builder session_01X342smAooS1HV8nwgZKPf7.
+- Also: 04.4-22 done (exec/04.4-22 7db23702): gate FAIL (b) scanned recall en-scanned-001, not_flipped; archived. Prod: t38–t41 + 0989/0991 applied (ops/owner-actions a576467b0); t42/t43 pending 跑.
+- 1013 vs phase53-migrations harness fixed in t44 (5035e896).
