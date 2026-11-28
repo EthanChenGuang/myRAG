@@ -192,3 +192,17 @@
   - 0 INSERT/ALL policies on documents and document_chunks. RLS on for both.
   - An authenticated insert into documents is refused with 42501 (probe rolled back).
 - No data rows were written.
+
+## 2026-11-28 PROD train 40 (owner said "跑")
+- Project: ppvywaxrycaxrtrrditl. Applied in order, one section per call, verbatim from ops/sql/train40-live.sql.
+- md5(statements[1]) matches the file section for all 8:
+  - train40_0723_source_recheck 669988a38ae06c621fccb63af65f7989
+  - train40_0724_purge_citation_scrub b87013aac92c683dc47649d98692339a
+  - train40_0724_purge_citation_scrub_multi_tenant e543d3ef58d26cb743268ab4d1ba0eb5
+  - train40_0726_purge_audit 78984402044849f1d13a327a7a77ca92
+  - train40_0727_purge_lineage 1cc8c2f5fb360cffe3c1fcf6f9cd39fe
+  - train40_0986_tenant_doc_types_access ea66c56a72b53a22b9c993a72b0f44f8
+  - train40_0988_review_items_writers_access_sets 53a2e3fbbc88aa30a628c2f1b00b15ea
+  - train40_0410_r23_delta d75f31dfc9ee909f49e3bf7db4d040a5
+- Verify: one rag_tenant_doc_types(text,text[],boolean); rag_access_readiness ready=true, no reasons; 42 functions checked, none executable by anon/authenticated, all by service_role; rag_purge_audit RLS on, 0 policies.
+- DROPs: only the one the file describes (0986 drops the old rag_tenant_doc_types overloads; 0723 drops rag_source_recheck before recreating). No data deleted.
