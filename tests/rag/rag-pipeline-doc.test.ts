@@ -137,3 +137,59 @@ describe('README_RAG_PIPELINE.md content', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('README_RAG_PIPELINE.md revision-4 workflows', () => {
+  test.each([
+    '## Per-language monitoring',
+    '## Rollouts',
+    '## Language addition and removal',
+    '## Red-team run',
+    '### Purges',
+    '### Lexical parameters on external backends',
+    '### Source-of-truth recheck',
+    '### Access groups on external backends',
+    '### Decision-record numbers',
+  ])('has the heading %s', (heading) => {
+    expect(readDoc()).toMatch(new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+  });
+
+  test.each([
+    'npm run rag:rollout',
+    'npm run rag:languages',
+    'npm run rag:red-team',
+    'rebuild-lexical',
+    'rag_vector_sync_purge_status',
+    'rag_vector_sync_purge_reopen',
+    'stale_index_drop',
+    'rag_validate_chunks_for_groups',
+    '`access_groups`',
+    'RAG_DOC_ACCESS_GROUPS',
+    '/api/rag/admin/language-quality',
+    'language_drop',
+    'RAG_LANG_CONFIDENCE',
+    'calibrate-language-confidence.mts',
+    'RAG_ROLLOUTS',
+    'config/rag/rollout-policy.json',
+    'config/rag/price-table.json',
+    'RAG_LEXICAL_BM25_K1',
+    'RAG_LEXICAL_BM25_B',
+  ])('mentions %s', (fragment) => {
+    expect(readDoc()).toContain(fragment);
+  });
+
+  test('the revision-4 sections sit outside the generated region', () => {
+    const doc = readDoc();
+    const generated = doc.slice(doc.indexOf(START_MARKER), doc.indexOf(END_MARKER));
+    for (const fragment of ['npm run rag:rollout', 'npm run rag:red-team', 'rebuild-lexical', 'stale_index_drop']) {
+      expect(generated, fragment).not.toContain(fragment);
+    }
+  });
+
+  test('the contents list names every top-level section', () => {
+    const doc = readDoc();
+    const contents = doc.slice(doc.indexOf('## Contents'), doc.indexOf('## Sidecar'));
+    for (const title of ['Per-language monitoring', 'Rollouts', 'Language addition and removal', 'Red-team run']) {
+      expect(contents, title).toContain(`[${title}]`);
+    }
+  });
+});
