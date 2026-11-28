@@ -1139,3 +1139,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - Orchestrator decision (b): leave the provisional fixture record without the annotation blocks; the live 07-33 decide writes them. No budget is spent. The owner can overrule.
   - MORNING (owner): fill the null prices in config/rag/price-table.json before the 07-33 decide.
   - Lesson: eval outputs a later plan needs must be committed, not left in a gitignored eval/out.
+- 03:48Z PR #137 round 2 pushed (df75bb65). Product audit: every legacy write goes through service_role, so there is no blocker. Full rag-db, all 12 shards, 0 failures. Session archived. Waiting for CI.
