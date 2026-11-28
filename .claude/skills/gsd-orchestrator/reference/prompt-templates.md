@@ -16,7 +16,7 @@ The block tells the session to read the executor brief and follow it, to merge n
 
 ```
 用 /gsd-execute-phase 执行计划 <plan>，只做这一个计划。
-分支：从 origin/<base> 新建 exec/<plan>，用普通提交推送。
+分支：`git fetch origin <base> && git checkout -B exec/<plan> FETCH_HEAD`，然后确认 HEAD 以 <base-sha> 开头，用普通提交推送。
 [可选] 先 `git merge --no-ff origin/<dep-branch>`：这是编排者授权的依赖合并，有冲突时两边都保留，并记进 SUMMARY。
 完成标志：<plan>-SUMMARY.md 已提交并推送。
 要点：<stop points / decisions already made for the owner / known traps>
