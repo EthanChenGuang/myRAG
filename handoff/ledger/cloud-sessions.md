@@ -1100,3 +1100,8 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - It found 11 failures already on t40: purge-store-coverage x6 (8 tables missing from the inventory), eval-gate-mode-default x2, rag-settings-hash x1, decomposed-answer-key x2.
   - Told the t40 builder to fix them before opening its PR, and t41 to coordinate so only one fix is written.
   - Told 06.3-23 to merge the newer 06.3-29 head.
+- 02:20Z 06.2-35 DONE (exec/06.2-35 88c219bb: Auto model routing in chat and embed; D-20 still waits for the owner) and archived.
+- Dispatched the train 42 builder, session_01X342siEs3VjsUkzorcMEpb, on t41. Branches:
+  - superset branches: 06.3-29, 06.3-28, 04.4-17, 06.2-38, 06.2-35;
+  - 07-44, quick-06-cache-gaps, quick-61-gaps.
+  - Excluded: 05.2.1-23, 04.1-18-r2, 06.2-30.
