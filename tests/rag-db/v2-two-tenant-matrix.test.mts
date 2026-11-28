@@ -1126,6 +1126,40 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('scoring bm25, DF mode cluster (04.4-17): a cluster-ready tenant is served on chunks_cluster, a tenant without cluster statistics by raw BM25, each inside its own tenant', async () => {
+    const statsModule = await import('@/lib/rag/lexical/stats');
+    const a = tenant('a');
+    const env = { ...allOnEnv, ...PATH_ENV.dup_cluster, ...SCORING_ENV.bm25, RAG_LEXICAL_DF_MODE: 'cluster' };
+    depsModule.setRagDepsForTests({ ragEnv: () => env });
+    configModule.resetRagConfigForTests();
+    await asServiceRole(db(), 'SELECT public.rag_lexstats_cluster_enable($1)', [a.scopeKey]);
+    await asServiceRole(db(), 'SELECT public.rag_lexstats_rebuild($1)', [a.scopeKey]);
+    statsModule.resetLexstatsCacheForTests();
+    try {
+      for (const [label, code] of [
+        ['a', 'lexical_df_cluster'],
+        ['b', 'lexical_df_cluster_unavailable'],
+      ] as const) {
+        const where = `DF mode cluster, tenant ${label}`;
+        const callsBefore = edge.calls.length;
+        const { result } = await retrieve(await scopeFor('chat', label), 'chat', V2_EXACT_QUERY);
+        const calls = edge.calls.slice(callsBefore);
+        assertBm25Served('bm25', calls, result, where);
+        assert.ok(['ok', 'degraded'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
+        const detail = stage(result, 'search')?.detail ?? '';
+        assert.ok(detail.split(';').includes('lexical_scoring_bm25'), `${where}: ${detail}`);
+        assert.ok(detail.split(';').includes(code), `${where}: ${detail}`);
+        await assertOwnRows(label, result, where);
+        assertNoForeignText(label, { result, stages: result.stages, rerankRequests: [] }, where);
+      }
+    } finally {
+      await asServiceRole(db(), 'SELECT public.rag_lexstats_cluster_disable($1)', [a.scopeKey]);
+      statsModule.resetLexstatsCacheForTests();
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('the fixture edge saw no unsupported request', () => {
     assert.deepEqual(edge.errors, []);
   });
@@ -1245,6 +1279,64 @@ describe('the BM25 leg reads only the caller statistics: direct calls, score sta
       (error: unknown) => (error as { code?: string }).code === '55000',
       'a tenant without statistics is not served',
     );
+  });
+
+  test('DF mode cluster (04.4-17): with a clustered and an unclustered tenant both cluster-enabled, neither ranking moves when the other tenant clusters or deletes chunks', async () => {
+    const a = tenant('a');
+    const b = tenant('b');
+    const tokens = queries[1] as string[];
+    const clusterBm25 = (tenantKey: string) =>
+      asServiceRole<Bm25Row>(
+        db(),
+        `SELECT chunk_id::text AS chunk_id, lexical_score
+           FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL,
+                                              p_lexical_tokens => $3::text[], p_lexical_limit => 200, p_df_mode => 'cluster')
+          WHERE leg = 'lexical' ORDER BY rank`,
+        [tenantKey, V2_LEGACY_EMBEDDING_PROFILE, [...tokens]],
+      );
+    const newCluster = async (tenantKey: string): Promise<string> =>
+      (
+        await db().query<{ id: string }>('INSERT INTO public.rag_dup_clusters (tenant_key, embedding_profile_id) VALUES ($1, $2) RETURNING id', [
+          tenantKey,
+          V2_LEGACY_EMBEDDING_PROFILE,
+        ])
+      ).rows[0]!.id;
+    for (const key of [a.scopeKey, b.scopeKey]) {
+      await asServiceRole(db(), 'SELECT public.rag_lexstats_cluster_enable($1)', [key]);
+      await asServiceRole(db(), 'SELECT public.rag_lexstats_rebuild($1)', [key]);
+    }
+    try {
+      // Tenant a holds a cluster of five copies; tenant b holds none yet.
+      const copies = await ingest(a, Array.from({ length: 5 }, () => `${tokens.join(' ')} w7101 w7102`));
+      const aCluster = await newCluster(a.scopeKey);
+      await db().query('UPDATE document_chunks SET dup_cluster_id = $2::uuid WHERE id = ANY($1::uuid[])', [copies.chunkIds, aCluster]);
+      await compact(a.scopeKey);
+      const aBaseline = await clusterBm25(a.scopeKey);
+      const bBaseline = await clusterBm25(b.scopeKey);
+      assert.ok(aBaseline.length > 0 && bBaseline.length > 0, 'both tenants find their own chunks');
+      assert.deepEqual(await ownerKeys(aBaseline.map((row) => row.chunk_id)), [a.scopeKey]);
+      assert.deepEqual(await ownerKeys(bBaseline.map((row) => row.chunk_id)), [b.scopeKey]);
+
+      // b clusters copies of its own, then deletes them: a does not move.
+      const bCopies = await ingest(b, Array.from({ length: 8 }, () => `${tokens.join(' ')} w7201`));
+      const bCluster = await newCluster(b.scopeKey);
+      await db().query('UPDATE document_chunks SET dup_cluster_id = $2::uuid WHERE id = ANY($1::uuid[])', [bCopies.chunkIds, bCluster]);
+      await compact(b.scopeKey);
+      assert.deepEqual(await clusterBm25(a.scopeKey), aBaseline, 'a after b clusters');
+      await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [bCopies.chunkIds]);
+      await compact(b.scopeKey);
+      assert.deepEqual(await clusterBm25(a.scopeKey), aBaseline, 'a after b deletes');
+      assert.deepEqual(await clusterBm25(b.scopeKey), bBaseline, 'b is back at its baseline');
+
+      // a deletes its clustered copies: b does not move.
+      await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [copies.chunkIds]);
+      await compact(a.scopeKey);
+      assert.deepEqual(await clusterBm25(b.scopeKey), bBaseline, 'b after a deletes its cluster');
+      await assertClean(a.scopeKey, 'cluster mode, a');
+      await assertClean(b.scopeKey, 'cluster mode, b');
+    } finally {
+      for (const key of [a.scopeKey, b.scopeKey]) await asServiceRole(db(), 'SELECT public.rag_lexstats_cluster_disable($1)', [key]);
+    }
   });
 
   test("tenant a's ids and scores are bit-identical while tenant b ingests 50 chunks of a's tokens, updates 10 and deletes 10", async () => {

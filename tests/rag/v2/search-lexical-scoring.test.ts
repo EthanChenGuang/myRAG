@@ -13,7 +13,15 @@ import { createTraceCollector } from '@/lib/rag/trace/collector';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
-import { LEXICAL_BM25_FAILED, LEXICAL_SCORING_BM25, LEXICAL_STATS_UNAVAILABLE, lexicalScoringArg, runSearchStages } from '@/lib/rag/v2/stages/search';
+import {
+  LEXICAL_BM25_FAILED,
+  LEXICAL_DF_CLUSTER,
+  LEXICAL_DF_CLUSTER_UNAVAILABLE,
+  LEXICAL_SCORING_BM25,
+  LEXICAL_STATS_UNAVAILABLE,
+  lexicalScoringArg,
+  runSearchStages,
+} from '@/lib/rag/v2/stages/search';
 import { hit } from '../fusion/helpers';
 import { getRagDeps, resetRagDepsForTests } from '@/lib/rag/deps';
 import { adminWithRpc, fakeAssemblyAdmin, fakeEmbedder, installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
@@ -33,7 +41,11 @@ interface Harness {
 }
 
 /** outcome(req) is what the backend reports for a request that carries lexicalScoring. */
-function harness(env: Record<string, string>, outcome: (req: BackendSearchRequest) => LexicalScoringOutcome | undefined = () => 'bm25'): Harness {
+function harness(
+  env: Record<string, string>,
+  outcome: (req: BackendSearchRequest) => LexicalScoringOutcome | undefined = () => 'bm25',
+  dfOutcome: (req: BackendSearchRequest) => 'cluster' | 'cluster_unavailable' | undefined = () => undefined,
+): Harness {
   const requests: BackendSearchRequest[] = [];
   const translationRequests: BackendTranslationSearchRequest[] = [];
   const backend: RetrievalBackend = {
@@ -46,7 +58,8 @@ function harness(env: Record<string, string>, outcome: (req: BackendSearchReques
         lexical: req.lexicalLimit > 0 && req.lexicalTokens.length > 0 ? [hit('b', { rank: 1, lexicalScore: 1 })] : [],
       };
       const reported = req.lexicalScoring && req.lexicalLimit > 0 && req.lexicalTokens.length > 0 ? outcome(req) : undefined;
-      return reported ? { ...legs, meta: { denseMode: null, lexicalScoring: reported } } : legs;
+      const df = reported === 'bm25' && req.lexicalScoring?.dfMode === 'cluster' ? dfOutcome(req) : undefined;
+      return reported ? { ...legs, meta: { denseMode: null, lexicalScoring: reported, ...(df ? { lexicalDfMode: df } : {}) } } : legs;
     },
     searchTranslations: async (req) => {
       translationRequests.push(req);
@@ -173,6 +186,71 @@ describe('search stage lexical scoring (D-28, D-40)', () => {
     const { search } = await run(BM25, { translations: true });
     expect(search?.detail?.split(';')).toContain(LEXICAL_STATS_UNAVAILABLE);
     expect(search?.detail?.split(';').filter((code) => code.startsWith('lexical_')).length).toBe(1);
+  });
+});
+
+describe('search stage lexical DF mode (04.4-17, D-49)', () => {
+  const CLUSTER = { ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' };
+
+  beforeEach(() => {
+    uninstallDeps();
+    resetRagConfigForTests();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetRagConfigForTests();
+    resetV2StartupForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('lexicalScoringArg carries dfMode cluster only when cluster is effective', () => {
+    expect(lexicalScoringArg(config(CLUSTER))).toEqual({ lexicalScoring: { mode: 'bm25', k1: 1.4, b: 0.6, dfMode: 'cluster' } });
+    expect(lexicalScoringArg(config({ ...BM25, RAG_LEXICAL_DF_MODE: 'raw' }))).toEqual({ lexicalScoring: { mode: 'bm25', k1: 1.4, b: 0.6 } });
+    expect(lexicalScoringArg(config({ ...BM25, RAG_LEXICAL_DF_MODE: 'cluster' }))).toEqual({ lexicalScoring: { mode: 'bm25', k1: 1.4, b: 0.6 } });
+  });
+
+  it('raw: requests and detail are those of today (no dfMode field, no DF code)', async () => {
+    const env = { ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'raw' };
+    const h = harness(env, () => 'bm25', () => 'cluster');
+    const { search } = await run(env, { terminology: true, bindings: true });
+    for (const req of h.requests) expect(req.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.4, b: 0.6 });
+    expect(search?.detail).toBe(LEXICAL_SCORING_BM25);
+  });
+
+  it('cluster: every search request (variants, terminology leg, binding legs) carries dfMode cluster', async () => {
+    const h = harness(CLUSTER, () => 'bm25', () => 'cluster');
+    const { search } = await run(CLUSTER, { terminology: true, bindings: true, translations: true });
+    expect(h.requests.length).toBeGreaterThanOrEqual(4);
+    for (const req of h.requests) expect(req.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.4, b: 0.6, dfMode: 'cluster' });
+    for (const req of h.translationRequests) expect('lexicalScoring' in req).toBe(false);
+    expect(search?.detail?.split(';')).toEqual(expect.arrayContaining([LEXICAL_SCORING_BM25, LEXICAL_DF_CLUSTER]));
+  });
+
+  it('cluster served everywhere: lexical_scoring_bm25 and lexical_df_cluster, status ok', async () => {
+    harness(CLUSTER, () => 'bm25', () => 'cluster');
+    const { search } = await run(CLUSTER, { terminology: true });
+    expect(search?.detail).toBe(`${LEXICAL_SCORING_BM25};${LEXICAL_DF_CLUSTER}`);
+    expect(search?.status).toBe('ok');
+  });
+
+  it('any cluster_unavailable call gives lexical_df_cluster_unavailable next to lexical_scoring_bm25; hits are still returned', async () => {
+    harness(CLUSTER, () => 'bm25', (req) => (req.denseVector === null ? 'cluster_unavailable' : 'cluster'));
+    const { search, output } = await run(CLUSTER, { terminology: true });
+    expect(search?.detail).toBe(`${LEXICAL_SCORING_BM25};${LEXICAL_DF_CLUSTER_UNAVAILABLE}`);
+    expect(search?.status).toBe('ok');
+    expect(output.fusedHits.some((row) => row.hit.chunkId === 'b')).toBe(true);
+  });
+
+  it('stats_unavailable under cluster: today\'s code, no DF code', async () => {
+    harness(CLUSTER, () => 'stats_unavailable', () => 'cluster');
+    const { search } = await run(CLUSTER, { terminology: true });
+    expect(search?.detail).toBe(LEXICAL_STATS_UNAVAILABLE);
   });
 });
 
