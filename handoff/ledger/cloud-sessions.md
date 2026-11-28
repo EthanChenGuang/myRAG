@@ -953,3 +953,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - PR #135 CI is running.
 - 00:18Z Owner asked why so many sessions. Census: 18 working children on page 1 (12 RUNNING, 6 idle waiting on suites or final reports: verify 6/6.1, UF-1, 07-37, ci-timeouts, 3.1.1), plus NF-1, the 3.2 verify, the t38/39/40 builders, the walkthrough desk and the owner desk. term-rpc archived (DONE b8ffdff9 -> train 41).
 - 00:20Z quick-config-ui-fixes DONE exec/quick-config-ui-fixes e0b67192 -> train 41. Bindings UI review 16->22/24, UI-SPEC signed. Languages panel: real bug fixed (the config server hard-coded verifiedAgainstActiveProfile:false). Archived.
+- 00:22Z OWNER approved the speed-up scheduling (5 points). Applied now:
+  1. Merge pipeline first: #135, then #136, the Medical preview, then t39/40/41.
+  2. Only security and blocker gaps get immediate quicks; medium/low gaps are batched per phase with /gsd-quick-batch.
+  3. No full local rag-db in quicks (executor brief updated).
+  4. /gsd-fast for trivial edits.
+  5. Plan executions are at least half of the running sessions.

@@ -35,13 +35,18 @@ Rules:
 - Commits: atomic, with explicit paths and hooks on.
 - Never commit eval/fixtures/parse/*. Running eval/tests/test_parse_fixtures.py regenerates them; restore with `git checkout -- eval/fixtures/parse/`.
 
+Speed rules (owner decision 2026-11-28):
+- Report as soon as your gates pass. Never sit idle waiting on a long suite.
+- Trivial edits (docs, labels, one-line config) use /gsd-fast, not the full flow.
+- Medium/low findings outside your task go into your SUMMARY under "Deferred"; don't fix them now.
+
 Gates (owner decision 2026-11-26: targeted gates per plan; the merge train runs the full suite):
 Always:
 - `npx next typegen && npx tsc --noEmit -p tsconfig.json`, with 0 errors
 - `npx vitest run` on the test files you added or changed plus every test file that imports a module you changed (find them with `git grep -l` on the module paths); run the full `npx vitest run` only if you changed shared code under src/lib/rag/ core types, src/lib/env.ts or test setup.
 - `node scripts/ci/check-rag-boundary.mjs`, `node scripts/check-config.mjs`, `node scripts/ci/check-language-literals.mjs` and `node scripts/ci/check-settings-classification.mjs`
 Only when your change touches the area:
-- SQL/migrations or code calling RPCs: `node --import tsx --test tests/rag-db/*.test.mts` (or the subset for the tables/functions you touched, plus tests/rag-db/*grants* and *search-path* tests).
+- SQL/migrations or code calling RPCs: run ONLY the rag-db files for the tables/functions you touched, plus tests/rag-db/*grants*, *search-path* and schema-equality, in the foreground, both modes. Do NOT run the full tests/rag-db suite locally: the merge train's CI (12 balanced shards) covers it. Background jobs here die silently at about 30 minutes, so never leave a suite in the background and go idle.
 - tests/*.test.mts or scripts they cover: `node --import tsx --test` on those files.
 - .github/workflows: `uv run --all-extras --frozen --directory eval python ../scripts/ci/check-workflows.py`
 - Python: pytest in rag-sidecar and/or eval for the packages you touched (`-q` on the relevant test paths; full suite if you changed shared modules).
