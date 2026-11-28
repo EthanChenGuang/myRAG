@@ -1125,3 +1125,11 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     - 07-38: session_01X342sk..., base 07-25 + t41
   - MORNING (owner): test-split used 26 times against a budget of 25. The extra use came from a resume after a tool timeout, and the ledger is append-only. The owner acknowledges this or adjusts the budget.
   - 07-33 live regression needs QDRANT_URL/WEAVIATE_URL.
+- 03:30Z debug 44-scanned DONE (debug/44-scanned 5e637945) and archived.
+  - Root cause: local_bm25 pool-level statistics. Changing the candidate pool shifts avgdl and df, so en-scanned-001 swaps places with another chunk at rank 8/9. This is not a BM25 retrieval regression; with rerank=none, 14/14 pass. It is the same mechanism as the 4.2 flip.
+  - MORNING (owner), options:
+    - A (recommended): record it as a fixture reranker edge flip; no spec change.
+    - B: re-register the gate (b) ingest pair with rerank=none.
+    - C: root fix, local_bm25 uses corpus- or tenant-level statistics. Needs a separate plan, new baselines and a signature.
+    - D: OCR-tolerant normalization.
+- t42 interim: 3 branch-level test fixes made on the train (translation-seam, legacy-post-filter-sentinel, eval-route-query-layer). Sidecar 2955 pass.
