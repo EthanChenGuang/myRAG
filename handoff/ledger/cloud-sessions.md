@@ -1172,3 +1172,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 06:46Z verify 7 DONE (verify/07 cbfc67f7) and archived. SECURED. G1-G3, IW-1 and the pr-smoke split were sent to the t43 builder.
 - 06:56Z t43 progress: gates green so far. train43-live.sql (92c72ee6) has 0742-0745 and runs after train42-live. Waiting for the quick-63-gaps hash, the verify-7 fixes and the t42 merge.
 - 06:59Z secure-phase 5.1.1 DONE (SECURED) and archived. Dispatched quick-511-sec (T-07-77, mining reasons, tmp modes, static gate).
+- 07:01Z t42 PR #142 opened; subscribed. The 4.2 gate now FAILs on colloquial MRR 0.3344 < 0.3352 (n=21), which goes to the owner.
