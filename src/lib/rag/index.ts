@@ -3,6 +3,8 @@ export type { StageSpec, StageOutcome } from './pipeline';
 export { parseRetrievalFilters } from './query/filters';
 export { resolveScopesFilter, ScopeFilterError } from './query/scopes';
 export { AttributeFilterError, checkExplicitAttributeFilter } from './retrieval/attributes';
+export { deleteTenantRuleData } from './ingest/rules/tenant-delete';
+export type { TenantRuleDataDeleteResult } from './ingest/rules/tenant-delete';
 export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';

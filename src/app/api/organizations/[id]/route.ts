@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { requireMultiTenant } from '@/lib/deployment-mode';
 import { isPersonalOrganization } from '@/lib/auth/organization-handler';
 import { logger } from '@/lib/logger';
+import { deleteTenantRuleData } from '@/lib/rag';
 
 /**
  * GET /api/organizations/[id]
@@ -244,6 +245,16 @@ export async function DELETE(
     const supabaseAdmin = getSupabaseAdmin();
     if (!supabaseAdmin) {
       logger.error('API', 'Admin client not available for organization deletion');
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable' },
+        { status: 503 }
+      );
+    }
+
+    // 03.3 G5: the tenant's rule and attribute data first; on failure the organization stays so the owner can retry
+    const ruleData = await deleteTenantRuleData(`o:${id}`, request.signal);
+    if (!ruleData.ok) {
+      logger.error('API', `Tenant rule data delete failed for organization ${id}: ${ruleData.reason}`);
       return NextResponse.json(
         { error: 'Service temporarily unavailable' },
         { status: 503 }

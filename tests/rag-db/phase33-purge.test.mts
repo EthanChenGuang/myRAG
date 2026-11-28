@@ -300,6 +300,51 @@ for (const mode of MODES) {
       assert.deepEqual(second.map((row) => [row.relation, row.deleted]), TABLE_ORDER.map((table) => [table, 0]));
     });
 
+    test('deleteTenantRuleData (the organization delete path, G5) removes only the named tenant’s rule data and drops its cached lexicon', async () => {
+      for (const [name, value] of [
+        ['OPENAI_API_KEY', 'placeholder-openai-key'],
+        ['SUPABASE_SERVICE_ROLE_KEY', 'placeholder-service-role-key'],
+        ['NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:9'],
+        ['NEXT_PUBLIC_SUPABASE_ANON_KEY', 'placeholder-anon-key'],
+      ] as const) {
+        process.env[name] ||= value;
+      }
+      const savedMode = process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+      process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
+      const { serviceRoleRpc } = await import('../../eval/harness/two-tenant-v2.mts');
+      const deps = await import('../../src/lib/rag/ingest/deps');
+      const lexicon = await import('../../src/lib/rag/retrieval/attributes');
+      const { mintScope } = await import('../../src/lib/rag/tenant/scope');
+      const { deleteTenantRuleData } = await import('../../src/lib/rag/ingest/rules/tenant-delete');
+      const client = serviceRoleRpc(db);
+      deps.setIngestDepsForTests({ db: () => client as never });
+      try {
+        await seedRuleData(db, a.key);
+        if (b) await seedRuleData(db, b.key);
+        const beforeA = await tableCounts(db, a.key);
+        const beforeB = b ? await tableCounts(db, b.key) : null;
+        lexicon.resetAttributeLexiconForTests();
+        const scopeA = mode === 'single-tenant' ? mintScope('single', null, null) : mintScope('org', null, ORG_A);
+        await lexicon.attributeLexiconFor(scopeA, { client });
+        assert.equal(lexicon.attributeLexiconSizeForTests(), 1);
+
+        const result = await deleteTenantRuleData(a.key);
+        assert.deepEqual(result, { ok: true, deleted: beforeA });
+        assert.deepEqual(Object.values(await tableCounts(db, a.key)), TABLE_ORDER.map(() => 0));
+        if (b && beforeB) assert.deepEqual(await tableCounts(db, b.key), beforeB);
+        assert.equal(lexicon.attributeLexiconSizeForTests(), 0, 'the tenant lexicon cache is dropped');
+
+        assert.deepEqual(await deleteTenantRuleData('not-a-key'), { ok: false, reason: 'invalid_tenant_key' });
+        const foreign = mode === 'single-tenant' ? `o:${ORG_A}` : 's:default';
+        assert.deepEqual(await deleteTenantRuleData(foreign), { ok: false, reason: 'unavailable' });
+      } finally {
+        deps.resetIngestDepsForTests();
+        lexicon.resetAttributeLexiconForTests();
+        if (savedMode === undefined) delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+        else process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = savedMode;
+      }
+    });
+
     test('both functions reject a tenant key of the other deployment mode', async () => {
       for (const key of foreignKeysFor(mode)) {
         for (const [sql, params] of [
