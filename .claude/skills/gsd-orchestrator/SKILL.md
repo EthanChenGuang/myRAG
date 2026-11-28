@@ -223,3 +223,40 @@ Refresh RESUME-PROMPT and sessions-status whenever the picture changes a lot: a 
 6. Restart the owner desk, then the merge-train builders.
 7. Report to the owner: what was found, what restarted, and what needs them.
 8. Never assume the old account's approvals carry over to anything new. Only rules written in `standing-rules.md`, plus the owner's own words in the new session, count.
+
+## 12. First start on a new project (bootstrap)
+
+The owner sends the bootstrap prompt (`reference/prompt-templates.md` → "Bootstrap a new project"). Then you do the following, one step at a time, reporting after each.
+
+1. **Check GSD is present.** Look for `.claude/` and the GSD commands. If they are missing, ask the owner to install GSD in the repo, or confirm it is installed at user level.
+2. **Get the project into GSD.**
+   - No `.planning/`:
+     - existing code → `/gsd-onboard`, which runs `/gsd-map-codebase` and `/gsd-ingest-docs`;
+     - greenfield → `/gsd-new-project`.
+   - Either path then needs PROJECT, REQUIREMENTS and ROADMAP. The owner answers the product questions, you answer the technical ones.
+   - `.planning/` exists → `/gsd-progress` to read where things stand.
+3. **Create the ops branch** (e.g. `ops/orchestrator`) holding:
+   - `briefs/executor-brief.md`: trunk name, gates for this stack, migration numbering scheme (if the project has SQL), no-prod rule, report-to address, speed rules from §7;
+   - `briefs/train-builder-brief.md`;
+   - `handoff/standing-rules.md`: start with the owner's answers to the questions below;
+   - `handoff/ledger/`;
+   - `handoff/tools/` with a READY detector adapted to the project's plan layout;
+   - `handoff/RESUME-PROMPT.md`.
+   If the project needs owner-run prod actions, add an owner-actions branch with a queue file and `sql/`.
+4. **Ask the owner, once, as one short list, and record the answers in standing-rules:**
+   - Which decisions can I make for you (design/technical yes; product, prod, money, signatures no)?
+   - Trunk branch and deploy target. Who approves deploys and prod migrations?
+   - Is there an eval/staging environment executors may use? Which credentials exist?
+   - Model roles: which model for code, planning, review, docs?
+   - Parallelism: how many sessions at once, and the rate-limit plan?
+   - Report language and cadence.
+5. **Check the cloud environment:**
+   - network hosts the project needs;
+   - a setup script, so dependencies install on every new session;
+   - credentials for the hosts it calls, via the credential form only.
+   - Run the project's own gates once yourself, or with one session, to learn the real commands and durations. Write them into the executor brief.
+6. **Check CI once:**
+   - shards balanced and timeouts sane (§9);
+   - a required green check list that the merge trains use.
+7. **Start small:** run the READY detector, dispatch 2–4 plans, watch their reports, fix the brief from what they hit, then widen to the agreed parallelism.
+8. **Set the self-check** (every ~20 minutes) and start the ledger.

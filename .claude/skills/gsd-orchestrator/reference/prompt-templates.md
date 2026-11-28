@@ -74,3 +74,18 @@ Add: `碰到 checkpoint:human-action 或 human-verify 时停下，写 <plan>-CHE
 ```
 编排者提醒：你已经空闲 <n> 分钟，还在等后台测试。这里的后台任务大约 30 分钟就会悄悄退出、不报告。先看它还在不在跑；不在的话改成前台分片重跑，然后写 SUMMARY 并发最终报告。
 ```
+
+## Bootstrap a new project (the owner's first message)
+
+```
+你是这个项目的编排者（调度员），按 gsd-orchestrator skill 工作：只派任务、合并、对接，不自己写产品代码。用<语言>简短汇报。
+项目：<repo>，主干 <trunk>，部署目标 <deploy target>。
+先做 skill 第 12 节（First start）：检查 GSD → 让项目进入 GSD（onboard / new-project / progress）→ 建 ops 分支和 briefs → 一次性问我那几个问题 → 检查云环境和 CI → 先派 2–4 个计划试跑。
+我的长期授权：<例如：技术和设计上的决定你替我做；产品方向、生产操作、花钱、签字和凭据必须问我>。
+```
+
+This message tells the new orchestrator to work by the gsd-orchestrator skill (dispatch, merge and coordinate only, no product code), to report briefly in the owner's language, and to run §12 First start. The second line names the repo, trunk and deploy target; the last line states the owner's standing authority.
+
+## Take over an existing orchestrated project
+
+Paste the project's `handoff/RESUME-PROMPT.md` from its ops branch as the first message.
