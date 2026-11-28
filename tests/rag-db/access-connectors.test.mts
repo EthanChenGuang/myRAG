@@ -548,5 +548,18 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         await rejects(() => apply(DOC.other, []), /^document_not_found/, 'cross-tenant document');
       });
     }
+
+    test('the SharePoint and OneDrive providers are accepted by the mapping, the rules and the label writer (0747)', async () => {
+      for (const provider of ['sharepoint-online', 'one-drive']) {
+        const created = await mapSet({ principal: `synthetic-${provider}-group`, provider, group: fx.groupA });
+        assert.equal(created[0]?.outcome, 'created', `map ${provider}`);
+        await mapDelete(created[0]!.id);
+        const rule = await ruleSet({ provider, kind: 'domain', domain: 'example.org', enabled: false });
+        assert.ok(rule[0]?.id, `rule ${provider}`);
+        const applied = await apply(DOC.second, [], 'ok', { provider });
+        assert.ok(Array.isArray(applied.keys), `apply ${provider}`);
+      }
+      await rejects(() => mapSet({ principal: 'x', provider: 'sharepoint', group: fx.groupA }), /^invalid_provider/, 'other names stay refused');
+    });
   });
 }

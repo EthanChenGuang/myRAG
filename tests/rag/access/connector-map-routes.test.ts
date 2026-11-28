@@ -270,6 +270,16 @@ describe('connector mapping routes (single-tenant operator)', () => {
     expect(await again.json()).toEqual({ success: false, error: 'not_found' });
   });
 
+  it('accepts the SharePoint and OneDrive providers (0747) and passes them to the mapping function', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    for (const provider of ['sharepoint-online', 'one-drive']) {
+      const created = await createMap(loaded, driveGroup(GROUP_A, { provider, externalPrincipalId: `synthetic-${provider}-group` }));
+      expect(created.status).toBe(201);
+      expect(state.rpcCalls).toContainEqual(expect.objectContaining({ fn: 'rag_connector_map_set', args: expect.objectContaining({ p_provider: provider }) }));
+    }
+  });
+
   it('refuses malformed bodies before any call', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
