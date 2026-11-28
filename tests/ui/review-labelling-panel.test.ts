@@ -477,12 +477,23 @@ describe('review-labelling.js: case view (D-16, D-19)', () => {
   });
 });
 
+function expectNoHtmlSinks(source: string) {
+  expect(source).not.toContain('innerHTML');
+  expect(source).not.toContain('insertAdjacentHTML');
+}
+
 describe('review-labelling.js static guards', () => {
   it('uses no innerHTML, no browser storage and no Authorization header', () => {
     const source = fs.readFileSync(PANEL_FILE, 'utf8');
-    expect(source).not.toContain('innerHTML');
-    expect(source).not.toContain('insertAdjacentHTML');
+    expectNoHtmlSinks(source);
     expect(source).not.toMatch(/localStorage|sessionStorage|document\.cookie|Authorization/);
+  });
+
+  it('the HTML sink gate also catches outerHTML and insertAdjacentHTML, like the admin panel gate', () => {
+    const source = fs.readFileSync(PANEL_FILE, 'utf8');
+    for (const probe of ['\nnode.outerHTML = value;\n', "\nnode.insertAdjacentHTML('beforeend', value);\n", '\nnode.innerHTML = value;\n']) {
+      expect(() => expectNoHtmlSinks(source + probe), probe).toThrow();
+    }
   });
 
   it('is registered in index.html after injection-defense.js with its panel skeleton', () => {
