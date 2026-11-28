@@ -408,6 +408,16 @@ Phase 4.3 document access groups also hold on Weaviate and Qdrant. Every point c
 - **Re-validation**: hits are re-read with `rag_validate_chunks_for_groups`, which also requires the document's groups to overlap the caller's; admins and the switch off use the plain re-validation. A request whose access scope does not match what the adapter sent is refused (`access_filter_mismatch`).
 - **Upgrade**: migration 0742 adds the field to the sync rows and queues one tenant re-sync per enabled target; re-run 0742 after re-running 0702.
 
+### Local reranker statistics (`RAG_RERANK_LOCAL_STATS`)
+
+The local reranker (`local_bm25`, the no-key resolution of `RAG_RERANKER=auto` and the voice reranker) scores with BM25.
+
+- **`pool` (default)**: document frequency and average length come from the rerank candidates, so a change that moves the candidate pool can reorder the last context slots. Model `bm25-v2`.
+- **`tenant`** (needs `RAG_PIPELINE=v2`): each candidate is scored with the tenant's compacted lexical statistics for the chunk's own chunking profile and language, read once per rerank call through `rag_lexical_rerank_stats` (migration 0906, not folded into the setup files, service role only, tenant checked in SQL; it redefines no function, so no re-run rule). A chunk of another tenant gets no statistics. Model `bm25-v3-tenant`, reported only when tenant statistics served.
+- **Preconditions and fallback**: build the statistics with `npm run rag:lexstats -- enable` (publish and relex keep them compacted while `tenant` is on). A tenant without ready statistics, a failed read or a candidate without statistics is reranked with pool statistics for that request; it is never a refusal. The rank stage records `rerank_stats_tenant` or `rerank_stats_unavailable`.
+- **Refusal cells**: `local_bm25` scores are relative, so the threshold gate never applies a cell to it, in either mode; a future cell for `bm25-v2` would be stale for `bm25-v3-tenant` until `python -m rag_eval.calibrate refusal` recalibrates it.
+- **Status**: not flipped (`eval/decisions/04.4-local-rerank-stats.md`). The fixture gate removed every rerank order flip between the two lexical arms but failed the no-slice-drop gate on the scanned slice in ingest mode; the default changes only with the owner's signature.
+
 ## Evaluation workflow
 
 Every change to retrieval or answers is proven against a baseline before it ships. Commands run from `eval/` with `uv run python -m ...`, or from the root with `uv run --directory eval python -m ...`.
