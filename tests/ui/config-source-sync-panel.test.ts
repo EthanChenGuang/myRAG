@@ -37,7 +37,7 @@ function pausedRun(overrides: Row = {}): Row {
   return {
     id: RUN_B,
     found_at: '2026-11-20T09:00:00Z',
-    expires_at: '2026-11-21T09:00:00Z',
+    expires_at: '2099-01-01T09:00:00Z',
     candidate_count: 25,
     total_count: 40,
     file_names: ['file-a.pdf', 'file-b.pdf'],
@@ -177,7 +177,7 @@ describe('buildPausedRunView', () => {
     expect(view.expired).toBe(false);
     expect(view.body).toBe('Documents whose file is missing at the source: 25 of 40 (63%). That is above the 30% limit, so nothing was removed.');
     expect(view.foundAt.iso).toBe('2026-11-20T09:00:00Z');
-    expect(view.expiresAt.iso).toBe('2026-11-21T09:00:00Z');
+    expect(view.expiresAt.iso).toBe('2099-01-01T09:00:00Z');
     expect(view.names).toHaveLength(20);
     expect(view.filesSummary).toBe('Show files: 25');
     expect(view.filesMore).toBe('Not shown: 10');

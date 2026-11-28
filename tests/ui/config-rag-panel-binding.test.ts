@@ -20,6 +20,7 @@ const PANELS = [
   { file: 'translation-targets.js', rootId: 'rag-administration-translation', instance: 'translationTargetsPanel', deps: ['rag-ui.js'] },
   { file: 'identifier-patterns.js', rootId: 'rag-administration-identifiers', instance: 'identifierPatternsPanel', deps: ['rag-ui.js'] },
   { file: 'ingestion.js', rootId: 'rag-administration-ingestion', instance: 'ingestionPanel' },
+  { file: 'source-sync.js', rootId: 'rag-administration-source-sync', instance: 'sourceSyncPanel' },
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
   { file: 'embedding-bindings.js', rootId: 'rag-administration-bindings', instance: 'embeddingBindingsPanel' },
