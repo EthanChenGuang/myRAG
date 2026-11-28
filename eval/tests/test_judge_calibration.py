@@ -423,6 +423,20 @@ def test_run_with_a_missing_judge_key_prints_the_notice_and_exits_3(tmp_path: Pa
     assert target.read_bytes() == before
 
 
+def test_run_with_the_openrouter_route_asks_only_for_the_openrouter_key(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.delenv("CONFIDENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("RAG_EVAL_OPENAI_VIA", "openrouter")
+    target = _calibration_file(tmp_path)
+    code = main(_cli(tmp_path, _all_languages(60), "--calibration", str(target)))
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "OPENROUTER_API_KEY" in err and "OPENAI_API_KEY" not in err
+    monkeypatch.setenv("RAG_EVAL_OPENAI_VIA", "bogus")
+    assert main(_cli(tmp_path, _all_languages(60), "--calibration", str(target))) == 2
+
+
 def test_run_with_a_same_family_generator_is_refused(tmp_path: Path, _keys, capsys):
     cases = _all_languages(60)
     argv = _cli(tmp_path, cases)

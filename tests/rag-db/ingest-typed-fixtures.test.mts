@@ -164,7 +164,7 @@ describe('typed ingest fixtures through buildIngestFixtureDatabase', () => {
         return request;
       },
     });
-    const deps = { db: () => pgliteRpc(), signal: new AbortController().signal };
+    const deps = { db: () => pgliteRpc(), signal: new AbortController().signal, access: { mode: 'off' } as const };
     const zh = manifestEntry('invoice-zh').expected.invoice as { invoice_number: string; supplier: { name: string }; gross_total: string; issue_date: string };
     const en = manifestEntry('invoice-en').expected.invoice as typeof zh;
     const hitsZh = await findInvoices(

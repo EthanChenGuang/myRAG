@@ -16,6 +16,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const MIGRATION = 'supabase/migrations/0950_calc_review_reasons.sql';
 const STRATA_MIGRATION = 'supabase/migrations/0967_rag_review_item_strata.sql';
+// 0984 rebuilds both functions later in file order (access sets); re-running 0950 requires re-running it.
+const ACCESS_SETS_MIGRATION = 'supabase/migrations/0984_review_items_access_sets.sql';
 const CALC_REASONS = ['calc_mismatch', 'calc_unverified'];
 const ANSWER_REASONS_BEFORE = ['feedback_negative', 'groundedness_flagged', 'claim_unsupported'];
 const ITEM_REASONS_BEFORE = [
@@ -186,9 +188,10 @@ for (const mode of MODES) {
       }
     });
 
-    test('applying 0950 a second time succeeds and leaves the catalog unchanged', async () => {
+    test('applying 0950 and the later 0984 a second time succeeds and leaves the catalog unchanged', async () => {
       const once = await catalog(db);
       await db.exec(readMigration(MIGRATION));
+      await db.exec(readMigration(ACCESS_SETS_MIGRATION));
       assert.deepEqual(await catalog(db), once);
     });
 
@@ -216,7 +219,7 @@ for (const mode of MODES) {
     });
 
     test('the replaced functions keep their security attributes, empty search_path and service-role-only grants', async () => {
-      assert.deepEqual(await functionState(db, 'rag_enqueue_review_item(text, text, jsonb, jsonb)'), {
+      assert.deepEqual(await functionState(db, 'rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb)'), {
         anon: false,
         authenticated: false,
         service: true,

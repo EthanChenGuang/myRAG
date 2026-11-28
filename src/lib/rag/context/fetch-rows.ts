@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { readAnswerConfig } from '../generation/answer-config';
+import { accessTableFilter, withAccessGroups, type ScopeAccessFilter } from '../tenant/access-filter';
 import type { AssemblyCandidate, AssemblyDocumentRow } from './assemble';
 import { fetchVersionPairs, type VersionPairRow } from './version-conflicts';
 
@@ -18,6 +19,8 @@ export interface AssemblyRows {
 export interface FetchAssemblyRowsOptions {
   adminClient: SupabaseClient;
   signal: AbortSignal;
+  /** D-11: the request's access filter; a restricted document or chunk row is never read back for a caller without its group. */
+  access: ScopeAccessFilter;
   /** The request's tenant key; the supersession rows are read only with it (T-05.2-223). */
   tenantKey?: string;
 }
@@ -68,7 +71,7 @@ function unique(values: string[]): string[] {
 
 export async function fetchAssemblyRows(
   candidates: AssemblyCandidate[],
-  { adminClient, signal, tenantKey }: FetchAssemblyRowsOptions,
+  { adminClient, signal, access, tenantKey }: FetchAssemblyRowsOptions,
 ): Promise<AssemblyRows> {
   const documents = new Map<string, AssemblyDocumentRow>();
   const chunkMetadata = new Map<string, Record<string, any> | null>();
@@ -77,18 +80,19 @@ export async function fetchAssemblyRows(
   const documentIds = unique(candidates.map((candidate) => candidate.document_id));
   const chunkIds = unique(candidates.map((candidate) => candidate.chunk_id));
 
+  const keys = accessTableFilter(access);
   const select = assemblyDocumentSelect();
-  let documentResult = await adminClient.from('documents').select(select).in('id', documentIds).abortSignal(signal);
+  let documentResult = await withAccessGroups(adminClient.from('documents').select(select).in('id', documentIds), keys).abortSignal(signal);
   signal.throwIfAborted();
   const fallback = assemblyDocumentSelect({ versionColumns: false });
   if (documentResult.error && select !== fallback && isUnknownColumnError(documentResult.error)) {
     warnVersionColumnsMissing();
-    documentResult = await adminClient.from('documents').select(fallback).in('id', documentIds).abortSignal(signal);
+    documentResult = await withAccessGroups(adminClient.from('documents').select(fallback).in('id', documentIds), keys).abortSignal(signal);
     signal.throwIfAborted();
   }
   if (documentResult.error) throw new Error(`[RAG Assemble] documents lookup failed: ${documentResult.error.message}`);
 
-  const chunkResult = await adminClient.from('document_chunks').select('id, metadata').in('id', chunkIds).abortSignal(signal);
+  const chunkResult = await withAccessGroups(adminClient.from('document_chunks').select('id, metadata').in('id', chunkIds), keys).abortSignal(signal);
   signal.throwIfAborted();
   if (chunkResult.error) throw new Error(`[RAG Assemble] chunk metadata lookup failed: ${chunkResult.error.message}`);
 
@@ -100,7 +104,7 @@ export async function fetchAssemblyRows(
   }
 
   if (tenantKey !== undefined && readAnswerConfig().versionLabels) {
-    const versionPairs = await fetchVersionPairs(adminClient, documentIds, { tenantKey, signal });
+    const versionPairs = await fetchVersionPairs(adminClient, documentIds.filter((id) => documents.has(id)), { tenantKey, signal });
     return { documents, chunkMetadata, versionPairs };
   }
   return { documents, chunkMetadata };
@@ -116,16 +120,18 @@ export type VersionColumns = Pick<AssemblyDocumentRow, 'version' | 'doc_type' | 
 export async function fetchVersionColumns(
   adminClient: SupabaseClient,
   documentIds: string[],
-  { tenantKey, signal }: { tenantKey: string; signal: AbortSignal },
+  { tenantKey, signal, access }: { tenantKey: string; signal: AbortSignal; access: ScopeAccessFilter },
 ): Promise<Map<string, VersionColumns>> {
   const out = new Map<string, VersionColumns>();
   if (documentIds.length === 0) return out;
-  const { data, error } = await adminClient
-    .from('documents')
-    .select(`id, ${VERSION_LABEL_COLUMNS.join(', ')}`)
-    .eq('tenant_key', tenantKey)
-    .in('id', unique(documentIds))
-    .abortSignal(signal);
+  const { data, error } = await withAccessGroups(
+    adminClient
+      .from('documents')
+      .select(`id, ${VERSION_LABEL_COLUMNS.join(', ')}`)
+      .eq('tenant_key', tenantKey)
+      .in('id', unique(documentIds)),
+    accessTableFilter(access),
+  ).abortSignal(signal);
   signal.throwIfAborted();
   if (error) {
     if (isUnknownColumnError(error)) warnVersionColumnsMissing();

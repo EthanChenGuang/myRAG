@@ -48,6 +48,8 @@ export interface BackfillRequest {
   dryRun: boolean;
   resumeBatchId: string | null;
   runner: RunnerName;
+  /** --access-groups (D-16): the label of every document of a new batch, already resolved to keys. Absent: untouched. */
+  accessKeys?: readonly string[];
 }
 
 export interface OrchestrateDeps {
@@ -781,7 +783,13 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
   }
 
   // D-33 step 4 and D-34: enqueue at priority 10 (re-entrant; terminal jobs are never enqueued again), then monitor until done.
-  const enqueued = await enqueueRun(batch, entries, { rpc, signal, kind: 'ingest', snapshot: () => config });
+  const enqueued = await enqueueRun(batch, entries, {
+    rpc,
+    signal,
+    kind: 'ingest',
+    snapshot: () => config,
+    ...(request.accessKeys ? { accessKeys: request.accessKeys } : {}),
+  });
   const refused = Object.entries(enqueued.refused)
     .map(([reason, n]) => `${reason} ${n}`)
     .join(', ');

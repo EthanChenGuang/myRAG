@@ -54,9 +54,11 @@ export interface ChatUploadFormDataInput {
   docType?: string | null;
   scopes?: readonly string[];
   replacesDocumentId?: string | null;
+  /** The serialized access choice (04.3-23 `access` field); null or absent for an untouched picker or no picker. */
+  access?: string | null;
 }
 
-/** Builds the process-document FormData; without a doc type, tags or a replaced document it stays byte-identical to legacy mode. */
+/** Builds the process-document FormData; without a doc type, tags, a replaced document or an access choice it stays byte-identical to legacy mode. */
 export function buildChatUploadFormData(input: ChatUploadFormDataInput): FormData {
   const formData = new FormData();
   formData.append('file', input.file);
@@ -71,6 +73,9 @@ export function buildChatUploadFormData(input: ChatUploadFormDataInput): FormDat
   }
   if (input.replacesDocumentId) {
     formData.append('replaces_document_id', input.replacesDocumentId);
+  }
+  if (input.access) {
+    formData.append('access', input.access);
   }
   return formData;
 }

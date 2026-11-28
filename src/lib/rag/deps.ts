@@ -143,6 +143,7 @@ function readRagEnvInput(): RagEnvInput {
     RAG_SCOPE_TAGS: process.env.RAG_SCOPE_TAGS ?? env.RAG_SCOPE_TAGS,
     RAG_DOC_TRANSLATION: process.env.RAG_DOC_TRANSLATION ?? env.RAG_DOC_TRANSLATION,
     RAG_BGE_M3_SERVING: process.env.RAG_BGE_M3_SERVING ?? env.RAG_BGE_M3_SERVING,
+    RAG_BGE_M3_VIA: process.env.RAG_BGE_M3_VIA ?? env.RAG_BGE_M3_VIA,
     RAG_OUTPUT_LINK_ALLOWLIST: process.env.RAG_OUTPUT_LINK_ALLOWLIST ?? env.RAG_OUTPUT_LINK_ALLOWLIST,
     RAG_EMBEDDING_PROFILES: process.env.RAG_EMBEDDING_PROFILES ?? env.RAG_EMBEDDING_PROFILES,
     RAG_DOMAIN_EMBEDDINGS: process.env.RAG_DOMAIN_EMBEDDINGS ?? env.RAG_DOMAIN_EMBEDDINGS,
@@ -154,6 +155,8 @@ function readRagEnvInput(): RagEnvInput {
     RAG_QUERY_CONDENSE: process.env.RAG_QUERY_CONDENSE ?? env.RAG_QUERY_CONDENSE,
     RAG_QUERY_EXPAND: process.env.RAG_QUERY_EXPAND ?? env.RAG_QUERY_EXPAND,
     RAG_QUERY_DECOMPOSE: process.env.RAG_QUERY_DECOMPOSE ?? env.RAG_QUERY_DECOMPOSE,
+    RAG_QUERY_DECOMPOSE_COMPLETENESS: process.env.RAG_QUERY_DECOMPOSE_COMPLETENESS,
+    RAG_QUERY_SUBQ_FILTERS: process.env.RAG_QUERY_SUBQ_FILTERS,
     RAG_QUERY_TRANSLATE: process.env.RAG_QUERY_TRANSLATE ?? env.RAG_QUERY_TRANSLATE,
     RAG_QUERY_DATE_NORMALIZE: process.env.RAG_QUERY_DATE_NORMALIZE ?? env.RAG_QUERY_DATE_NORMALIZE,
     RAG_QUERY_HYDE: process.env.RAG_QUERY_HYDE ?? env.RAG_QUERY_HYDE,
@@ -233,6 +236,11 @@ export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
 }
+/** Phase 5.2.1 D-83: RAG_CONTEXT_TOKEN_BUDGET as the pipeline reads it, the document target of the prompt budget. */
+export function currentContextTokenBudget(): number {
+  return loadRagConfig(getRagDeps().ragEnv()).v2.tokenBudget;
+}
+
 /** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
 export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));

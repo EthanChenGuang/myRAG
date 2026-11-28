@@ -8,6 +8,7 @@ from ragas.metrics.collections import AnswerRelevancy, ContextRecall, Faithfulne
 from rag_sidecar.contracts.judge import JudgeConfig
 
 from rag_eval.judge.config import JUDGE_MAX_OUTPUT_TOKENS, JudgeCase, JudgeFatalError, raise_if_fatal
+from rag_eval.judge.openai_route import EmbeddingRoute, embedding_model_for
 
 Outcome = tuple[float | None, str | None]
 
@@ -76,8 +77,17 @@ def score_ragas(
     return asyncio.run(_score_all(cases, llm, embeddings, max_concurrency))
 
 
-def build_ragas_live(config: JudgeConfig, openrouter_key: str, openai_key: str) -> tuple[InstructorBaseRagasLLM, BaseRagasEmbedding]:
+def build_ragas_live(
+    config: JudgeConfig, openrouter_key: str, embeddings: EmbeddingRoute | str
+) -> tuple[InstructorBaseRagasLLM, BaseRagasEmbedding]:
+    """A plain string is an OPENAI_API_KEY for api.openai.com; an EmbeddingRoute picks the host (RAG_EVAL_OPENAI_VIA)."""
     from openai import AsyncOpenAI
+
+    route = (
+        embeddings
+        if isinstance(embeddings, EmbeddingRoute)
+        else EmbeddingRoute("openai", "OPENAI_API_KEY", embeddings, None, embedding_model_for(config.embedding_model, "openai"))
+    )
     from ragas.embeddings.base import embedding_factory
     from ragas.llms.base import llm_factory
 
@@ -103,8 +113,8 @@ def build_ragas_live(config: JudgeConfig, openrouter_key: str, openai_key: str) 
         )
     embeddings = embedding_factory(
         "openai",
-        model=config.embedding_model,
-        client=AsyncOpenAI(api_key=openai_key),
+        model=route.model,
+        client=AsyncOpenAI(api_key=route.api_key, base_url=route.base_url) if route.base_url else AsyncOpenAI(api_key=route.api_key),
         interface="modern",
     )
     return llm, embeddings  # type: ignore[return-value]

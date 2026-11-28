@@ -2,6 +2,7 @@ import type { RpcClient } from '../backend/supabase-rpc';
 import { getRagDeps } from '../deps';
 import { accessRpcArgs, scopeAccessFilter } from '../tenant/access';
 import { scopeKey, type TenantScope } from '../tenant/scope';
+import { scheduleAfterResponse } from '../trace/schedule';
 
 export type VisibilityResult = { ok: true; ids: ReadonlySet<string> } | { ok: false; reason: 'visibility_unavailable' | 'visibility_lookup_failed' };
 
@@ -117,4 +118,11 @@ export async function recordSecurityEvent(scope: TenantScope, input: SecurityEve
     console.warn('[RAG Access] security_event_failed', { event: input.event, chunks: input.chunkIds.length, documents: input.documentIds.length });
     return false;
   }
+}
+
+/** D-26: writes the security event after the response (never on the answer path); ids only. */
+export function scheduleSecurityEvent(scope: TenantScope, input: SecurityEventInput, options?: VisibilityOptions): void {
+  scheduleAfterResponse(async () => {
+    await recordSecurityEvent(scope, input, options);
+  });
 }

@@ -17,6 +17,11 @@ const EMBEDDING_PROFILES_LABELS = {
       'Hosted API: document and query text is sent to the hosted API with the existing DeepInfra key. Sidecar: text stays on your servers, and if the sidecar cannot be reached embedding fails; it never falls back to the hosted API. Both modes return the same vectors, so switching needs no re-embedding.',
     'RAG_BGE_M3_SERVING.opt.hosted': 'Hosted API',
     'RAG_BGE_M3_SERVING.opt.sidecar': 'Sidecar, in-house',
+    'via.title': 'Hosted API route',
+    'via.help':
+      'OpenRouter sends the hosted calls with the OpenRouter key and records host openrouter on new vectors. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.',
+    'RAG_BGE_M3_VIA.opt.deepinfra': 'DeepInfra, as today',
+    'RAG_BGE_M3_VIA.opt.openrouter': 'OpenRouter, pinned to DeepInfra',
     listSeparator: ', ',
   },
   zh: {
@@ -32,6 +37,11 @@ const EMBEDDING_PROFILES_LABELS = {
       '托管 API：文档和查询文本会使用现有的 DeepInfra 密钥发送到托管 API。侧车服务：文本留在你的服务器上；侧车服务无法连接时向量化会失败，绝不会回退到托管 API。两种方式返回相同的向量，切换时无需重新向量化。',
     'RAG_BGE_M3_SERVING.opt.hosted': '托管 API',
     'RAG_BGE_M3_SERVING.opt.sidecar': '侧车服务（本地）',
+    'via.title': '托管 API 线路',
+    'via.help':
+      'OpenRouter 使用 OpenRouter 密钥发送托管调用，并在新向量上记录主机 openrouter。在已有向量上使用之前，请先运行 npm run rag:embedding -- verify-route bge-m3。',
+    'RAG_BGE_M3_VIA.opt.deepinfra': 'DeepInfra（与现在相同）',
+    'RAG_BGE_M3_VIA.opt.openrouter': 'OpenRouter（固定使用 DeepInfra）',
     listSeparator: '、',
   },
   it: {
@@ -47,6 +57,11 @@ const EMBEDDING_PROFILES_LABELS = {
       "API ospitata: il testo di documenti e query viene inviato all'API ospitata con la chiave DeepInfra esistente. Sidecar: il testo resta sui tuoi server e, se il sidecar non è raggiungibile, l'embedding non riesce; non ripiega mai sull'API ospitata. Entrambe le modalità restituiscono gli stessi vettori, quindi il cambio non richiede un nuovo embedding.",
     'RAG_BGE_M3_SERVING.opt.hosted': 'API ospitata',
     'RAG_BGE_M3_SERVING.opt.sidecar': 'Sidecar, in sede',
+    'via.title': "Percorso dell'API ospitata",
+    'via.help':
+      "OpenRouter invia le chiamate ospitate con la chiave OpenRouter e registra l'host openrouter sui nuovi vettori. Esegui npm run rag:embedding -- verify-route bge-m3 prima di usarlo con vettori già salvati.",
+    'RAG_BGE_M3_VIA.opt.deepinfra': 'DeepInfra, come oggi',
+    'RAG_BGE_M3_VIA.opt.openrouter': 'OpenRouter, vincolato a DeepInfra',
     listSeparator: ', ',
   },
 };

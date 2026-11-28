@@ -74,6 +74,16 @@ describe('enqueueReviewItem (D-55)', () => {
     expect(lines).toEqual([]);
   });
 
+  it('sends p_access_sets only when given, each set sorted and deduplicated; a malformed set becomes a key nobody holds', async () => {
+    const group = 'g:00000000-0000-4000-8000-0000000000a1';
+    const { calls, deps } = harness();
+    await enqueueReviewItem({ ...INPUT, accessSets: [[group, 'all', group], ['Group name'], []] }, deps);
+    expect(calls[0]?.args.p_access_sets).toEqual([['all', group], ['g:00000000-0000-0000-0000-000000000000']]);
+    const off = harness();
+    await enqueueReviewItem({ ...INPUT, accessSets: null }, off.deps);
+    expect(off.calls[0]?.args).not.toHaveProperty('p_access_sets');
+  });
+
   it('leaves out a detector or trace id that is not an id token instead of failing the call', async () => {
     const { calls, deps } = harness();
     await enqueueReviewItem({ tenantKey: TENANT, reason: 'version_conflict', documentIds: [DOC], detector: 'Two words', traceId: 'a sentence with spaces' }, deps);

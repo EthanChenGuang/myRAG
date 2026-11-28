@@ -109,6 +109,7 @@ from rag_sidecar.contracts import (
     RunEmbedder,
     ReviewQueueItem,
     RunManifest,
+    TraceAccess,
     SidecarError,
     SidecarHealth,
     SidecarInfo,
@@ -1656,6 +1657,7 @@ def _models() -> dict[str, Any]:
         ),
         "RagTrace": _trace("Twenty days per year.").model_copy(update={"languages": _p7_trace_languages()}),
         "RunManifest": _run_manifest(),
+        "TraceAccess": TraceAccess(mode="keys", violations=1),
         "GoldenItem": _golden_item(),
         "GoldenSplitManifest": GoldenSplitManifest(
             rule="sha256-first8hex-mod100-lt70-dev",

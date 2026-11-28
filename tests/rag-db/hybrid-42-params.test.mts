@@ -140,8 +140,8 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
         const [names] = await argNames(db, name);
         const inputs = (names ?? []).filter((n) => n.startsWith('p_'));
         for (const param of params) assert.ok(inputs.includes(param), `${param} (from ${file}) is still a parameter`);
-        // 04.3-03: 0930 appends the access parameters to hybrid_search_chunks after the two 0856 ones.
-        const later = name === 'hybrid_search_chunks' ? ACCESS_PARAMS : [];
+        // 04.3-03 / 04.3-10: 0930 appends the access parameters to both functions after the two 0856 ones.
+        const later = ACCESS_PARAMS;
         assert.deepEqual(inputs, [...params, ...NEW_PARAMS, ...later]);
         const args = await db.query<{ args: string }>(
           "SELECT pg_get_function_arguments(p.oid) AS args FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1",
@@ -150,9 +150,7 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
         const text = args.rows[0]?.args ?? '';
         assert.match(
           text,
-          name === 'hybrid_search_chunks'
-            ? /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\], p_access_keys text\[\] DEFAULT NULL::text\[\], p_access_all boolean DEFAULT false$/
-            : /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\]$/,
+          /p_version_scope jsonb DEFAULT NULL::jsonb, p_identifiers_norm text\[\] DEFAULT NULL::text\[\], p_access_keys text\[\] DEFAULT NULL::text\[\], p_access_all boolean DEFAULT false$/,
         );
       });
 
@@ -258,7 +256,8 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
 
     test('re-running an earlier definition (0802, 0314 and 0425) then 0856 again leaves one function of each name', async () => {
       const files = migrationFiles(mode);
-      const older = files.filter((file) => ['0314', '0425', '0802'].includes(path.basename(file).slice(0, 4)));
+      // 0306 and 0308 restore the signatures 0930 dropped that the 0425 precheck names (0930 operator rule).
+      const older = files.filter((file) => ['0306', '0308', '0314', '0425', '0802'].includes(path.basename(file).slice(0, 4)));
       await applyMigrationFiles(db, older);
       assert.ok((await overloads(db, 'hybrid_search_chunks')) === 2, 'the earlier file adds its own overload back');
       await applyMigrationFiles(db, [MIGRATION]);

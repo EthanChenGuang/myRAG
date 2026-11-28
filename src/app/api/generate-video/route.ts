@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '../../../lib/env';
-import { repairOwnerMembership, resolveTenantScope, runRetrieval, type TenantScope } from '@/lib/rag';
+import {
+  bodyNamesAccessGroups,
+  repairOwnerMembership,
+  resolveAccessScope,
+  resolveTenantScope,
+  runRetrieval,
+  type TenantScope,
+} from '@/lib/rag';
 import { requireSessionUser } from '@/lib/session-auth';
 import { v4 as uuidv4 } from 'uuid';
 import Replicate from 'replicate';
@@ -353,7 +360,10 @@ export async function POST(req: NextRequest) {
     // Add detailed error tracking
     let stage = 'parsing-request';
 
-    const { prompt, useContext, model, aspectRatio, resolution, frameCount, duration, cameraFixed, sourceImage, generateAudio, useFastMode, organizationId } = await req.json();
+    const requestBody = await req.json();
+    // D-06: groups never come from the body; a claim is ignored and logged once per request
+    if (bodyNamesAccessGroups(requestBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'generate_video' });
+    const { prompt, useContext, model, aspectRatio, resolution, frameCount, duration, cameraFixed, sourceImage, generateAudio, useFastMode, organizationId } = requestBody;
     // Support both legacy `frameCount` and new `duration` - normalize to a string like "8s"
     let videoDuration: string | undefined;
     if (typeof duration === 'string') {
@@ -418,6 +428,12 @@ export async function POST(req: NextRequest) {
         );
       }
       ragScope = resolved.scope;
+      // D-05: the access groups of the session user; a refusal keeps the scope unresolved, so retrieval fails closed with status error
+      // and the video is generated from the original prompt (D-10)
+      if (ragScope) {
+        const access = await resolveAccessScope({ scope: ragScope, identity: { kind: 'user', userId: auth.user.id }, signal: req.signal });
+        if (access.ok) ragScope = access.scope;
+      }
     }
 
     if (useContext) {

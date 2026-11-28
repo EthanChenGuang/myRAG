@@ -182,12 +182,14 @@ ACCESS_SCOPE_CHAT_STAGES = {"access_scope": 25}
 ACCESS_SCOPE_VOICE_STAGES = {"access_scope": 15}
 # 06.2-03 (D-26): report-only scope_gate budget for chat and embed; voice never runs the scope gate.
 SCOPE_GATE_CHAT_STAGES = {"scope_gate": 5}
+# 05.2.1-21 (D-61): the prompt_budget span (report-only), chat and embed 5 ms; voice-rag plans with its own reserves.
+PROMPT_BUDGET_STAGES = {"prompt_budget": 5}
 
 
 def test_committed_budgets_carry_the_v2_stage_p95_targets():
     profiles = load_latency_budgets(BUDGETS_PATH).profiles
-    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES, **IDENTIFIER_CHAT_STAGES, **ACCESS_SCOPE_CHAT_STAGES, **SCOPE_GATE_CHAT_STAGES}
-    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES, **IDENTIFIER_CHAT_STAGES, **ACCESS_SCOPE_CHAT_STAGES, **SCOPE_GATE_CHAT_STAGES}
+    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES, **IDENTIFIER_CHAT_STAGES, **ACCESS_SCOPE_CHAT_STAGES, **SCOPE_GATE_CHAT_STAGES, **PROMPT_BUDGET_STAGES}
+    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES, **IDENTIFIER_CHAT_STAGES, **ACCESS_SCOPE_CHAT_STAGES, **SCOPE_GATE_CHAT_STAGES, **PROMPT_BUDGET_STAGES}
     assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_VOICE_STAGES, **IDENTIFIER_VOICE_STAGES, **ACCESS_SCOPE_VOICE_STAGES}
     assert profiles["chat"].stages["rerank"] == 600 and profiles["voice"].stages["rerank"] == 250
 

@@ -138,7 +138,7 @@ for (const mode of MODES) {
     }
 
     const ids = async (scope: TenantScope, filters: InvoiceFilters = {}): Promise<string[]> => {
-      const hits = await findInvoices(scope, filters, { db: () => pgliteRpc(db), signal });
+      const hits = await findInvoices(scope, filters, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       return hits.map((hit) => hit.invoiceNumber ?? '').sort();
     };
 
@@ -239,7 +239,7 @@ for (const mode of MODES) {
       await seed(scopeA, { sourceKey: `order-old-${mode}`, filename: 'order-old.pdf', fields: { invoice_number: 'ORD-OLD', supplier_name: 'Order Test Co', issue_date: '2024-01-05', gross_total: '5.50', currency: 'EUR' } });
       await seed(scopeA, { sourceKey: `order-new-${mode}`, filename: 'order-new.pdf', fields: { invoice_number: 'ORD-NEW', supplier_name: 'Order Test Co', supplier_tax_id: IT_IVA_2, issue_date: '2025-06-05', gross_total: '7.25', currency: 'EUR' } });
 
-      const hits = await findInvoices(scopeA, { supplier: 'Order Test Co' }, { db: () => pgliteRpc(db), signal });
+      const hits = await findInvoices(scopeA, { supplier: 'Order Test Co' }, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       assert.deepEqual(
         hits.map((hit) => [hit.invoiceNumber, hit.issueDate, hit.grossTotal, hit.currency, hit.supplierName, hit.supplierTaxId, hit.filename]),
         [
@@ -248,7 +248,7 @@ for (const mode of MODES) {
         ],
       );
       assert.equal(typeof hits[0]?.documentId, 'string');
-      const limited = await findInvoices(scopeA, { supplier: 'Order Test Co', limit: 1 }, { db: () => pgliteRpc(db), signal });
+      const limited = await findInvoices(scopeA, { supplier: 'Order Test Co', limit: 1 }, { db: () => pgliteRpc(db), signal, access: { mode: 'off' } as const });
       assert.deepEqual(limited.map((hit) => hit.invoiceNumber), ['ORD-NEW']);
     });
 
@@ -269,16 +269,41 @@ for (const mode of MODES) {
     test('findInvoices sends the tenant key of the scope and nothing else identifies the tenant', async () => {
       await requireSchema();
       const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
-      await findInvoices(scopeA, { supplier: 'x' }, { db: () => pgliteRpc(db, calls), signal });
+      await findInvoices(scopeA, { supplier: 'x' }, { db: () => pgliteRpc(db, calls), signal, access: { mode: 'off' } as const });
       assert.equal(calls.length, 1);
       assert.equal(calls[0]?.fn, 'rag_find_invoices');
       assert.equal(calls[0]?.args.p_tenant_key, keyOf(scopeA));
       assert.deepEqual(Object.keys(calls[0]?.args ?? {}).filter((key) => /user|org|tenant/.test(key)), ['p_tenant_key']);
     });
 
+    test('rag_find_invoices and rag_exact_id_documents take the 0930 access arguments, and a key set without the label returns nothing', async () => {
+      await requireSchema();
+      await seed(scopeA, { sourceKey: `access-args-${mode}`, fields: { invoice_number: 'ACC-2025-00931', supplier_name: 'Access Args Co', issue_date: '2025-03-15', gross_total: '10.00', currency: 'EUR' } });
+      const find = (keys: string[]) =>
+        pgliteRpc(db).rpc('rag_find_invoices', {
+          p_tenant_key: keyOf(scopeA),
+          p_supplier: 'access args co',
+          p_date_from: null,
+          p_date_to: null,
+          p_amount_min: null,
+          p_amount_max: null,
+          p_currency: null,
+          p_limit: 10,
+          p_access_keys: keys,
+          p_access_all: false,
+        });
+      const open = await find(['all']);
+      assert.equal(open.error, null);
+      assert.deepEqual((open.data as Row[]).map((row) => row.invoice_number), ['ACC-2025-00931']);
+      assert.deepEqual((await find(['g:00000000-0000-4000-8000-0000000000ff'])).data, []);
+      const exact = await pgliteRpc(db).rpc('rag_exact_id_documents', { p_tenant_key: keyOf(scopeA), p_tokens: ['acc-2025-00931'], p_limit: 20, p_access_keys: ['g:00000000-0000-4000-8000-0000000000ff'], p_access_all: false });
+      assert.equal(exact.error, null);
+      assert.deepEqual(exact.data, []);
+    });
+
     test('invalid filters are refused before any call is made', async () => {
       const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
-      const deps = { db: () => pgliteRpc(db, calls), signal };
+      const deps = { db: () => pgliteRpc(db, calls), signal, access: { mode: 'off' } as const };
       const bad: InvoiceFilters[] = [
         { currency: 'euro' },
         { dateRange: { from: '15/03/2025' } },

@@ -40,11 +40,14 @@ const HYDE_ID = 'langchain.hyde';
 const DECOMPOSE_ID = 'langchain.decompose';
 
 /** SubQuestions without the list bound: the shared finisher checks the wire bound and cuts to max_sub_questions (D-15). */
-const SUB_QUESTIONS_WIRE_JSON: Record<string, unknown> = (() => {
-  const schema = structuredClone(RAW_STRUCTURED_SCHEMAS.SubQuestions) as { properties: { questions: Record<string, unknown> } };
+function withoutListBound(json: Record<string, unknown>): Record<string, unknown> {
+  const schema = structuredClone(json) as { properties: { questions: Record<string, unknown> } };
   delete schema.properties.questions.maxItems;
   return schema;
-})();
+}
+const SUB_QUESTIONS_WIRE_JSON: Record<string, unknown> = withoutListBound(RAW_STRUCTURED_SCHEMAS.SubQuestions);
+/** P-18: requested only while RAG_QUERY_SUBQ_FILTERS is effective; the switch-off request stays SubQuestions. */
+const SUB_QUESTIONS_WITH_FILTERS_WIRE_JSON: Record<string, unknown> = withoutListBound(RAW_STRUCTURED_SCHEMAS.SubQuestionsWithFilters);
 
 export interface LangChainTransformerDeps {
   /** The shared post-check step (transformer.ts QUERY_TRANSFORM_FINISHERS), so results have exactly the native shapes. */
@@ -156,15 +159,22 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
   /**
    * LangChain's query-decomposition prompt (vendored) as a literal system message, the query as the human message, and
    * withStructuredOutput SubQuestions. The shared finisher validates the wire bound and applies the D-15 cut to
-   * max_sub_questions, so a longer list is cut, never discarded. A failure is a skip; an abort propagates.
+   * max_sub_questions, so a longer list is cut, never discarded. With required terms in the input (D-03/D-04) the same
+   * finisher runs checkDecompositionCompleteness, so both frameworks repair one way. A failure is a skip; an abort propagates.
+   * With sub-question filters effective (D-06, D-07) the system message ends with the shared addendum and the schema is
+   * SubQuestionsWithFilters; the shared finisher then runs parseProposedFilter and narrowFilters on each spec against the
+   * request's base filters, exactly as on the native path. With them off the request is the Phase 6 one and any returned
+   * filter is stripped by the same finisher.
    */
   async function decompose(input: TransformDecomposeInput): Promise<DecomposeResult> {
     const { query, language, protectedTokens, signal } = input;
     const limits = input.limits ?? finish.defaultLimits;
-    const system = renderPrompt(loadPrompt(DECOMPOSE_ID, { [DECOMPOSE_ID]: decomposePrompt }), {}, { language, maxItems: limits.maxSubQuestions, protectedTokens });
+    const base = renderPrompt(loadPrompt(DECOMPOSE_ID, { [DECOMPOSE_ID]: decomposePrompt }), {}, { language, maxItems: limits.maxSubQuestions, protectedTokens });
+    const system = input.subqFilters ? `${base}\n\n${finish.decomposeAddendum(input.subqFilters)}` : base;
+    const [json, name] = input.subqFilters ? [SUB_QUESTIONS_WITH_FILTERS_WIRE_JSON, 'SubQuestionsWithFilters'] : [SUB_QUESTIONS_WIRE_JSON, 'SubQuestions'];
     let output: unknown;
     try {
-      output = await structuredRaw(options.chatModelFactory('decompose'), SUB_QUESTIONS_WIRE_JSON, 'SubQuestions', [new SystemMessage(system), new HumanMessage(query)], signal, 'decompose');
+      output = await structuredRaw(options.chatModelFactory('decompose'), json, name, [new SystemMessage(system), new HumanMessage(query)], signal, 'decompose');
     } catch (error) {
       const adapterError = toAdapterError(error, signal, 'decompose');
       if (adapterError.kind === 'aborted') throw adapterError;

@@ -17,6 +17,8 @@ import {
     readFeedbackLoopConfig,
     readSecurityConfig,
     resolveVoiceScope,
+    bodyNamesAccessGroups,
+    resolveAccessScope,
     runRetrieval,
     scopeKey,
     shouldOfferCalcTool,
@@ -176,6 +178,9 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
         }
 
+        // D-06: groups never come from the body; a claim is ignored and logged once per request
+        if (bodyNamesAccessGroups(rawBody)) console.warn('[RAG Access] body_group_claim_ignored', { route: 'voice_rag' });
+
         const parsed = bodySchema.safeParse(rawBody);
         if (!parsed.success) {
             const field = parsed.error.issues[0]?.path[0];
@@ -188,6 +193,15 @@ export async function POST(req: NextRequest) {
         if (!scope.ok) {
             return NextResponse.json({ error: scope.status === 503 ? 'Voice scope unavailable' : 'Unauthorized', reason: scope.reason }, { status: scope.status });
         }
+
+        // D-06, D-08: memberships are read now from the token's actor, never from the token or the body. A refusal keeps the scope
+        // unresolved, so retrieval fails closed with status error and the knowledge_base_unavailable answer below applies (D-10).
+        const access = await resolveAccessScope({
+            scope: scope.scope,
+            identity: scope.actorUserId ? { kind: 'user', userId: scope.actorUserId } : { kind: 'anonymous' },
+            signal: req.signal,
+        });
+        const ragScope = access.ok ? access.scope : scope.scope;
 
         // The answer is produced in the voice agent, so the row carries no answer language (D-03a)
         const logged = readFeedbackLoopConfig().retrievalLog !== 'off';
@@ -224,7 +238,7 @@ export async function POST(req: NextRequest) {
 
         const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
         const result = await runRetrieval({
-            scope: scope.scope,
+            scope: ragScope,
             query,
             profile: 'voice',
             options: { maxResults: matchCount, ...(budget ? { documentTokenBudget: budget.documentBudget } : {}) },

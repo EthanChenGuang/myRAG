@@ -272,7 +272,7 @@ describe('image upload through ingest() against two tenants', () => {
     const { getSupabaseAdmin } = await import('@/lib/supabase');
     const { fetchAssemblyRows } = await import('@/lib/rag/context/fetch-rows');
     const { assembleContext } = await import('@/lib/rag/context/assemble');
-    const assemblyRows = await fetchAssemblyRows(forA.candidates as never, { adminClient: getSupabaseAdmin() as never, signal: new AbortController().signal });
+    const assemblyRows = await fetchAssemblyRows(forA.candidates as never, { access: { mode: 'off' }, adminClient: getSupabaseAdmin() as never, signal: new AbortController().signal });
     const assembled = assembleContext({
       queryText: recorded.captions.chart,
       candidates: forA.candidates as never,

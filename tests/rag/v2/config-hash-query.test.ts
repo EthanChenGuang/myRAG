@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
-import { queryLayerHashComponent, queryPromptVersions } from '@/lib/rag/query/hash-part';
+import { queryLayerHashComponent, queryPromptVersions, SWITCH_GATED_PROMPT_IDS } from '@/lib/rag/query/hash-part';
 import { effectiveQueryParams } from '@/lib/rag/query/query-params';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import { computeRetrievalConfigHash, type RetrievalConfigHashInput, type RetrievalConfigHashQueryLayer } from '@/lib/rag/v2/config-hash';
@@ -98,10 +98,12 @@ describe('queryLayerHashComponent', () => {
     const dir = path.join(process.cwd(), 'src/lib/rag/query/prompts');
     const files = readdirSync(dir).filter((name) => name.endsWith('.json'));
     const expected = Object.fromEntries(
-      files.map((name) => {
-        const file = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as { id: string; version: number };
-        return [file.id, file.version];
-      }),
+      files
+        .map((name) => {
+          const file = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as { id: string; version: number };
+          return [file.id, file.version] as const;
+        })
+        .filter(([id]) => !SWITCH_GATED_PROMPT_IDS.has(id)),
     );
     expect(queryPromptVersions()).toEqual(expected);
   });
@@ -119,6 +121,23 @@ describe('queryLayerHashComponent', () => {
     expect(queryLayerHashComponent({ ...layer, transforms: { ...layer.transforms, hyde: !layer.transforms.hyde } }, params).transforms.hyde).toBe(
       !layer.transforms.hyde,
     );
+    resetRagConfigForTests();
+  });
+
+  it('shared.subq-filters joins the prompt versions only while RAG_QUERY_SUBQ_FILTERS is effective (train 38)', () => {
+    resetRagConfigForTests();
+    const layer = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' }).queryLayer;
+    const params = effectiveQueryParams('chat');
+    const unset = queryLayerHashComponent(layer, params);
+    const off = queryLayerHashComponent(layer, params, { subqFilters: false });
+    const on = queryLayerHashComponent(layer, params, { subqFilters: true });
+    expect(SWITCH_GATED_PROMPT_IDS.has('shared.subq-filters')).toBe(true);
+    expect(off).toEqual(unset);
+    expect('shared.subq-filters' in off.prompts).toBe(false);
+    expect(on.prompts['shared.subq-filters']).toBeGreaterThan(0);
+    const input = (queryLayer: RetrievalConfigHashQueryLayer) => ({ ...literalHashInput(), queryLayer });
+    expect(computeRetrievalConfigHash(input(off))).toBe(computeRetrievalConfigHash(input(unset)));
+    expect(computeRetrievalConfigHash(input(on))).not.toBe(computeRetrievalConfigHash(input(off)));
     resetRagConfigForTests();
   });
 });

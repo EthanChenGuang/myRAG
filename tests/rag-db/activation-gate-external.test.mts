@@ -16,6 +16,8 @@ async function inTransaction(db: PGlite, body: () => Promise<void>): Promise<voi
     await body();
   } finally {
     await db.exec('ROLLBACK');
+    // Rolled-back vectors stay in the HNSW indexes as dead entries until a vacuum; without it every later insert walks them.
+    await db.exec('VACUUM chunk_embeddings');
   }
 }
 

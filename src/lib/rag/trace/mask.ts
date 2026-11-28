@@ -54,3 +54,60 @@ function maskValue(value: unknown, depth: number): unknown {
 export function maskPII<T>(value: T): T {
   return maskValue(value, 0) as T;
 }
+
+/** D-25: a kept chunk as the Langfuse export receives it; `restricted` chunks carry only their id, rank and score. */
+export interface ExportChunk {
+  chunk_id: string;
+  document_id: string;
+  document_name: string;
+  content: string;
+  similarity: number;
+  rank: number;
+}
+
+export type ExportedChunk =
+  | { document_name: string; content: string; similarity: number; rank: number }
+  | { chunk_id: string; similarity: number; rank: number };
+
+export interface StrippableTrace {
+  review?: { query?: string; answer?: string; context?: string; model?: string };
+  content?: { query?: string; chunks?: ExportedChunk[] };
+}
+
+/**
+ * D-25: true for a document whose label set is anything other than exactly `all`. With access on, a document without a known label
+ * set counts as restricted (labels: null for the request means access is off and nothing is restricted).
+ */
+export function isRestrictedDocument(labels: ReadonlyMap<string, readonly string[]> | null, documentId: string): boolean {
+  if (labels === null) return false;
+  const set = labels.get(documentId);
+  return !set || set.length !== 1 || set[0] !== 'all';
+}
+
+/**
+ * D-25: builds the exported chunk list and, when any kept chunk comes from a restricted document, removes the text Langfuse would
+ * otherwise receive: restricted chunks keep id, rank and score only, and review exports lose query, context and answer. Pure; with
+ * labels null (access off) the output equals today's export.
+ */
+export function stripRestrictedContent<T extends StrippableTrace>(
+  collected: T,
+  labels: ReadonlyMap<string, readonly string[]> | null,
+  kept: readonly ExportChunk[],
+): T {
+  const restricted = kept.some((chunk) => isRestrictedDocument(labels, chunk.document_id));
+  const out: T = { ...collected };
+  if (out.content?.chunks !== undefined) {
+    out.content = {
+      ...out.content,
+      chunks: kept.map((chunk) =>
+        isRestrictedDocument(labels, chunk.document_id)
+          ? { chunk_id: chunk.chunk_id, similarity: chunk.similarity, rank: chunk.rank }
+          : { document_name: chunk.document_name, content: chunk.content, similarity: chunk.similarity, rank: chunk.rank },
+      ),
+    };
+  }
+  if (restricted && out.review !== undefined) {
+    out.review = out.review.model !== undefined ? { model: out.review.model } : {};
+  }
+  return out;
+}

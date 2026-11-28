@@ -102,6 +102,7 @@ class ConnectorsConfigManager {
     container.innerHTML = this.config.providers
       .map(provider => this.createProviderElement(provider))
       .join('');
+    this.applyAccessNotices(container);
 
     // Add event listeners to toggles
     this.config.providers.forEach(provider => {
@@ -133,6 +134,20 @@ class ConnectorsConfigManager {
         });
       }
     });
+  }
+
+  applyAccessNotices(container) {
+    if (!window.AccessGroupsConnectorNotices) return;
+    const hosts = Array.from(container.children).map(card => card.querySelector('[data-connector-extras]'));
+    const cards = [];
+    this.config.providers.forEach((provider, index) => {
+      const conn = provider.user_connection;
+      if (hosts[index] && conn && conn.connected && conn.connection_id) {
+        cards.push({ host: hosts[index], connectionId: String(conn.connection_id) });
+      }
+    });
+    const orgId = window.AccessGroupsConnectorNotices.workspaceId(document);
+    window.AccessGroupsConnectorNotices.apply(cards, orgId).catch(() => {});
   }
 
   createProviderElement(provider) {
@@ -191,6 +206,7 @@ class ConnectorsConfigManager {
                 </div>
                 <p class="text-sm text-base-content/70">${esc(provider.stats.connected_users)} total user${provider.stats.connected_users !== 1 ? 's' : ''}</p>
                 ${connectionInfo}
+                ${isConnected ? '<div data-connector-extras></div>' : ''}
               </div>
             </div>
             <div class="flex items-center gap-2">

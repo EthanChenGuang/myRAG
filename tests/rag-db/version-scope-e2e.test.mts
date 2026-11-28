@@ -24,7 +24,10 @@ const MODE_ENV = 'VERSION_SCOPE_E2E_MODE';
 const MODE = process.env[MODE_ENV];
 
 const TERM = 'zorvexalith';
-const QUESTION = `What is the ${TERM} threshold value for each cycle, according to the document?`;
+// Train 38: no generic tail ("for each cycle, according to the document"): with the 05.2.1-12 corpus documents in the
+// single-tenant tenant those words gave corpus chunks a lexical hit on top of their dense one, which pushed the superseded chunk
+// (lexical leg only, D-58) out of the candidates.
+const QUESTION = `What is the ${TERM} threshold value per cycle?`;
 const OLD_TEXT = `The ${TERM} threshold value is seven units per cycle.`;
 const NEW_TEXT = `The ${TERM} threshold value is nine units per cycle.`;
 const FOREIGN_TEXT = `The ${TERM} threshold value is eleven units per cycle, ${TERM} ${TERM}.`;

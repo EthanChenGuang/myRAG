@@ -46,6 +46,7 @@ async function run(specs: Spec[], extra: Partial<ContextStagesInput> = {}, env: 
   const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
   const params = { ...effectiveRetrievalParams('chat', config, null), final_top_k: 20 };
   const output = await runContextStages({
+    access: { mode: 'off' },
     input: { scope, query: 'drovask quilmeno', profile: 'chat', signal: new AbortController().signal },
     config,
     profile: 'chat',

@@ -132,7 +132,7 @@ describe('queued process-document identity: dedup, versions and tenants (D-22, D
 
     const assembled = await fetchRows.fetchAssemblyRows(
       [{ chunk_id: v1ChunkId, document_id: firstDocumentId }] as unknown as Parameters<typeof fetchRows.fetchAssemblyRows>[0],
-      { adminClient: admin, signal: new AbortController().signal },
+      { access: { mode: 'off' }, adminClient: admin, signal: new AbortController().signal },
     );
     assert.equal(assembled.documents.get(firstDocumentId)?.filename, FILENAME);
     assert.ok(assembled.chunkMetadata.has(v1ChunkId));

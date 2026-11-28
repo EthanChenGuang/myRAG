@@ -724,6 +724,8 @@ RAG_TABLE_ROW_SERIALIZATION=false
 RAG_CAPTION_LANGUAGE=en
 # BGE-M3 serving (Phase 3.2.1): hosted | sidecar
 RAG_BGE_M3_SERVING=hosted
+# Host for hosted BGE-M3 calls: deepinfra | openrouter (openrouter uses OPENROUTER_API_KEY, pins the DeepInfra upstream and records host openrouter; verify with npm run rag:embedding -- verify-route bge-m3)
+RAG_BGE_M3_VIA=deepinfra
 # Search-only translations of document chunks: off | on
 RAG_DOC_TRANSLATION=off
 # Translation model override (empty = RAG_QUERY_LLM_MODEL)

@@ -11,6 +11,8 @@ export interface ChatStreamFacts {
   answerLanguage: string | null;
   /** The route marked the turn's context as flagged (Phase 5.1 injectionFlagged). */
   injectionFlagged: boolean;
+  /** The turn's `rag` message metadata (standalone query and query language) as streamed; validated where it is stored. */
+  rag: unknown;
 }
 
 export interface ChatStreamParser {
@@ -49,6 +51,7 @@ export function createChatStreamParser(): ChatStreamParser {
   const webSearchCalls = new Set<string>();
   let answerLanguage: string | null = null;
   let injectionFlagged = false;
+  let rag: unknown;
 
   const addUrls = (payload: unknown) => {
     for (const item of resultItems(payload)) {
@@ -62,6 +65,7 @@ export function createChatStreamParser(): ChatStreamParser {
     if (!isObject(metadata)) return;
     if (typeof metadata.answerLanguage === 'string' && metadata.answerLanguage.length > 0) answerLanguage = metadata.answerLanguage;
     if (metadata.injectionFlagged === true) injectionFlagged = true;
+    if (isObject(metadata.rag)) rag = metadata.rag;
     if (isObject(metadata.webSearch)) addUrls(metadata.webSearch.results);
   };
 
@@ -123,6 +127,7 @@ export function createChatStreamParser(): ChatStreamParser {
         webResultUrls: [...urls],
         answerLanguage,
         injectionFlagged,
+        rag,
       };
     },
   };
