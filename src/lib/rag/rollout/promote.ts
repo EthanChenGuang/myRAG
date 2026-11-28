@@ -1,11 +1,16 @@
 import { z } from 'zod/v3';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import rawPolicy from '../../../../config/rag/rollout-policy.json';
 import type { LanguageQualityCell } from '@/lib/rag-eval/contracts.generated';
 import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
+import { loadRagConfig } from '../config';
+import { getRagDeps } from '../deps';
+import { getLanguageSettings } from '../lang/settings';
 import {
   languageCountMeasure,
   languageJudgeMean,
   languageJudgeMetrics,
+  readLanguageJudgeCells,
   toLanguageQualityCells,
   type LanguageCountMetric,
   type LanguageJudgeCell,
@@ -496,4 +501,55 @@ export function parseEndedRollouts(rows: unknown): EndedRollout[] {
     });
   }
   return out;
+}
+
+const ENDED_LIMIT = 20;
+
+/** Whether RAG_ROLLOUTS is on for this process (the value the request path reads). */
+export function rolloutsEnabled(): boolean {
+  return loadRagConfig(getRagDeps().ragEnv()).rollouts.enabled;
+}
+
+/**
+ * The service-role dependencies of the admin route: the rollout RPCs, the configured languages, the job's judge cells and the ended
+ * rollouts (id, kind, candidate, state, ended_at only). Null when no service-role client is configured.
+ */
+export function rolloutServiceDeps(): PromoteDeps | null {
+  let client: (RpcClient & Partial<Pick<SupabaseClient, 'from'>>) | null;
+  try {
+    client = getRagDeps().adminClient() as unknown as (RpcClient & Partial<Pick<SupabaseClient, 'from'>>) | null;
+  } catch {
+    client = null;
+  }
+  if (!client) return null;
+  const table = typeof client.from === 'function' ? (client as unknown as SupabaseClient) : null;
+  return {
+    rpc: client,
+    languages: () => {
+      const settings = getLanguageSettings();
+      return settings.configured ? (settings.languages ?? []) : null;
+    },
+    readJudge: async (window, tenantKeys) => {
+      if (!table) return [];
+      try {
+        return await readLanguageJudgeCells(table, { window, tenantKeys });
+      } catch {
+        return [];
+      }
+    },
+    readEnded: async () => {
+      if (!table) return [];
+      try {
+        const { data, error } = await table
+          .from('rag_rollouts')
+          .select('id, kind, candidate_ref, state, ended_at')
+          .neq('state', 'active')
+          .order('ended_at', { ascending: false })
+          .limit(ENDED_LIMIT);
+        return error ? [] : parseEndedRollouts(data);
+      } catch {
+        return [];
+      }
+    },
+  };
 }

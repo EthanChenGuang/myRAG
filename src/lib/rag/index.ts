@@ -867,6 +867,17 @@ export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './moni
 export { evaluateLanguageDrop, LANGUAGE_DROP_RULE_ID, languageQualityForAdmin, MAX_LANGUAGE_QUALITY_DAYS } from './monitor/language-drop';
 export type { LanguageQualityReport } from './monitor/language-drop';
 export {
+  compareRolloutLanguages,
+  listRollouts,
+  promoteRollout,
+  RolloutRefusedError,
+  rolloutRpc,
+  rolloutServiceDeps,
+  rolloutsEnabled,
+  RolloutUnavailableError,
+} from './rollout/promote';
+export type { ActiveRolloutListEntry, EndedRollout, RolloutLanguageRow, RolloutPromoteResult } from './rollout/promote';
+export {
   addPilotUser,
   decodePilotCursor,
   listPilotUsers,
