@@ -98,6 +98,8 @@ const PURGE_LABELS = {
     "store.page_images": "Page images",
     "store.uploaded_image": "Uploaded image",
     "store.sync_records": "Connector sync records",
+    "store.lexical_stats": "Keyword search statistics",
+    "store.golden_items": "Evaluation evidence and answer-check labels",
   },
   zh: {
     "panel.title": "清除记录",
@@ -193,6 +195,8 @@ const PURGE_LABELS = {
     "store.page_images": "页面图片",
     "store.uploaded_image": "上传的图片",
     "store.sync_records": "连接器同步记录",
+    "store.lexical_stats": "关键词检索统计",
+    "store.golden_items": "评估证据和答案检查标签",
   },
   it: {
     "panel.title": "Registro delle eliminazioni definitive",
@@ -288,6 +292,8 @@ const PURGE_LABELS = {
     "store.page_images": "Immagini delle pagine",
     "store.uploaded_image": "Immagine caricata",
     "store.sync_records": "Record di sincronizzazione del connettore",
+    "store.lexical_stats": "Statistiche della ricerca per parole chiave",
+    "store.golden_items": "Evidenze di valutazione ed etichette di verifica delle risposte",
   },
 };
 
