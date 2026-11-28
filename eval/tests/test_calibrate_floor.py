@@ -1,16 +1,19 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
 from rag_sidecar.contracts.eval_run import TraceCandidate
 from rag_sidecar.contracts.retrieval import RefusalCalibrationConfig
 
+import rag_eval.calibrate.refusal as refusal_module
+from rag_eval.calibrate.__main__ import main as cli_main
 from rag_eval.calibrate.refusal import (
-    FixtureScoreCalibration,
+    CalibrationError,
     fit_similarity_floor,
     run_refusal_calibration,
 )
-from rag_eval.golden_io import load_golden, write_golden
+from rag_eval.golden_io import golden_sha256, load_golden, write_golden
 from rag_eval.harness_runner import HarnessRun
 from test_calibrate_refusal import V2_RECOMMENDED, _calibration_trace, _empty_thresholds, _golden_item, _ids
 
@@ -126,17 +129,127 @@ def test_write_records_a_fixture_score_calibration_file_with_only_the_context_th
     golden, _, sims = _world(tmp_path)
     floor = tmp_path / "fixture-score-calibration.json"
     result = _run(tmp_path, golden, sims, write=True, floor_path=floor)
-    written = FixtureScoreCalibration.model_validate_json(floor.read_text(encoding="utf-8"))
-    assert written.source == "fixture"
-    assert written.fixture_mode == "prechunked"
-    assert list(written.score_calibration) == ["context_threshold"]
-    assert written.score_calibration["context_threshold"] == pytest.approx((0.12 + 0.30) / 2)
-    assert written.status == "calibrated"
+    written = json.loads(floor.read_text(encoding="utf-8"))
+    assert written["schema_version"] == 2 and written["source"] == "fixture"
+    assert list(written["modes"]) == ["prechunked"]
+    entry = written["modes"]["prechunked"]
+    assert list(entry["score_calibration"]) == ["context_threshold"]
+    assert entry["score_calibration"]["context_threshold"] == pytest.approx((0.12 + 0.30) / 2)
+    assert entry["status"] == "calibrated"
+    assert entry["golden_sha256"] == golden_sha256(golden)
     assert result.floor_written is True
     assert result.similarity_floor is not None and result.similarity_floor.status == "calibrated"
     report = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
     assert "## Fixture similarity floor" in report
     assert "dev split only" in report
+
+
+OTHER_ENTRY = {
+    "dev": None,
+    "golden_sha256": "a" * 64,
+    "score_calibration": {"context_threshold": 0.2345678901234567},
+    "status": "calibrated",
+    "target_false_refusal": 0.05,
+}
+
+
+def _seed_floor(path: Path, modes: dict) -> None:
+    path.write_text(json.dumps({"modes": modes, "schema_version": 2, "source": "fixture"}, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _entry_text(path: Path, mode: str) -> str:
+    return json.dumps(json.loads(path.read_text(encoding="utf-8"))["modes"][mode], sort_keys=True, indent=2)
+
+
+def test_write_floor_writes_only_its_mode_and_keeps_the_other_entry_byte_for_byte(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    floor = tmp_path / "fixture-score-calibration.json"
+    _seed_floor(floor, {"ingest": OTHER_ENTRY})
+    before = _entry_text(floor, "ingest")
+    result = _run(tmp_path, golden, sims, write_floor=True, floor_path=floor, fixture_mode="prechunked")
+    written = json.loads(floor.read_text(encoding="utf-8"))
+    assert sorted(written["modes"]) == ["ingest", "prechunked"]
+    assert _entry_text(floor, "ingest") == before
+    assert '"context_threshold": 0.2345678901234567' in floor.read_text(encoding="utf-8")
+    assert written["modes"]["prechunked"]["score_calibration"]["context_threshold"] == pytest.approx((0.12 + 0.30) / 2)
+    assert result.floor_written is True and result.thresholds_written is False
+
+
+def test_write_floor_never_opens_the_thresholds_file_for_writing(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    thresholds = tmp_path / "thresholds-copy.json"
+    thresholds.write_bytes(_empty_thresholds(tmp_path).read_bytes())
+    os.utime(thresholds, ns=(1_000_000_000_000_000_000, 1_000_000_000_000_000_000))
+    before = (thresholds.read_bytes(), thresholds.stat().st_mtime_ns)
+    result = _run(tmp_path, golden, sims, write_floor=True, thresholds_path=thresholds, fixture_mode="ingest")
+    assert (thresholds.read_bytes(), thresholds.stat().st_mtime_ns) == before
+    assert result.thresholds_written is False and result.floor_written is True
+
+
+def test_a_single_entry_file_is_read_as_its_mode_and_upgraded_on_the_next_write(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    floor = tmp_path / "fixture-score-calibration.json"
+    old = {"fixture_mode": "prechunked", "schema_version": 1, "source": "fixture", **OTHER_ENTRY}
+    floor.write_text(json.dumps(old, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    _run(tmp_path, golden, sims, write_floor=True, floor_path=floor, fixture_mode="ingest")
+    written = json.loads(floor.read_text(encoding="utf-8"))
+    assert written["schema_version"] == 2
+    assert written["modes"]["prechunked"] == OTHER_ENTRY
+    assert written["modes"]["ingest"]["status"] == "calibrated"
+
+
+def test_write_thresholds_merges_the_floor_file_instead_of_replacing_it(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    floor = tmp_path / "fixture-score-calibration.json"
+    thresholds = tmp_path / "thresholds-copy.json"
+    thresholds.write_bytes(_empty_thresholds(tmp_path).read_bytes())
+    _seed_floor(floor, {"ingest": OTHER_ENTRY})
+    before = _entry_text(floor, "ingest")
+    result = _run(tmp_path, golden, sims, write=True, floor_path=floor, thresholds_path=thresholds)
+    assert result.thresholds_written is True
+    assert _entry_text(floor, "ingest") == before
+    assert "prechunked" in json.loads(floor.read_text(encoding="utf-8"))["modes"]
+
+
+def test_write_floor_is_refused_for_a_live_run(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    floor = tmp_path / "fixture-score-calibration.json"
+    with pytest.raises(CalibrationError):
+        _run(tmp_path, golden, sims, write_floor=True, floor_path=floor, base_url="https://app.example.test")
+    assert not floor.exists()
+
+
+def test_cli_write_floor_reports_a_fit_that_is_not_calibrated(tmp_path, monkeypatch, capsys):
+    golden, _, sims = _world(tmp_path)
+    flat = {key: 0.5 for key in sims}
+    monkeypatch.setattr(refusal_module, "_default_runner", _FloorRunner(flat))
+    floor = tmp_path / "fixture-score-calibration.json"
+    monkeypatch.setattr(refusal_module, "FLOOR_PATH", floor)
+    thresholds = tmp_path / "thresholds-copy.json"
+    thresholds.write_bytes(_empty_thresholds(tmp_path).read_bytes())
+    monkeypatch.setattr(refusal_module, "THRESHOLDS_PATH", thresholds)
+    before = thresholds.read_bytes()
+    code = cli_main(
+        ["refusal", "--run-config", str(V2_RECOMMENDED), "--out", str(tmp_path / "d"), "--golden", str(golden), "--fixture-mode", "ingest", "--write-floor"]
+    )
+    assert code == 0
+    entry = json.loads(floor.read_text(encoding="utf-8"))["modes"]["ingest"]
+    assert entry["status"] != "calibrated" and entry["score_calibration"] == {}
+    out = capsys.readouterr().out
+    assert "wrote the ingest fixture floor" in out
+    assert "no threshold was written" in out
+    assert thresholds.read_bytes() == before
+
+
+def test_cli_write_floor_with_a_base_url_is_a_usage_error(tmp_path, monkeypatch):
+    golden, _, sims = _world(tmp_path)
+    monkeypatch.setattr(refusal_module, "_default_runner", _FloorRunner(sims))
+    monkeypatch.setattr(refusal_module, "FLOOR_PATH", tmp_path / "fixture-score-calibration.json")
+    code = cli_main(
+        ["refusal", "--run-config", str(V2_RECOMMENDED), "--out", str(tmp_path / "d"), "--golden", str(golden), "--base-url", "https://app.example.test", "--write-floor"]
+    )
+    assert code == 2
+    assert not (tmp_path / "fixture-score-calibration.json").exists()
 
 
 def test_without_write_the_floor_file_is_left_alone(tmp_path):
