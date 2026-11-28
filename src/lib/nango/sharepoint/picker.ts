@@ -1,4 +1,4 @@
-import { sharePointIntegrationKey, type SharePointProvider } from './config';
+import { isGraphId, sharePointIntegrationKey, type SharePointProvider } from './config';
 import { graphEndpointOf, graphGet, nangoGraphTransport, pathAndQueryOf, type GraphTransport } from './graph';
 
 /**
@@ -6,6 +6,8 @@ import { graphEndpointOf, graphGet, nangoGraphTransport, pathAndQueryOf, type Gr
  * is handed out as an opaque cursor that only this module reads back, bound to the exact listing path it came from, so
  * a browser-supplied cursor can never steer a request to another path family or host (T-06.3-33).
  */
+export { isGraphId };
+
 export interface PickerConnection {
     connectionId: string;
     provider: SharePointProvider;
@@ -38,16 +40,10 @@ const CURSOR_PREFIX = 'spc1.';
 const MAX_CURSOR_LENGTH = 4096;
 const PICKER_DEADLINE_MS = 15_000;
 const PICKER_MAX_TOTAL_WAIT_MS = 10_000;
-const GRAPH_ID = /^[A-Za-z0-9!_.,-]{1,256}$/;
 
 const SITE_SELECT = '$select=id,name,displayName';
 const DRIVE_SELECT = '$select=id,name';
 const CHILD_SELECT = '$select=id,name,folder,file&$top=200';
-
-/** A Graph site, drive or item id: no separators, no encoding, not a dot segment. */
-export function isGraphId(value: string): boolean {
-    return GRAPH_ID.test(value) && !/^\.+$/.test(value);
-}
 
 function encodeCursor(nextLink: unknown): string | null {
     if (typeof nextLink !== 'string' || nextLink === '') return null;
