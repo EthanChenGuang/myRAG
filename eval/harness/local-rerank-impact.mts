@@ -4,9 +4,11 @@
  *   --list [--out <file>]       classify every run config under eval/config/runs/ and every run of every committed phase spec
  *                               (eval/config/phase*.json with a "runs" array) by the reranker the app resolves for the eval, chat,
  *                               embed and voice profiles. Exits 1 when a run cannot be classified.
- *   --compare --name <run> --pool <dir> --tenant <dir> [--mode <fixture mode>]
- *                               paired differences tenant against pool per slice, items whose top context set changed, refusal changes
- *                               and the refusal cells that go stale, from two finished harness run directories; prints one JSON row.
+ *   --compare --pool <dir> --tenant <dir> --mode <fixture mode>
+ *                               slice changes tenant against pool, slices beyond the noise floor, items whose top context set changed,
+ *                               refusal changes and all-zero rerank items, from two finished harness run directories; one JSON row.
+ *   --report --gate-runs <dir> --impact-runs <dir> --out <dir>
+ *                               impact.json and impact.md for every local_bm25 configuration (exit 1 when one was not measured).
  *
  * The classification calls the app's own resolver (describeReranker under loadRagConfig), never a copy of its rule. Output holds ids,
  * names, counts and metric values only: no query, chunk or lexeme text.
@@ -146,15 +148,20 @@ export async function classifyRun(run: ResolvedRun): Promise<ClassifiedRun> {
 
 // ---------- comparison of two finished run directories
 
-interface SliceMetricValue {
-  value: number | null;
+interface MetricCell {
   n?: number;
+  value: number | null;
 }
 
+type MetricBlock = Record<string, MetricCell | null | undefined>;
+
 interface Report {
-  overall: Record<string, SliceMetricValue | number | null>;
-  slices?: Record<string, Record<string, SliceMetricValue | number | null>>;
+  overall: MetricBlock;
+  by_language?: Record<string, MetricBlock>;
+  by_category?: Record<string, MetricBlock>;
   items: Array<{ item_id: string; refused: boolean }>;
+  golden_manifest_sha256?: string;
+  golden_set_version?: number;
 }
 
 interface TraceRow {
@@ -163,12 +170,9 @@ interface TraceRow {
   candidates?: Array<{ chunk_id: string; rerank_score: number | null }>;
 }
 
-const SLICE_METRICS = ['recall_at_5', 'recall_at_10', 'mrr', 'correct_refusal_rate', 'false_refusal_rate'];
-
-function metricValue(value: SliceMetricValue | number | null | undefined): number | null {
-  if (value === null || value === undefined) return null;
-  return typeof value === 'number' ? value : value.value;
-}
+const NOISE = path.join(REPO_ROOT, 'eval/config/noise.json');
+/** The slice rule of the pinned Phase 4.4 spec (no_slice_drop_rule v2). */
+const MIN_GATE_N = 10;
 
 function readTraces(dir: string): Map<string, TraceRow> {
   const file = path.join(dir, 'traces.jsonl');
@@ -186,29 +190,54 @@ function staleCells(): number {
   return (data.cells ?? []).filter((cell) => cell.provider === 'local_bm25').length;
 }
 
-export interface ImpactComparison {
-  name: string;
-  fixture_mode: string | null;
-  slices: Array<{ slice: string; metric: string; pool: number | null; tenant: number | null; delta: number | null }>;
-  items: number;
-  top_context_changed: number;
-  refusal_changed: number;
-  stale_refusal_cells: number;
+function slicesOf(report: Report): Map<string, MetricBlock> {
+  const out = new Map<string, MetricBlock>([['overall', report.overall]]);
+  for (const [key, block] of Object.entries(report.by_language ?? {})) out.set(`language:${key}`, block);
+  for (const [key, block] of Object.entries(report.by_category ?? {})) out.set(`category:${key}`, block);
+  return out;
 }
 
-export function compareRuns(name: string, poolDir: string, tenantDir: string, fixtureMode: string | null): ImpactComparison {
+/** Items whose reranked candidates all scored 0 (every raw score at or below 0, so the pool maximum normalizes them to 0). */
+export function allZeroItems(traces: Map<string, TraceRow>): { items: number; all_zero: number } {
+  let items = 0;
+  let zero = 0;
+  for (const row of traces.values()) {
+    const scores = (row.candidates ?? []).map((c) => c.rerank_score).filter((v): v is number => typeof v === 'number');
+    if (scores.length === 0) continue;
+    items += 1;
+    if (scores.every((v) => v === 0)) zero += 1;
+  }
+  return { items, all_zero: zero };
+}
+
+export interface ImpactComparison {
+  fixture_mode: string;
+  items: number;
+  overall: Array<{ metric: string; pool: number | null; tenant: number | null }>;
+  slices_changed: number;
+  slices_beyond_band: string[];
+  top_context_changed: number;
+  refusal_changed: number;
+  all_zero_rerank: { pool: number; tenant: number; items: number };
+  golden_manifest_sha256: string | null;
+}
+
+export function compareRuns(poolDir: string, tenantDir: string, fixtureMode: string): ImpactComparison {
   const pool = readJson(path.join(poolDir, 'report.json')) as Report;
   const tenant = readJson(path.join(tenantDir, 'report.json')) as Report;
-  const sliceNames = ['overall', ...Object.keys(tenant.slices ?? {}).sort()];
-  const slices: ImpactComparison['slices'] = [];
-  for (const slice of sliceNames) {
-    const a = slice === 'overall' ? pool.overall : pool.slices?.[slice];
-    const b = slice === 'overall' ? tenant.overall : tenant.slices?.[slice];
-    for (const metric of SLICE_METRICS) {
-      const p = metricValue(a?.[metric]);
-      const t = metricValue(b?.[metric]);
-      const delta = p === null || t === null ? null : t - p;
-      if (slice === 'overall' || (delta !== null && delta !== 0)) slices.push({ slice, metric, pool: p, tenant: t, delta });
+  const noise = readJson(NOISE) as { floor: number; metrics: Record<string, 'higher' | 'lower'> };
+  const poolSlices = slicesOf(pool);
+  let changed = 0;
+  const beyond: string[] = [];
+  for (const [slice, block] of slicesOf(tenant)) {
+    const before = poolSlices.get(slice);
+    for (const [metric, direction] of Object.entries(noise.metrics)) {
+      const a = block?.[metric];
+      const b = before?.[metric];
+      if (!a || !b || a.value === null || b.value === null) continue;
+      if (a.value !== b.value) changed += 1;
+      const worse = direction === 'higher' ? b.value - a.value : a.value - b.value;
+      if (worse > noise.floor && (a.n ?? 0) >= MIN_GATE_N) beyond.push(`${slice}:${metric} ${b.value.toFixed(4)} -> ${a.value.toFixed(4)} (n ${a.n})`);
     }
   }
   const poolTraces = readTraces(poolDir);
@@ -221,15 +250,138 @@ export function compareRuns(name: string, poolDir: string, tenantDir: string, fi
   }
   const refusedBefore = new Map(pool.items.map((item) => [item.item_id, item.refused]));
   const refusalChanged = tenant.items.filter((item) => refusedBefore.has(item.item_id) && refusedBefore.get(item.item_id) !== item.refused).length;
+  const zeroPool = allZeroItems(poolTraces);
+  const zeroTenant = allZeroItems(tenantTraces);
   return {
-    name,
     fixture_mode: fixtureMode,
-    slices,
     items: tenant.items.length,
+    overall: ['recall_at_5', 'recall_at_10', 'mrr', 'correct_refusal_rate', 'false_refusal_rate'].map((metric) => ({
+      metric,
+      pool: pool.overall[metric]?.value ?? null,
+      tenant: tenant.overall[metric]?.value ?? null,
+    })),
+    slices_changed: changed,
+    slices_beyond_band: beyond,
     top_context_changed: topChanged,
     refusal_changed: refusalChanged,
-    stale_refusal_cells: staleCells(),
+    all_zero_rerank: { pool: zeroPool.all_zero, tenant: zeroTenant.all_zero, items: zeroTenant.items },
+    golden_manifest_sha256: tenant.golden_manifest_sha256 ?? null,
   };
+}
+
+// ---------- the impact report
+
+const PIN_ENV = (): Record<string, string> => stringRecord(readJson(EVAL_ENV));
+
+/** Runs grouped by their effective configuration (environment without values equal to the eval pin, overrides, entry profile). */
+export async function groupedRuns(): Promise<Array<{ key: string; index: number; rep: string; runs: ClassifiedRun[] }>> {
+  const pin = PIN_ENV();
+  const groups = new Map<string, { key: string; index: number; rep: string; runs: ClassifiedRun[] }>();
+  for (const run of discoverRuns()) {
+    const classified = await classifyRun(run);
+    if (classified.classification !== 'local_bm25') continue;
+    const env = Object.fromEntries(Object.entries(run.env).filter(([k, v]) => pin[k] !== v).sort());
+    const key = JSON.stringify([env, run.overrides, run.entryProfile]);
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, index: groups.size, rep: run.source, runs: [] };
+      groups.set(key, group);
+    }
+    if (!group.rep.startsWith('eval/config/runs/') && run.source.startsWith('eval/config/runs/')) group.rep = run.source;
+    group.runs.push(classified);
+  }
+  return [...groups.values()];
+}
+
+/** Where a group's two arms were run: the gate's own arms for the gate's configurations, else <impact>/gNN-<arm>-<mode>. */
+function armDirs(rep: string, index: number, mode: string, gateRoot: string, impactRoot: string): { pool: string; tenant: string } | null {
+  const gate: Record<string, string> = {
+    'eval/config/runs/v2-default.json': 'v2-default',
+    'eval/config/runs/v2-lexical-bm25-on.json': 'v2-bm25',
+    'eval/config/phase44-local-rerank-stats-comparison.json#voice-pool-prechunked': 'voice',
+  };
+  const tag = gate[rep];
+  if (tag) {
+    if (tag === 'voice' && mode !== 'prechunked') return null;
+    return { pool: path.join(gateRoot, `${tag}-pool-${mode}`), tenant: path.join(gateRoot, `${tag}-tenant-${mode}`) };
+  }
+  const key = `g${String(index).padStart(2, '0')}`;
+  return { pool: path.join(impactRoot, `${key}-pool-${mode}`), tenant: path.join(impactRoot, `${key}-tenant-${mode}`) };
+}
+
+export async function impactReport(gateRoot: string, impactRoot: string): Promise<Record<string, unknown>> {
+  const classified: ClassifiedRun[] = [];
+  for (const run of discoverRuns()) classified.push(await classifyRun(run));
+  const groups = await groupedRuns();
+  const measured: Record<string, unknown>[] = [];
+  for (const group of groups) {
+    const evalProvider = group.runs[0]?.providers.eval;
+    const entry = group.runs[0]?.entry_profile;
+    const base = { group: group.index, representative: group.rep, sources: group.runs.map((run) => run.source) };
+    if (group.rep.endsWith('-local-stats-tenant.json')) {
+      measured.push({ ...base, status: 'is_tenant_arm', note: 'the tenant arm of the gate itself (phase44-local-rerank-stats-comparison.json)' });
+      continue;
+    }
+    if (entry !== 'voice' && evalProvider !== 'local_bm25') {
+      measured.push({ ...base, status: 'voice_profile_only', note: `eval profile reranker ${evalProvider}; only the voice profile resolves to local_bm25, measured by the gate's voice arm` });
+      continue;
+    }
+    const modes: ImpactComparison[] = [];
+    const missing: string[] = [];
+    for (const mode of ['prechunked', 'ingest']) {
+      const dirs = armDirs(group.rep, group.index, mode, gateRoot, impactRoot);
+      if (!dirs) continue;
+      if (!fs.existsSync(path.join(dirs.pool, 'report.json')) || !fs.existsSync(path.join(dirs.tenant, 'report.json'))) {
+        missing.push(mode);
+        continue;
+      }
+      modes.push(compareRuns(dirs.pool, dirs.tenant, mode));
+    }
+    measured.push({ ...base, status: missing.length === 0 ? 'measured' : 'not_measured', ...(missing.length ? { missing_modes: missing } : {}), modes });
+  }
+  return {
+    schema_version: 1,
+    stale_refusal_cells: staleCells(),
+    counts: {
+      runs: classified.length,
+      local_bm25: classified.filter((run) => run.classification === 'local_bm25').length,
+      not_affected: classified.filter((run) => run.classification === 'not_affected').length,
+      groups: groups.length,
+    },
+    runs: classified,
+    groups: measured,
+  };
+}
+
+export function impactMarkdown(report: Record<string, unknown>): string {
+  const counts = report.counts as Record<string, number>;
+  const groups = report.groups as Array<Record<string, unknown>>;
+  const lines = [
+    '# RAG_RERANK_LOCAL_STATS=tenant: impact on every keyless v2 run (plan 04.4-22, D-58)',
+    '',
+    `Runs classified: ${counts.runs} (${counts.local_bm25} resolve to local_bm25 for at least one profile, ${counts.not_affected} not affected); ${counts.groups} effective configurations among the local_bm25 runs. Refusal cells that go stale: ${String(report.stale_refusal_cells)} (no cell is keyed to local_bm25, and local_bm25 scores are relative, so no cell applies in either mode).`,
+    '',
+    'Each row compares the tenant arm with the pool arm of the same run configuration (ids, counts and metric values only). "Beyond band" uses the noise floor with n at least 10, as the pinned Phase 4.4 slice rule; it is reported here, not gated.',
+    '',
+    '| Group | Representative | Runs | Mode | Recall@10 pool → tenant | Slices changed | Beyond band | Top context changed | Refusal changed | All-zero rerank pool / tenant |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  ];
+  for (const group of groups) {
+    const sources = (group.sources as string[]).length;
+    if (group.status !== 'measured') {
+      lines.push(`| ${String(group.group)} | \`${String(group.representative)}\` | ${sources} | — | ${String(group.status)}: ${String(group.note ?? (group.missing_modes as string[] | undefined)?.join(', ') ?? '')} | | | | | |`);
+      continue;
+    }
+    for (const mode of group.modes as ImpactComparison[]) {
+      const r10 = mode.overall.find((m) => m.metric === 'recall_at_10');
+      const fmt = (v: number | null | undefined) => (v === null || v === undefined ? '—' : v.toFixed(4));
+      lines.push(
+        `| ${String(group.group)} | \`${String(group.representative)}\` | ${sources} | ${mode.fixture_mode} | ${fmt(r10?.pool)} → ${fmt(r10?.tenant)} | ${mode.slices_changed} | ${mode.slices_beyond_band.length ? mode.slices_beyond_band.join('; ') : 'none'} | ${mode.top_context_changed} of ${mode.items} | ${mode.refusal_changed} | ${mode.all_zero_rerank.pool} / ${mode.all_zero_rerank.tenant} of ${mode.all_zero_rerank.items} |`,
+      );
+    }
+  }
+  lines.push('', 'Not affected runs and the reason for each are listed in impact.json (`runs`, classification `not_affected`).', '');
+  return lines.join('\n');
 }
 
 /**
@@ -270,11 +422,13 @@ async function main(): Promise<number> {
     options: {
       list: { type: 'boolean' },
       compare: { type: 'boolean' },
+      report: { type: 'boolean' },
       out: { type: 'string' },
-      name: { type: 'string' },
       pool: { type: 'string' },
       tenant: { type: 'string' },
       mode: { type: 'string' },
+      'gate-runs': { type: 'string' },
+      'impact-runs': { type: 'string' },
     },
   });
   if (values.list) {
@@ -304,14 +458,29 @@ async function main(): Promise<number> {
     return failures.length === 0 ? 0 : 1;
   }
   if (values.compare) {
-    if (!values.name || !values.pool || !values.tenant) {
-      console.error('usage: --compare --name <run> --pool <dir> --tenant <dir> [--mode <fixture mode>]');
+    if (!values.pool || !values.tenant || !values.mode) {
+      console.error('usage: --compare --pool <dir> --tenant <dir> --mode <fixture mode>');
       return 2;
     }
-    process.stdout.write(`${JSON.stringify(compareRuns(values.name, values.pool, values.tenant, values.mode ?? null))}\n`);
+    process.stdout.write(`${JSON.stringify(compareRuns(values.pool, values.tenant, values.mode))}\n`);
     return 0;
   }
-  console.error('usage: local-rerank-impact.mts --list [--out <file>] | --compare --name <run> --pool <dir> --tenant <dir> [--mode <mode>]');
+  if (values.report) {
+    if (!values['gate-runs'] || !values['impact-runs'] || !values.out) {
+      console.error('usage: --report --gate-runs <dir> --impact-runs <dir> --out <dir>');
+      return 2;
+    }
+    const report = await impactReport(path.resolve(values['gate-runs']), path.resolve(values['impact-runs']));
+    const out = path.resolve(values.out);
+    fs.mkdirSync(out, { recursive: true });
+    fs.writeFileSync(path.join(out, 'impact.json'), `${JSON.stringify(report, null, 2)}\n`);
+    fs.writeFileSync(path.join(out, 'impact.md'), impactMarkdown(report));
+    const groups = report.groups as Array<{ status: string }>;
+    const notMeasured = groups.filter((g) => g.status === 'not_measured').length;
+    console.error(`[Local Rerank Impact] ${groups.length} groups, ${notMeasured} not measured`);
+    return notMeasured === 0 ? 0 : 1;
+  }
+  console.error('usage: local-rerank-impact.mts --list [--out <file>] | --compare ... | --report --gate-runs <dir> --impact-runs <dir> --out <dir>');
   return 2;
 }
 

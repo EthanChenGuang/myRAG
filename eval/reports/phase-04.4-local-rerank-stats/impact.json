@@ -1,0 +1,4321 @@
+{
+  "schema_version": 1,
+  "stale_refusal_cells": 0,
+  "counts": {
+    "runs": 172,
+    "local_bm25": 50,
+    "not_affected": 122,
+    "groups": 24
+  },
+  "runs": [
+    {
+      "source": "eval/config/runs/access-groups-on.json",
+      "name": "access-groups-on",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/budget-overflow-legacy.json",
+      "name": "budget-overflow-legacy",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/budget-overflow-v2.json",
+      "name": "budget-overflow-v2",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/calc-block-follow.json",
+      "name": "calc-block-follow",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/calc-missing-operand.json",
+      "name": "calc-missing-operand",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/calc-skip-rule-check-off.json",
+      "name": "calc-skip-rule-check-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/calc-skip-rule-check-on.json",
+      "name": "calc-skip-rule-check-on",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/calc-tool-follow.json",
+      "name": "calc-tool-follow",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/legacy.json",
+      "name": "legacy",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/live-cohere-fast.json",
+      "name": "live-cohere-fast",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/live-cohere-pro.json",
+      "name": "live-cohere-pro",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/live-voyage-3-lite.json",
+      "name": "live-voyage-3-lite",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker voyage for every profile"
+      ],
+      "providers": {
+        "eval": "voyage",
+        "chat": "voyage",
+        "embed": "voyage",
+        "voice": "voyage"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/live-voyage-3.json",
+      "name": "live-voyage-3",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker voyage for every profile"
+      ],
+      "providers": {
+        "eval": "voyage",
+        "chat": "voyage",
+        "embed": "voyage",
+        "voice": "voyage"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-all-off.json",
+      "name": "p52-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-output-cap-512.json",
+      "name": "p52-output-cap-512",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-output-cap.json",
+      "name": "p52-output-cap",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-rules-on.json",
+      "name": "p52-rules-on",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-sec-output-guard.json",
+      "name": "p52-sec-output-guard",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-violating-offtopic.json",
+      "name": "p52-violating-offtopic",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-violating-partial.json",
+      "name": "p52-violating-partial",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/p52-violating-versions.json",
+      "name": "p52-violating-versions",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/q62-scope-score.json",
+      "name": "q62-scope-score",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/q62-voice-no-translate.json",
+      "name": "q62-voice-no-translate",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "voice"
+    },
+    {
+      "source": "eval/config/runs/q62-voice-translate.json",
+      "name": "q62-voice-translate",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "voice"
+    },
+    {
+      "source": "eval/config/runs/q62-whatsapp-multi-turn.json",
+      "name": "q62-whatsapp-multi-turn",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/query-layer-langchain.json",
+      "name": "query-layer-langchain",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/query-layer-llamaindex.json",
+      "name": "query-layer-llamaindex",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/query-layer-off.json",
+      "name": "query-layer-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/sec-all-off.json",
+      "name": "sec-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/sec-recommended.json",
+      "name": "sec-recommended",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/sec-tagging-only.json",
+      "name": "sec-tagging-only",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-all-off.json",
+      "name": "tpl-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-attributes.json",
+      "name": "tpl-only-attributes",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-boilerplate.json",
+      "name": "tpl-only-boilerplate",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-filter-hard.json",
+      "name": "tpl-only-filter-hard",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-filter-soft.json",
+      "name": "tpl-only-filter-soft",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-header.json",
+      "name": "tpl-only-header",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-identifier-feed.json",
+      "name": "tpl-only-identifier-feed",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-quantity.json",
+      "name": "tpl-only-quantity",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-only-section-rules.json",
+      "name": "tpl-only-section-rules",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-recommended.json",
+      "name": "tpl-recommended",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/tpl-v2-off.json",
+      "name": "tpl-v2-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-all-off.json",
+      "name": "v2-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-fallback-none-no-cells.json",
+      "name": "v2-default-fallback-none-no-cells",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-fallback-none.json",
+      "name": "v2-default-fallback-none",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-hosted-fake-no-cells.json",
+      "name": "v2-default-hosted-fake-no-cells",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto: local_bm25 for voice (no hosted reranker for that profile)"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-hosted-fake.json",
+      "name": "v2-default-hosted-fake",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto: local_bm25 for voice (no hosted reranker for that profile)"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-local-stats-tenant.json",
+      "name": "v2-default-local-stats-tenant",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-no-cells.json",
+      "name": "v2-default-no-cells",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-similarity-floor-hosted-fake-no-cells.json",
+      "name": "v2-default-similarity-floor-hosted-fake-no-cells",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto: local_bm25 for voice (no hosted reranker for that profile)"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-similarity-floor-hosted-fake.json",
+      "name": "v2-default-similarity-floor-hosted-fake",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto: local_bm25 for voice (no hosted reranker for that profile)"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-similarity-floor-no-cells.json",
+      "name": "v2-default-similarity-floor-no-cells",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default-similarity-floor.json",
+      "name": "v2-default-similarity-floor",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-default.json",
+      "name": "v2-default",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-diversity-collapse.json",
+      "name": "v2-diversity-collapse",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-diversity-mmr.json",
+      "name": "v2-diversity-mmr",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-identifier-on.json",
+      "name": "v2-identifier-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-bm25-cluster-df-on.json",
+      "name": "v2-lexical-bm25-cluster-df-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-bm25-on-local-stats-tenant.json",
+      "name": "v2-lexical-bm25-on-local-stats-tenant",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-bm25-on.json",
+      "name": "v2-lexical-bm25-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-dict-on.json",
+      "name": "v2-lexical-dict-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-stem-it-on.json",
+      "name": "v2-lexical-stem-it-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-terminology-off.json",
+      "name": "v2-lexical-terminology-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-lexical-terminology-on.json",
+      "name": "v2-lexical-terminology-on",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-recommended.json",
+      "name": "v2-recommended",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-table-lookup-on.json",
+      "name": "v2-table-lookup-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-terminology-off.json",
+      "name": "v2-terminology-off",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-terminology-on.json",
+      "name": "v2-terminology-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/runs/v2-version-scope-on.json",
+      "name": "v2-version-scope-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-all-off-prechunked",
+      "name": "tpl-all-off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-all-off-ingest",
+      "name": "tpl-all-off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-v2-off-prechunked",
+      "name": "tpl-v2-off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-v2-off-ingest",
+      "name": "tpl-v2-off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-recommended-prechunked",
+      "name": "tpl-recommended-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-recommended-ingest",
+      "name": "tpl-recommended-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-boilerplate-prechunked",
+      "name": "tpl-only-boilerplate-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-boilerplate-ingest",
+      "name": "tpl-only-boilerplate-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-section-rules-prechunked",
+      "name": "tpl-only-section-rules-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-section-rules-ingest",
+      "name": "tpl-only-section-rules-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-attributes-prechunked",
+      "name": "tpl-only-attributes-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-attributes-ingest",
+      "name": "tpl-only-attributes-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-header-prechunked",
+      "name": "tpl-only-header-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-header-ingest",
+      "name": "tpl-only-header-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-filter-hard-prechunked",
+      "name": "tpl-only-filter-hard-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-filter-hard-ingest",
+      "name": "tpl-only-filter-hard-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-filter-soft-prechunked",
+      "name": "tpl-only-filter-soft-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-filter-soft-ingest",
+      "name": "tpl-only-filter-soft-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-quantity-prechunked",
+      "name": "tpl-only-quantity-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-quantity-ingest",
+      "name": "tpl-only-quantity-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-identifier-feed-prechunked",
+      "name": "tpl-only-identifier-feed-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase33-comparison.json#tpl-only-identifier-feed-ingest",
+      "name": "tpl-only-identifier-feed-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#legacy-prechunked",
+      "name": "legacy-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#legacy-ingest",
+      "name": "legacy-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#v2-all-off",
+      "name": "v2-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#v2-recommended",
+      "name": "v2-recommended",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#parent-child-off",
+      "name": "parent-child-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#parent-child-on",
+      "name": "parent-child-on",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#compression-on",
+      "name": "compression-on",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#local-bm25",
+      "name": "local-bm25",
+      "classification": "local_bm25",
+      "reasons": [
+        "explicit: RAG_RERANKER=local_bm25"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#translation-on",
+      "name": "translation-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "explicit: RAG_RERANKER=local_bm25"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase4-comparison.json#iterative-scan-relaxed",
+      "name": "iterative-scan-relaxed",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker cohere for every profile"
+      ],
+      "providers": {
+        "eval": "cohere",
+        "chat": "cohere",
+        "embed": "cohere",
+        "voice": "cohere"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-default",
+      "name": "v2-default",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-default-phase42-off",
+      "name": "v2-default-phase42-off",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-diversity-collapse",
+      "name": "v2-diversity-collapse",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-diversity-mmr",
+      "name": "v2-diversity-mmr",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-identifier-on",
+      "name": "v2-identifier-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-table-lookup-on",
+      "name": "v2-table-lookup-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-version-scope-on",
+      "name": "v2-version-scope-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-lexical-dict-on",
+      "name": "v2-lexical-dict-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase42-gates.json#v2-lexical-stem-it-on",
+      "name": "v2-lexical-stem-it-on",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-default-prechunked",
+      "name": "v2-default-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-lexical-bm25-on-prechunked",
+      "name": "v2-lexical-bm25-on-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-default-ingest",
+      "name": "v2-default-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-lexical-bm25-on-ingest",
+      "name": "v2-lexical-bm25-on-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-default-rerank-none-prechunked",
+      "name": "v2-default-rerank-none-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-cluster-df-comparison.json#v2-lexical-bm25-on-rerank-none-prechunked",
+      "name": "v2-lexical-bm25-on-rerank-none-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-default-prechunked",
+      "name": "v2-default-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-lexical-bm25-on-prechunked",
+      "name": "v2-lexical-bm25-on-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-default-ingest",
+      "name": "v2-default-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-lexical-bm25-on-ingest",
+      "name": "v2-lexical-bm25-on-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-default-rerank-none-prechunked",
+      "name": "v2-default-rerank-none-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-comparison.json#v2-lexical-bm25-on-rerank-none-prechunked",
+      "name": "v2-lexical-bm25-on-rerank-none-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#off-voice",
+      "name": "off-voice",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "voice"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-pool-prechunked",
+      "name": "v2-default-pool-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-tenant-prechunked",
+      "name": "v2-default-tenant-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-pool-ingest",
+      "name": "v2-default-pool-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-tenant-ingest",
+      "name": "v2-default-tenant-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-pool-prechunked",
+      "name": "v2-bm25-pool-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-tenant-prechunked",
+      "name": "v2-bm25-tenant-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-pool-ingest",
+      "name": "v2-bm25-pool-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-tenant-ingest",
+      "name": "v2-bm25-tenant-ingest",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#voice-pool-prechunked",
+      "name": "voice-pool-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY",
+        "voice entry run"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "voice"
+    },
+    {
+      "source": "eval/config/phase44-local-rerank-stats-comparison.json#voice-tenant-prechunked",
+      "name": "voice-tenant-prechunked",
+      "classification": "local_bm25",
+      "reasons": [
+        "auto_without_key: RAG_RERANKER=auto with an empty COHERE_API_KEY",
+        "voice entry run"
+      ],
+      "providers": {
+        "eval": "local_bm25",
+        "chat": "local_bm25",
+        "embed": "local_bm25",
+        "voice": "local_bm25"
+      },
+      "entry_profile": "voice"
+    },
+    {
+      "source": "eval/config/phase5-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5-comparison.json#on-prechunked",
+      "name": "on-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5-comparison.json#on-ingest",
+      "name": "on-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.1.1-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.1.1-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.1.1-comparison.json#on-prechunked",
+      "name": "on-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.1.1-comparison.json#on-ingest",
+      "name": "on-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.3-comparison.json#off-prechunked",
+      "name": "off-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase5.3-comparison.json#off-ingest",
+      "name": "off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase51-comparison.json#all-off",
+      "name": "all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase51-comparison.json#recommended",
+      "name": "recommended",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase51-comparison.json#tagging-only",
+      "name": "tagging-only",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase51-comparison.json#flag",
+      "name": "flag",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase51-comparison.json#downweight",
+      "name": "downweight",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#all-off",
+      "name": "all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#all-off-ingest",
+      "name": "all-off-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#rules-on",
+      "name": "rules-on",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#violating-partial",
+      "name": "violating-partial",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#violating-versions",
+      "name": "violating-versions",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#violating-offtopic",
+      "name": "violating-offtopic",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#sec-output-guard",
+      "name": "sec-output-guard",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase52-comparison.json#output-cap-512",
+      "name": "output-cap-512",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#legacy-prechunked",
+      "name": "legacy-prechunked",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#legacy-ingest",
+      "name": "legacy-ingest",
+      "classification": "not_affected",
+      "reasons": [
+        "legacy_pipeline: no v2 rerank stage"
+      ],
+      "providers": {
+        "eval": "legacy_pipeline",
+        "chat": "legacy_pipeline",
+        "embed": "legacy_pipeline",
+        "voice": "legacy_pipeline"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#v2-all-off",
+      "name": "v2-all-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#query-layer-off",
+      "name": "query-layer-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#query-layer-llamaindex",
+      "name": "query-layer-llamaindex",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#query-layer-llamaindex-cache-off",
+      "name": "query-layer-llamaindex-cache-off",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#query-layer-llamaindex-cache-on",
+      "name": "query-layer-llamaindex-cache-on",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    },
+    {
+      "source": "eval/config/phase6-comparison.json#cache-pairs",
+      "name": "cache-pairs",
+      "classification": "not_affected",
+      "reasons": [
+        "reranker none for every profile"
+      ],
+      "providers": {
+        "eval": "none",
+        "chat": "none",
+        "embed": "none",
+        "voice": "none"
+      },
+      "entry_profile": "eval"
+    }
+  ],
+  "groups": [
+    {
+      "group": 0,
+      "representative": "eval/config/runs/v2-default-hosted-fake-no-cells.json",
+      "sources": [
+        "eval/config/runs/v2-default-hosted-fake-no-cells.json"
+      ],
+      "status": "voice_profile_only",
+      "note": "eval profile reranker cohere; only the voice profile resolves to local_bm25, measured by the gate's voice arm"
+    },
+    {
+      "group": 1,
+      "representative": "eval/config/runs/v2-default-hosted-fake.json",
+      "sources": [
+        "eval/config/runs/v2-default-hosted-fake.json"
+      ],
+      "status": "voice_profile_only",
+      "note": "eval profile reranker cohere; only the voice profile resolves to local_bm25, measured by the gate's voice arm"
+    },
+    {
+      "group": 2,
+      "representative": "eval/config/runs/v2-default-local-stats-tenant.json",
+      "sources": [
+        "eval/config/runs/v2-default-local-stats-tenant.json"
+      ],
+      "status": "is_tenant_arm",
+      "note": "the tenant arm of the gate itself (phase44-local-rerank-stats-comparison.json)"
+    },
+    {
+      "group": 3,
+      "representative": "eval/config/runs/v2-default-no-cells.json",
+      "sources": [
+        "eval/config/runs/v2-default-no-cells.json"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 4,
+      "representative": "eval/config/runs/v2-default-similarity-floor-hosted-fake-no-cells.json",
+      "sources": [
+        "eval/config/runs/v2-default-similarity-floor-hosted-fake-no-cells.json"
+      ],
+      "status": "voice_profile_only",
+      "note": "eval profile reranker cohere; only the voice profile resolves to local_bm25, measured by the gate's voice arm"
+    },
+    {
+      "group": 5,
+      "representative": "eval/config/runs/v2-default-similarity-floor-hosted-fake.json",
+      "sources": [
+        "eval/config/runs/v2-default-similarity-floor-hosted-fake.json"
+      ],
+      "status": "voice_profile_only",
+      "note": "eval profile reranker cohere; only the voice profile resolves to local_bm25, measured by the gate's voice arm"
+    },
+    {
+      "group": 6,
+      "representative": "eval/config/runs/v2-default-similarity-floor-no-cells.json",
+      "sources": [
+        "eval/config/runs/v2-default-similarity-floor-no-cells.json"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.8729166666666667,
+              "tenant": 0.9041666666666667
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8854166666666666,
+              "tenant": 0.9166666666666666
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7775396825396825,
+              "tenant": 0.8150396825396825
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.020833333333333332,
+              "tenant": 0.020833333333333332
+            }
+          ],
+          "slices_changed": 21,
+          "slices_beyond_band": [],
+          "top_context_changed": 167,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7966867469879518,
+              "tenant": 0.8313253012048193
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8253012048192772,
+              "tenant": 0.8629518072289156
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7229740390131957,
+              "tenant": 0.7539192484222604
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 0.9846153846153847,
+              "tenant": 0.9846153846153847
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.030120481927710843,
+              "tenant": 0.030120481927710843
+            }
+          ],
+          "slices_changed": 27,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 268,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 7,
+      "representative": "eval/config/runs/v2-default-similarity-floor.json",
+      "sources": [
+        "eval/config/runs/v2-default-similarity-floor.json"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.8729166666666667,
+              "tenant": 0.9041666666666667
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8854166666666666,
+              "tenant": 0.9166666666666666
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7775396825396825,
+              "tenant": 0.8150396825396825
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.020833333333333332,
+              "tenant": 0.020833333333333332
+            }
+          ],
+          "slices_changed": 21,
+          "slices_beyond_band": [],
+          "top_context_changed": 167,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7966867469879518,
+              "tenant": 0.8313253012048193
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8253012048192772,
+              "tenant": 0.8629518072289156
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7229740390131957,
+              "tenant": 0.7539192484222604
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 0.9846153846153847,
+              "tenant": 0.9846153846153847
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.030120481927710843,
+              "tenant": 0.030120481927710843
+            }
+          ],
+          "slices_changed": 27,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 268,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 8,
+      "representative": "eval/config/runs/v2-default.json",
+      "sources": [
+        "eval/config/runs/v2-default.json",
+        "eval/config/runs/v2-terminology-off.json",
+        "eval/config/phase42-gates.json#v2-default",
+        "eval/config/phase42-gates.json#v2-default-phase42-off",
+        "eval/config/phase44-comparison.json#v2-default-prechunked",
+        "eval/config/phase44-comparison.json#v2-default-ingest",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-pool-prechunked",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-tenant-prechunked",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-pool-ingest",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-default-tenant-ingest"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 9,
+      "representative": "eval/config/runs/v2-diversity-collapse.json",
+      "sources": [
+        "eval/config/runs/v2-diversity-collapse.json",
+        "eval/config/phase42-gates.json#v2-diversity-collapse"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 124,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6957831325301205,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7078313253012049,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 10,
+      "representative": "eval/config/runs/v2-diversity-mmr.json",
+      "sources": [
+        "eval/config/runs/v2-diversity-mmr.json",
+        "eval/config/phase42-gates.json#v2-diversity-mmr"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.71875,
+              "tenant": 0.7354166666666667
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6441319444444444,
+              "tenant": 0.6585813492063491
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 22,
+          "slices_beyond_band": [],
+          "top_context_changed": 146,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7123493975903614
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7078313253012049,
+              "tenant": 0.7259036144578314
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6352194492254734,
+              "tenant": 0.658311818703385
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 27,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 234,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 11,
+      "representative": "eval/config/runs/v2-identifier-on.json",
+      "sources": [
+        "eval/config/runs/v2-identifier-on.json",
+        "eval/config/phase42-gates.json#v2-identifier-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7895833333333333,
+              "tenant": 0.8020833333333334
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7979166666666667,
+              "tenant": 0.8104166666666667
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7019444444444445,
+              "tenant": 0.6973313492063492
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.16666666666666666,
+              "tenant": 0.16666666666666666
+            }
+          ],
+          "slices_changed": 22,
+          "slices_beyond_band": [
+            "category:multi_turn:mrr 0.5313 -> 0.4896 (n 16)"
+          ],
+          "top_context_changed": 76,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 48,
+            "tenant": 29,
+            "items": 444
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.4864457831325301,
+              "tenant": 0.5120481927710844
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.4954819277108434,
+              "tenant": 0.5195783132530121
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.45261044176706833,
+              "tenant": 0.471636546184739
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.4578313253012048,
+              "tenant": 0.4578313253012048
+            }
+          ],
+          "slices_changed": 23,
+          "slices_beyond_band": [],
+          "top_context_changed": 145,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 441
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 12,
+      "representative": "eval/config/runs/v2-lexical-bm25-cluster-df-on.json",
+      "sources": [
+        "eval/config/runs/v2-lexical-bm25-cluster-df-on.json",
+        "eval/config/phase44-cluster-df-comparison.json#v2-lexical-bm25-on-prechunked",
+        "eval/config/phase44-cluster-df-comparison.json#v2-lexical-bm25-on-ingest"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7104166666666667,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6475396825396825,
+              "tenant": 0.660734126984127
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 20,
+          "slices_beyond_band": [],
+          "top_context_changed": 123,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6987951807228916,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7078313253012049,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6388554216867469,
+              "tenant": 0.658785140562249
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 24,
+          "slices_beyond_band": [],
+          "top_context_changed": 211,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 13,
+      "representative": "eval/config/runs/v2-lexical-bm25-on-local-stats-tenant.json",
+      "sources": [
+        "eval/config/runs/v2-lexical-bm25-on-local-stats-tenant.json"
+      ],
+      "status": "is_tenant_arm",
+      "note": "the tenant arm of the gate itself (phase44-local-rerank-stats-comparison.json)"
+    },
+    {
+      "group": 14,
+      "representative": "eval/config/runs/v2-lexical-bm25-on.json",
+      "sources": [
+        "eval/config/runs/v2-lexical-bm25-on.json",
+        "eval/config/phase44-comparison.json#v2-lexical-bm25-on-prechunked",
+        "eval/config/phase44-comparison.json#v2-lexical-bm25-on-ingest",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-pool-prechunked",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-tenant-prechunked",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-pool-ingest",
+        "eval/config/phase44-local-rerank-stats-comparison.json#v2-bm25-tenant-ingest"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7083333333333334,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.725,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6475396825396825,
+              "tenant": 0.660734126984127
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 21,
+          "slices_beyond_band": [],
+          "top_context_changed": 125,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.697289156626506,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6396084337349397,
+              "tenant": 0.658785140562249
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 24,
+          "slices_beyond_band": [],
+          "top_context_changed": 211,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 15,
+      "representative": "eval/config/runs/v2-lexical-dict-on.json",
+      "sources": [
+        "eval/config/runs/v2-lexical-dict-on.json",
+        "eval/config/phase42-gates.json#v2-lexical-dict-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6477480158730159,
+              "tenant": 0.6609424603174604
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 16,
+      "representative": "eval/config/runs/v2-lexical-stem-it-on.json",
+      "sources": [
+        "eval/config/runs/v2-lexical-stem-it-on.json",
+        "eval/config/phase42-gates.json#v2-lexical-stem-it-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7125,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.725,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6475396825396825,
+              "tenant": 0.6610813492063492
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 22,
+          "slices_beyond_band": [],
+          "top_context_changed": 130,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 17,
+      "representative": "eval/config/runs/v2-table-lookup-on.json",
+      "sources": [
+        "eval/config/runs/v2-table-lookup-on.json",
+        "eval/config/phase42-gates.json#v2-table-lookup-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 18,
+      "representative": "eval/config/runs/v2-terminology-on.json",
+      "sources": [
+        "eval/config/runs/v2-terminology-on.json"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6475396825396825,
+              "tenant": 0.660734126984127
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6371736947791165,
+              "tenant": 0.6598895582329317
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 218,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 19,
+      "representative": "eval/config/runs/v2-version-scope-on.json",
+      "sources": [
+        "eval/config/runs/v2-version-scope-on.json",
+        "eval/config/phase42-gates.json#v2-version-scope-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7208333333333333,
+              "tenant": 0.7333333333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7333333333333333,
+              "tenant": 0.7458333333333333
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6987951807228916,
+              "tenant": 0.7243975903614458
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7108433734939759,
+              "tenant": 0.7319277108433735
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 20,
+      "representative": "eval/config/phase4-comparison.json#local-bm25",
+      "sources": [
+        "eval/config/phase4-comparison.json#local-bm25"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.8729166666666667,
+              "tenant": 0.9041666666666667
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8854166666666666,
+              "tenant": 0.9166666666666666
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7775396825396825,
+              "tenant": 0.8150396825396825
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.020833333333333332,
+              "tenant": 0.020833333333333332
+            }
+          ],
+          "slices_changed": 21,
+          "slices_beyond_band": [],
+          "top_context_changed": 167,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7966867469879518,
+              "tenant": 0.8313253012048193
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8253012048192772,
+              "tenant": 0.8629518072289156
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7229740390131957,
+              "tenant": 0.7539192484222604
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 0.9846153846153847,
+              "tenant": 0.9846153846153847
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.030120481927710843,
+              "tenant": 0.030120481927710843
+            }
+          ],
+          "slices_changed": 27,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 268,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 21,
+      "representative": "eval/config/phase4-comparison.json#translation-on",
+      "sources": [
+        "eval/config/phase4-comparison.json#translation-on"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.9104166666666667,
+              "tenant": 0.9416666666666667
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.9270833333333334,
+              "tenant": 0.9583333333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.811468253968254,
+              "tenant": 0.8500099206349206
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.016666666666666666,
+              "tenant": 0.016666666666666666
+            }
+          ],
+          "slices_changed": 22,
+          "slices_beyond_band": [],
+          "top_context_changed": 174,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 18,
+            "tenant": 17,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.8207831325301205,
+              "tenant": 0.858433734939759
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.8554216867469879,
+              "tenant": 0.8930722891566265
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.7495804647160069,
+              "tenant": 0.7792706540447505
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 0.9846153846153847,
+              "tenant": 0.9846153846153847
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.024096385542168676,
+              "tenant": 0.024096385542168676
+            }
+          ],
+          "slices_changed": 29,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 272,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 24,
+            "tenant": 35,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 22,
+      "representative": "eval/config/phase44-cluster-df-comparison.json#v2-default-prechunked",
+      "sources": [
+        "eval/config/phase44-cluster-df-comparison.json#v2-default-prechunked",
+        "eval/config/phase44-cluster-df-comparison.json#v2-default-ingest"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.7145833333333333,
+              "tenant": 0.7270833333333333
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7270833333333333,
+              "tenant": 0.7395833333333334
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6454563492063492,
+              "tenant": 0.6586507936507936
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.2375,
+              "tenant": 0.2375
+            }
+          ],
+          "slices_changed": 19,
+          "slices_beyond_band": [],
+          "top_context_changed": 129,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 22,
+            "tenant": 23,
+            "items": 454
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        },
+        {
+          "fixture_mode": "ingest",
+          "items": 602,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.6942771084337349,
+              "tenant": 0.7198795180722891
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.7063253012048193,
+              "tenant": 0.7274096385542169
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.6356676706827309,
+              "tenant": 0.6583835341365463
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 1,
+              "tenant": 1
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.24096385542168675,
+              "tenant": 0.24096385542168675
+            }
+          ],
+          "slices_changed": 26,
+          "slices_beyond_band": [
+            "category:scanned:recall_at_10 1.0000 -> 0.9286 (n 14)"
+          ],
+          "top_context_changed": 219,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 28,
+            "tenant": 41,
+            "items": 602
+          },
+          "golden_manifest_sha256": "ee414c493caf28de3b3034543d9d2de95f648712e7196ea999b8eeb49edc6148"
+        }
+      ]
+    },
+    {
+      "group": 23,
+      "representative": "eval/config/phase44-local-rerank-stats-comparison.json#voice-pool-prechunked",
+      "sources": [
+        "eval/config/phase44-local-rerank-stats-comparison.json#voice-pool-prechunked",
+        "eval/config/phase44-local-rerank-stats-comparison.json#voice-tenant-prechunked"
+      ],
+      "status": "measured",
+      "modes": [
+        {
+          "fixture_mode": "prechunked",
+          "items": 454,
+          "overall": [
+            {
+              "metric": "recall_at_5",
+              "pool": 0.9145833333333333,
+              "tenant": 0.9125
+            },
+            {
+              "metric": "recall_at_10",
+              "pool": 0.9145833333333333,
+              "tenant": 0.9125
+            },
+            {
+              "metric": "mrr",
+              "pool": 0.821875,
+              "tenant": 0.8351388888888889
+            },
+            {
+              "metric": "correct_refusal_rate",
+              "pool": 0.1568627450980392,
+              "tenant": 0.1568627450980392
+            },
+            {
+              "metric": "false_refusal_rate",
+              "pool": 0.008333333333333333,
+              "tenant": 0.008333333333333333
+            }
+          ],
+          "slices_changed": 22,
+          "slices_beyond_band": [],
+          "top_context_changed": 112,
+          "refusal_changed": 0,
+          "all_zero_rerank": {
+            "pool": 0,
+            "tenant": 0,
+            "items": 0
+          },
+          "golden_manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+        }
+      ]
+    }
+  ]
+}
