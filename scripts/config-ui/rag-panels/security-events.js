@@ -657,7 +657,7 @@ class SecurityEventsPanel {
     return this.el('time', { className: 'tabular-nums', text: this.formatTime(value), attrs: { datetime: valid ? date.toISOString() : null } });
   }
 
-  /** Short date and time as two lines (no year in the current year); the full form stays in the title. */
+  /** Short date and time as two lines (no year in the current year); the full value stays in the datetime attribute. */
   formatCompactTime(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return [securityEventsText(value)];
@@ -681,7 +681,7 @@ class SecurityEventsPanel {
     const valid = !Number.isNaN(date.getTime());
     const full = this.formatTime(value);
     const lines = this.formatCompactTime(value).map((text) => this.el('span', { className: 'block whitespace-nowrap', text }));
-    return this.el('time', { className: 'tabular-nums', attrs: { datetime: valid ? date.toISOString() : null, title: full } }, [
+    return this.el('time', { className: 'tabular-nums', attrs: { datetime: valid ? date.toISOString() : null } }, [
       this.el('span', { className: 'max-md:hidden', text: full, attrs: { 'data-time-full': '' } }),
       this.el('span', { className: 'md:hidden', attrs: { 'data-time-compact': '' } }, lines),
     ]);

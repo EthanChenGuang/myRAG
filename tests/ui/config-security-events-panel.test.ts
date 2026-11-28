@@ -661,7 +661,8 @@ describe('Security events panel: Uploaders, Events and Link previews', () => {
     expect(compact.className).toContain('md:hidden');
     expect(compact.textContent.length).toBeGreaterThan(0);
     expect(compact.textContent.length).toBeLessThan(full.textContent.length);
-    expect(time.getAttribute('title')).toBe(full.textContent);
+    expect(time.getAttribute('title')).toBeNull();
+    expect(time.getAttribute('datetime')).toBe('2026-11-21T10:00:00.000Z');
     expect(cells[0]!.className).toContain('whitespace-nowrap');
   });
 
