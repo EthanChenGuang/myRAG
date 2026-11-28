@@ -1,6 +1,7 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
+import { scheduleRedisvlInvalidation } from '../../cache/emit';
 
 /**
  * Admin service for scope tags (DATA-18, D-38, D-40, D-50). Tags narrow retrieval inside the caller's already verified tenant; they are not
@@ -245,6 +246,7 @@ export async function setDocumentScopes(input: SetDocumentScopesInput): Promise<
   const scopes = row ? strings(row, 'scopes') : null;
   const chunksUpdated = row?.chunks_updated;
   if (documentId === null || scopes === null || typeof chunksUpdated !== 'number') return { ok: false, reason: 'unavailable' };
+  scheduleRedisvlInvalidation(input.tenantKey, [documentId]);
   return { ok: true, documentId, scopes, chunksUpdated };
 }
 
