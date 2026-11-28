@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bm25Reference } from '../helpers/bm25-reference';
+import { bm25ClusterReference, bm25ClusterStats, bm25Reference } from '../helpers/bm25-reference';
 import { neutralLexicalCorpus, zipfPicker } from '../helpers/neutral-lexical-corpus';
 
 const EPS = 1e-9;
@@ -126,6 +126,53 @@ describe('neutralLexicalCorpus', () => {
       expect(rank).toBeGreaterThanOrEqual(0);
       expect(rank).toBeLessThan(10);
     }
+  });
+});
+
+describe('bm25ClusterReference (D-46)', () => {
+  it('counts a cluster once: N, avgdl and df over units, each copy scored with its own tf and length', () => {
+    // Units: c1 (cluster X, smallest id) and c3. N = 2, avgdl = (2 + 1) / 2 = 1.5, df(a) = 1.
+    // idf(a) = ln(1 + (2 - 1 + 0.5) / (1 + 0.5)) = ln 2; c1 and c2 [a b], dl 2: ln 2 * 2.2 / (1 + 1.2 * (0.25 + 0.75 * 2 / 1.5)) = ln 2 * 0.88
+    const docs = [
+      { id: 'c2', tokens: ['a', 'b'], cluster: 'X' },
+      { id: 'c1', tokens: ['a', 'b'], cluster: 'X' },
+      { id: 'c3', tokens: ['c'] },
+    ];
+    const stats = bm25ClusterStats(docs);
+    expect(stats.N).toBe(2);
+    expect(stats.avgdl).toBe(1.5);
+    expect((stats.df as Map<string, number>).get('a')).toBe(1);
+    const scores = bm25ClusterReference({ docs, query: ['a'], k1: 1.2, b: 0.75 });
+    expect(Math.abs(scores[0] - Math.LN2 * 0.88)).toBeLessThan(EPS);
+    expect(Math.abs(scores[1] - Math.LN2 * 0.88)).toBeLessThan(EPS);
+    expect(scores[2]).toBe(0);
+  });
+
+  it('the unit of a cluster is its member with the smallest id, so its length decides avgdl', () => {
+    const docs = [
+      { id: 'b', tokens: ['x', 'y', 'z', 'z'], cluster: 'K' },
+      { id: 'a', tokens: ['x'], cluster: 'K' },
+    ];
+    expect(bm25ClusterStats(docs)).toMatchObject({ N: 1, avgdl: 1 });
+  });
+
+  it('with no cluster it returns what bm25Reference returns', () => {
+    const tokens = neutralLexicalCorpus({ seed: 5, chunks: 40, vocabulary: 60, minLength: 3, maxLength: 15 });
+    const docs = tokens.map((t, i) => ({ id: `d${String(i).padStart(3, '0')}`, tokens: t }));
+    const query = ['w0', 'w3', 'w17', 'w42'];
+    expect(bm25ClusterReference({ docs, query, k1: 1.2, b: 0.75 })).toEqual(bm25Reference({ docs: tokens, query, k1: 1.2, b: 0.75 }));
+  });
+
+  it('30 copies of one passage: raw ranks copies below a chunk with two moderately common terms, units rank every copy above', () => {
+    const docs: { id: string; tokens: string[]; cluster?: string }[] = [];
+    for (let i = 0; i < 30; i += 1) docs.push({ id: `p${String(i).padStart(2, '0')}`, tokens: ['pa', 'pb', 'pc', 'pd', 'pe'], cluster: 'P' });
+    for (let i = 0; i < 20; i += 1) docs.push({ id: `c${String(i).padStart(2, '0')}`, tokens: ['ca', 'cb', 'f1', 'f2', 'f3'] });
+    for (let i = 0; i < 40; i += 1) docs.push({ id: `f${String(i).padStart(2, '0')}`, tokens: [`g${i}`, 'f4', 'f5', 'f6', 'f7'] });
+    const query = ['pa', 'ca', 'cb'];
+    const raw = bm25Reference({ docs: docs.map((d) => d.tokens), query, k1: 1.2, b: 0.75 });
+    const unit = bm25ClusterReference({ docs, query, k1: 1.2, b: 0.75 });
+    expect(Math.max(...raw.slice(0, 30))).toBeLessThan(Math.min(...raw.slice(30, 50)));
+    expect(Math.min(...unit.slice(0, 30))).toBeGreaterThan(Math.max(...unit.slice(30, 50)));
   });
 });
 

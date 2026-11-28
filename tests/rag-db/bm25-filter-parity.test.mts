@@ -168,9 +168,22 @@ async function rebuildStats(db: PGlite, tenant: string): Promise<void> {
      FROM public.document_chunks c CROSS JOIN LATERAL unnest(tsvector_to_array(c.lexical_tsv)) AS x(lexeme) WHERE ${member} GROUP BY 3, 4, 5`,
     [tenant],
   );
+  // 0938 (04.4-17): corpus chunks_cluster as a copy of chunks (no chunk is clustered here), so p_df_mode cluster admits the same rows.
   await db.query(
-    `INSERT INTO public.rag_lexical_stats_state (tenant_key, status, rebuilt_at) VALUES ($1, 'ready', now())
-     ON CONFLICT (tenant_key) DO UPDATE SET status = 'ready', rebuilt_at = now()`,
+    `INSERT INTO public.rag_lexical_corpus (tenant_key, corpus, chunking_profile_id, language, chunk_count, total_len)
+     SELECT tenant_key, 'chunks_cluster', chunking_profile_id, language, chunk_count, total_len FROM public.rag_lexical_corpus
+      WHERE tenant_key = $1 AND corpus = 'chunks'`,
+    [tenant],
+  );
+  await db.query(
+    `INSERT INTO public.rag_lexical_df (tenant_key, corpus, lexeme, chunking_profile_id, language, df)
+     SELECT tenant_key, 'chunks_cluster', lexeme, chunking_profile_id, language, df FROM public.rag_lexical_df
+      WHERE tenant_key = $1 AND corpus = 'chunks'`,
+    [tenant],
+  );
+  await db.query(
+    `INSERT INTO public.rag_lexical_stats_state (tenant_key, status, rebuilt_at, cluster_status, cluster_rebuilt_at) VALUES ($1, 'ready', now(), 'ready', now())
+     ON CONFLICT (tenant_key) DO UPDATE SET status = 'ready', rebuilt_at = now(), cluster_status = 'ready', cluster_rebuilt_at = now()`,
     [tenant],
   );
 }
@@ -230,11 +243,12 @@ async function lexicalLegIds(db: PGlite, tenant: string, args: Record<string, un
   return rows.rows.map((r) => r.id).sort();
 }
 
-async function bm25Ids(db: PGlite, tenant: string, args: Record<string, unknown>): Promise<string[]> {
+async function bm25Ids(db: PGlite, tenant: string, args: Record<string, unknown>, dfMode?: 'raw' | 'cluster'): Promise<string[]> {
   const extra = namedArgs(args, 2);
+  const df = dfMode === undefined ? '' : `, p_df_mode => '${dfMode}'`;
   const rows = await db.query<{ id: string }>(
     `SELECT chunk_id::text AS id FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL,
-       p_lexical_tokens => ARRAY['${TOKEN}'], p_lexical_limit => 200, p_candidate_limit => 0${extra.sql})`,
+       p_lexical_tokens => ARRAY['${TOKEN}'], p_lexical_limit => 200, p_candidate_limit => 0${extra.sql}${df})`,
     [tenant, LEGACY, ...extra.params],
   );
   return rows.rows.map((r) => r.id).sort();
@@ -409,7 +423,7 @@ for (const mode of MODES) {
       }
       for (const name of DENSE_ONLY) assert.ok(!bm25.has(name), `${name} is dense-only`);
       const added = [...bm25.keys()].filter((name) => !hybrid.some((a) => a.name === name));
-      assert.deepEqual(added.sort(), ['p_b', 'p_candidate_limit', 'p_k1']);
+      assert.deepEqual(added.sort(), ['p_b', 'p_candidate_limit', 'p_df_mode', 'p_k1']);
       // proargnames is the catalog source of both lists.
       const names = await db.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM pg_proc WHERE proname IN ('hybrid_search_chunks', 'rag_bm25_search_chunks') AND 'p_lexical_tokens' = ANY (proargnames)",
@@ -417,15 +431,16 @@ for (const mode of MODES) {
       assert.equal(names.rows[0]?.n, 2);
     });
 
-    test('matched-set parity: for every filter case both functions return the same chunk ids', async () => {
+    test('matched-set parity: for every filter case both functions return the same chunk ids, in both DF modes', async () => {
       assert.ok(cases.length >= 30);
       for (const c of cases) {
         const expected = await lexicalLegIds(db, tenant.key, c.args);
-        const actual = await bm25Ids(db, tenant.key, c.args);
         assert.ok(expected.length < 200, `${c.name}: the match count stays below the limit`);
         if (c.exact !== undefined) assert.equal(expected.length, c.exact, `${c.name}: ts_rank_cd leg count`);
         if (c.min !== undefined) assert.ok(expected.length >= c.min, `${c.name}: ts_rank_cd leg returned ${expected.length}, expected >= ${c.min}`);
-        assert.deepEqual(actual, expected, `${c.name}: id sets differ`);
+        for (const dfMode of [undefined, 'raw', 'cluster'] as const) {
+          assert.deepEqual(await bm25Ids(db, tenant.key, c.args, dfMode), expected, `${c.name} (${dfMode ?? 'omitted'}): id sets differ`);
+        }
       }
     });
 

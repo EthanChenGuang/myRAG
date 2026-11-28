@@ -364,31 +364,35 @@ for (const mode of MODES) {
         const svc = await db.query<{ ok: boolean }>('SELECT has_function_privilege($1, $2::oid, $3) AS ok', ['service_role', row.oid, 'EXECUTE']);
         assert.equal(svc.rows[0]?.ok, true, `${name}: service_role executes`);
       }
+      // 0938 (04.4-17) rebuilds rag_bm25_search_chunks on this body and appends p_df_mode as the last argument.
       const args = (await db.query<{ a: string }>("SELECT pg_get_function_arguments(oid) AS a FROM pg_proc WHERE proname = 'rag_bm25_search_chunks'")).rows[0]?.a;
-      assert.equal(args, bm25ArgsBefore, 'bm25 argument list equals the 0932 one');
+      assert.equal(args, `${bm25ArgsBefore}, p_df_mode text DEFAULT 'raw'::text`, 'bm25 argument list: the 0932 one, then the 0938 DF mode');
       const names = args!.split(/,\s*(?=p_)/).map((p) => p.split(' ')[0]);
-      assert.deepEqual(names, BM25_ARGS_0932, 'no argument outside the 0932 signature');
+      assert.deepEqual(names, [...BM25_ARGS_0932, 'p_df_mode'], 'no argument outside the 0932 signature and p_df_mode');
+      const src = (await db.query<{ s: string }>("SELECT prosrc AS s FROM pg_proc WHERE proname = 'rag_bm25_search_chunks'")).rows[0]?.s ?? '';
+      assert.equal(fragments(src).length, 1, 'the 0938 body keeps the 0936 identifier fragment');
     });
 
-    test('re-applying 0936 changes nothing; an extra bm25 argument (for example p_df_mode) stops it with 55000', async () => {
-      const sql = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations', `${MIGRATION}.sql`), 'utf8');
+    test('re-applying 0936 changes nothing; on top of 0938 (p_df_mode) it stops with 55000 until 0932 is re-run first', async () => {
+      const read = (name: string): string => fs.readFileSync(path.join(process.cwd(), 'supabase/migrations', `${name}.sql`), 'utf8');
+      const sql = read(MIGRATION);
       const src = async (): Promise<string[]> =>
         (await db.query<{ s: string }>('SELECT proname || prosrc AS s FROM pg_proc WHERE proname = ANY($1) ORDER BY proname', [FUNCTIONS])).rows.map((r) => r.s);
       const before = await src();
       const ids = await hybridIds(db, tenantA, { ids: [X] });
+      const bm25Before = await bm25Ids(db, tenantA, { ids: [X] });
+      // The database holds 0938's p_df_mode, an argument outside the 0932 signature: 0936 stops and changes nothing.
+      await assert.rejects(db.exec(sql), (error: unknown) => (error as { code?: string }).code === '55000');
+      await db.exec('ROLLBACK').catch(() => undefined);
+      assert.deepEqual(await src(), before, 'a stopped run leaves the functions as they were');
+      // The documented re-run order: 0932, then 0936 (twice: idempotent), then 0938.
+      await db.exec(read('0932_access_bm25_search'));
       await db.exec(sql);
+      await db.exec(sql);
+      await db.exec(read('0938_bm25_search_df_mode'));
       assert.deepEqual(await src(), before);
       assert.deepEqual(await hybridIds(db, tenantA, { ids: [X] }), ids);
-      await db.exec(
-        "CREATE FUNCTION public.rag_bm25_search_chunks(p_tenant_key text, p_df_mode text) RETURNS integer LANGUAGE sql SET search_path = '' AS $$ SELECT 1 $$",
-      );
-      try {
-        await assert.rejects(db.exec(sql), (error: unknown) => (error as { code?: string }).code === '55000');
-        await db.exec('ROLLBACK').catch(() => undefined);
-      } finally {
-        await db.exec('DROP FUNCTION public.rag_bm25_search_chunks(text, text)');
-      }
-      assert.deepEqual(await src(), before, 'a stopped run leaves the functions as they were');
+      assert.deepEqual(await bm25Ids(db, tenantA, { ids: [X] }), bm25Before);
     });
   });
 }

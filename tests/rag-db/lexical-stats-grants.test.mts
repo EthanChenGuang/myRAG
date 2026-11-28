@@ -5,7 +5,7 @@ import { startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { FIXTURE_USER_ID, createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
 /**
- * LEX-06 (D-31, D-32): every object of migrations 0900 to 0905 is closed to the client roles in both deployment modes. anon goes through
+ * LEX-06 (D-31, D-32): every object of migrations 0900 to 0905 (and the 0938 search signature) is closed to the client roles in both deployment modes. anon goes through
  * the fake PostgREST edge with the anon key; authenticated runs as PostgREST runs it, SET ROLE authenticated with the JWT claims of a user,
  * because the fake edge maps only the anon and service keys. The object list is exact: a new function of the phase fails the catalog test.
  */
@@ -15,9 +15,9 @@ const LEGACY = 'openai-3-small-1536';
 const ZERO_UUID = '00000000-0000-4000-8000-000000000000';
 const DOC_ID = '00000000-0000-4000-8000-0000000004a1';
 
-// 0932 (train 35, 04.3) appended p_access_keys text[] and p_access_all boolean to the 0904 signature.
+// 0932 (train 35, 04.3) appended p_access_keys text[] and p_access_all boolean to the 0904 signature; 0938 (04.4-17) appended p_df_mode text.
 const BM25_SIGNATURE =
-  'rag_bm25_search_chunks(text,text,vector,text[],integer,date,date,text[],uuid[],text[],text[],text[],text,numeric,numeric,text,jsonb,boolean,text[],boolean,date,jsonb,text[],double precision,double precision,integer,text[],boolean)';
+  'rag_bm25_search_chunks(text,text,vector,text[],integer,date,date,text[],uuid[],text[],text[],text[],text,numeric,numeric,text,jsonb,boolean,text[],boolean,date,jsonb,text[],double precision,double precision,integer,text[],boolean,text)';
 const TRIGGER_FUNCTIONS = ['rag_lexstats_chunks_delete()', 'rag_lexstats_chunks_insert()', 'rag_lexstats_chunks_update()'];
 /** The thirteen callable functions of the phase: rag_lexical_dl (0900), the eight of 0902 (with the unguarded compaction body), the hook (0903), the search (0904), cluster enable and disable (0905). */
 const RPC_SIGNATURES = [
@@ -56,6 +56,12 @@ function rpcCalls(tenant: string): Array<{ fn: string; body: Record<string, unkn
       fn: 'rag_bm25_search_chunks',
       body: { p_tenant_key: tenant, p_profile_id: LEGACY, p_query_embedding: null, p_lexical_tokens: ['w1'], p_lexical_limit: 5 },
       sql: 'SELECT * FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL, p_lexical_tokens => $3::text[], p_lexical_limit => 5)',
+      params: [tenant, LEGACY, ['w1']],
+    },
+    {
+      fn: 'rag_bm25_search_chunks',
+      body: { p_tenant_key: tenant, p_profile_id: LEGACY, p_query_embedding: null, p_lexical_tokens: ['w1'], p_lexical_limit: 5, p_df_mode: 'cluster' },
+      sql: "SELECT * FROM public.rag_bm25_search_chunks(p_tenant_key => $1, p_profile_id => $2, p_query_embedding => NULL, p_lexical_tokens => $3::text[], p_lexical_limit => 5, p_df_mode => 'cluster')",
       params: [tenant, LEGACY, ['w1']],
     },
     { fn: 'rag_lexstats_status', body: { p_tenant_key: tenant }, sql: 'SELECT public.rag_lexstats_status($1)', params: [tenant] },
@@ -189,7 +195,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
 
     test('every RPC through the fake edge: the anon key is refused, the service key succeeds', async () => {
       const calls = rpcCalls(tenant);
-      assert.equal(calls.length, RPC_SIGNATURES.length, 'one call per callable function');
+      assert.equal(new Set(calls.map((call) => call.fn)).size, RPC_SIGNATURES.length, 'at least one call per callable function');
       for (const call of calls) {
         const refused = await post(ANON_KEY, call.fn, call.body);
         assert.ok(refused.status === 403 || refused.status === 404, `${call.fn}: anon status ${refused.status}`);
