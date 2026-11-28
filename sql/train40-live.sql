@@ -1,4 +1,4 @@
--- Train 40 live SQL (ci/merge-train-40). Apply after train 39 is live (0982, 0983, 0985, 1010 and 0410 r22). Multi-tenant production.
+-- Train 40 live SQL (ci/merge-train-40, PR #140). Apply after train 39 (0982, 0983, 0985, 1010, 0410 r22), 0989 (#138) and 0991 are live. Multi-tenant production.
 -- Order: 0723, 0724 (common, then its .multi-tenant file), 0726, 0727, 0986, 0988, then the 0410 r23 delta (grants only).
 -- A single-tenant project applies 0724_purge_citation_scrub.single-tenant.sql instead of the .multi-tenant file; nothing else differs.
 -- Dependencies:
