@@ -312,6 +312,34 @@ describe('Phase 4.4 BM25 document frequency mode in every config location (04.4-
     expect(help).toContain('RAG_DUP_CLUSTERS');
   });
 
+  it('a status note says cluster has no effect while bm25 is chosen and duplicate clusters are off; it is described only while shown', () => {
+    expect(html).toMatch(/<p\b[^>]*\bid="rag-lexical-df-mode-needs-dup-clusters"[^>]*\brole="status"[^>]*\bhidden>/);
+    expect(html).toContain('data-rag-i18n="RAG_LEXICAL_DF_MODE.needsDupClusters"');
+    expect(html).toMatch(/\['RAG_LEXICAL_DF_MODE', 'RAG_DUP_CLUSTERS'\]\) \{\s*const field = document\.getElementById\(id\);\s*if \(field\) field\.addEventListener\('change'/);
+    const method = lexicalScoringMethod();
+    const cases: Array<[string, string, boolean, boolean]> = [
+      ['bm25', 'cluster', false, true],
+      ['bm25', 'cluster', true, false],
+      ['bm25', 'raw', false, false],
+      ['ts_rank_cd', 'cluster', false, false],
+    ];
+    for (const [mode, df, dup, shown] of cases) {
+      const select = stubControl(NAME, { value: df });
+      const note = stubControl('rag-lexical-df-mode-needs-dup-clusters', { hidden: true });
+      const controls = new Map<string, StubControl>([
+        ['RAG_LEXICAL_SCORING', stubControl('RAG_LEXICAL_SCORING', { value: mode })],
+        ['RAG_LEXICAL_SEARCH', stubControl('RAG_LEXICAL_SEARCH', { checked: true })],
+        ['RAG_DUP_CLUSTERS', stubControl('RAG_DUP_CLUSTERS', { checked: dup })],
+        [NAME, select],
+        [note.id, note],
+      ]);
+      (method as unknown as (d: unknown) => () => void)({ getElementById: (id: string) => controls.get(id) ?? null }).call({});
+      const label = `${mode}/${df}/dup=${dup}`;
+      expect(note.hidden, label).toBe(!shown);
+      expect(select.getAttribute('aria-describedby'), label).toBe(shown ? `${helpId(NAME)} ${note.id}` : helpId(NAME));
+    }
+  });
+
   it('the select is disabled while the scoring is not bm25, like k1 and b', () => {
     const method = lexicalScoringMethod();
     for (const mode of ['ts_rank_cd', 'bm25']) {
