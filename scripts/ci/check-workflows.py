@@ -70,6 +70,7 @@ PR_JOBS = [
     "python",
     "eval-smoke",
     "eval-smoke-p52",
+    "eval-smoke-p521",
     "gate-negative-control",
     "docker-build",
     "next-build",
@@ -122,6 +123,21 @@ P52_SMOKE_STEP = "npm run test-rag -- --phase52 --out eval/out/smoke-p52"
 P52_NIGHTLY_STEP = "run-nightly.mts --phase52 --generator live --out eval/out/nightly-p52"
 P52_JUDGE_STEP = "rag_eval.judge.run"
 P52_SKIP_NOTICE = "::notice::judge key not configured, skipping Phase 5.2 answer-rule runs"
+# 05.2.1-23 (D-62, D-78, D-88): the Phase 5.2.1 runs gated on every pull request, the negative control and the nightly runs.
+P521_JOB = "eval-smoke-p521"
+P521_GATED_RUNS = (
+    "calc-tool-follow",
+    "calc-block-follow",
+    "calc-skip-rule-check-on",
+    "calc-missing-operand",
+    "budget-overflow-legacy",
+    "budget-overflow-v2",
+)
+P521_NEGATIVE_CONTROL = "calc-skip-rule-check-off"
+SMOKE_ALL_ZERO = "jq -e '.paired.all_zero == true' eval/out/smoke/gate.json"
+CALC_LIVE_JOB = "calc-live"
+CALC_LIVE_RUNS = (("calc-live-tool-off", "nightly-calc-tool-off"), ("calc-live-tool-on", "nightly-calc-tool-on"))
+CALC_LIVE_SKIP_NOTICE = "::notice::generator key not configured, skipping the live calculation runs"
 # 05.2-32 (D-12): every generated file the schema-parity job regenerates is in its drift check.
 DRIFT_PATHS = (
     "rag-sidecar/schemas",
@@ -360,6 +376,7 @@ def check_pr(errors: list[str]) -> None:
             errors.append("pr-smoke: the degrade step must run before the max_results control")
     check_eval_smoke(jobs.get("eval-smoke"), errors)
     check_eval_smoke_p52(jobs.get("eval-smoke-p52"), errors)
+    check_eval_smoke_p521(jobs.get(P521_JOB), errors)
     # every job that runs eval pytest or the harness must sync eval with all extras
     for jname, job in jobs.items():
         body = step_text(job)
@@ -406,7 +423,7 @@ def check_pr(errors: list[str]) -> None:
         for needle in DRIFT_PATHS:
             if needle not in drift:
                 errors.append(f"pr-smoke: the schema-parity drift check must include {needle}")
-    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "eval-smoke-p52", "gate-negative-control"):
+    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "eval-smoke-p52", P521_JOB, "gate-negative-control"):
         job = jobs.get(jname)
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
@@ -646,6 +663,8 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
         errors.append("pr-smoke: the ingest smoke step must gate against the committed ingest baseline (no --no-gate, no --baseline)")
     if plain is None or plain > ingest:
         errors.append("pr-smoke: the ingest smoke step must run after the prechunked smoke step")
+    if plain is not None and not any(SMOKE_ALL_ZERO in run for run in runs[plain:]):
+        errors.append(f"pr-smoke: a step after the all-off smoke step must assert \"{SMOKE_ALL_ZERO}\" (D-62)")
     uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
     if not any("eval/out/smoke-ingest" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-ingest")
@@ -687,6 +706,88 @@ def check_eval_smoke_p52(job: dict | None, errors: list[str]) -> None:
     uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
     if not any("eval/out/smoke-p52" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke-p52 must upload eval/out/smoke-p52")
+
+
+def _p521_command(name: str) -> str:
+    return f"npm run test-rag -- --run-config eval/config/runs/{name}.json --out eval/out/p521-{name}"
+
+
+def check_eval_smoke_p521(job: dict | None, errors: list[str]) -> None:
+    """05.2.1-23 (D-78, D-88): every Phase 5.2.1 run is gated on every pull request; the negative control must fail."""
+    if job is None:
+        return
+    steps = all_steps(job)
+    runs = [str(step.get("run", "")) for step in steps]
+    for name in (*P521_GATED_RUNS, P521_NEGATIVE_CONTROL):
+        command = _p521_command(name)
+        matching = [index for index, run in enumerate(runs) if f"eval/config/runs/{name}.json" in run]
+        if len(matching) != 1 or command not in runs[matching[0]]:
+            errors.append(f"pr-smoke: job {P521_JOB} must run '{command}' once")
+            continue
+        body = runs[matching[0]]
+        soft = "--no-gate" in body or "|| true" in body or "continue-on-error" in str(steps[matching[0]])
+        if name == P521_NEGATIVE_CONTROL:
+            needed = (
+                re.search(r'test\s+"?\$code"?\s+-eq\s+10\b', body) is not None,
+                f"eval/out/p521-{name}/gate.json" in body and ".passed == false" in body,
+                'select(.reason == "negative_control_failed"' in body,
+                'select(.reason == "negative_control_passed")] | length == 0' in body,
+            )
+            if soft or not all(needed):
+                errors.append(
+                    f"pr-smoke: the {name} step is the negative control: it must assert exit code 10 with 'test \"$code\" -eq 10' and,"
+                    " with jq -e on its gate.json, passed false, a negative_control_failed offender and no negative_control_passed"
+                )
+            continue
+        check = f"jq -e '.passed == true' eval/out/p521-{name}/gate.json"
+        if soft or "set +e" in body or check not in body:
+            errors.append(f"pr-smoke: the {name} step must gate, fail the job and assert '{check}'")
+    timeout = job.get("timeout-minutes")
+    if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
+        errors.append(f"pr-smoke: job {P521_JOB} must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+    if "python3 scripts/ci/fill-tiktoken-cache.py" not in step_text(job):
+        errors.append(f"pr-smoke: job {P521_JOB} must fill the tiktoken cache")
+    uploads = " ".join(
+        str((step.get("with") or {}).get("path", "")) for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+    )
+    for name in (*P521_GATED_RUNS, P521_NEGATIVE_CONTROL):
+        if f"eval/out/p521-{name}" not in uploads:
+            errors.append(f"pr-smoke: job {P521_JOB} must upload eval/out/p521-{name}")
+
+
+def check_calc_live_nightly(data: dict, errors: list[str]) -> None:
+    """05.2.1-23 (D-78): the live calculation error rate without and with the tool runs nightly behind the generator key."""
+    job = (data.get("jobs") or {}).get(CALC_LIVE_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{CALC_LIVE_JOB}' missing")
+        return
+    flag = "HAS_GENERATOR_KEY"
+    if "secrets.OPENROUTER_API_KEY != ''" not in str((job.get("env") or {}).get(flag, "")):
+        errors.append(f"nightly: {CALC_LIVE_JOB} job env {flag} must require secrets.OPENROUTER_API_KEY")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or CALC_LIVE_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"nightly: only the skip-notice step of {CALC_LIVE_JOB} may run without the {flag} == 'true' condition")
+    for config, out in CALC_LIVE_RUNS:
+        command = f"run-nightly.mts --calc-live eval/config/runs/{config}.json --generator live --out eval/out/{out}"
+        matching = [s for s in steps if command in str(s.get("run", ""))]
+        if len(matching) != 1:
+            errors.append(f"nightly: {CALC_LIVE_JOB} must run '{command}' once")
+            continue
+        if str((matching[0].get("env") or {}).get("OPENROUTER_API_KEY")) != "${{ secrets.OPENROUTER_API_KEY }}":
+            errors.append(f"nightly: {CALC_LIVE_JOB} must pass OPENROUTER_API_KEY from repository secrets by name through step env")
+    if "uv sync --directory eval --locked --all-extras" not in step_text(job):
+        errors.append(f"nightly: {CALC_LIVE_JOB} must sync eval with --locked --all-extras")
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append(f"nightly: {CALC_LIVE_JOB} secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\bKEY\b", run):
+            errors.append(f"nightly: a {CALC_LIVE_JOB} step appears to echo a key")
 
 
 def check_answer_rules_nightly(data: dict, errors: list[str]) -> None:
@@ -1245,6 +1346,7 @@ def check_nightly(errors: list[str]) -> None:
     check_bge_m3_identity(data, errors)
     check_injection_sec(data, errors)
     check_answer_rules_nightly(data, errors)
+    check_calc_live_nightly(data, errors)
     check_weekly_report(data, errors)
     check_tenant_nightly(data, errors)
     check_monitor_job(data, errors)

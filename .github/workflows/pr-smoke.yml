@@ -317,6 +317,8 @@ jobs:
         run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: Smoke tier against the committed baseline
         run: npm run test-rag -- --out eval/out/smoke --gates-report-only false_refusal_rate
+      - name: Every switch off, the smoke tier's paired differences are all zero (D-62)
+        run: jq -e '.paired.all_zero == true' eval/out/smoke/gate.json
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
       - name: Legacy smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
@@ -405,6 +407,75 @@ jobs:
         with:
           name: eval-smoke-p52
           path: eval/out/smoke-p52
+          if-no-files-found: warn
+
+  eval-smoke-p521:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - run: npm ci --ignore-scripts
+      - run: uv sync --directory rag-sidecar --locked
+      - run: uv sync --directory eval --locked --all-extras
+      - name: Fill the tiktoken encoding cache (tests never download it)
+        run: python3 scripts/ci/fill-tiktoken-cache.py
+      - name: Phase 5.2.1 calculation gate, tool-following fake (every step listed, one number per paraphrase group)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/calc-tool-follow.json --out eval/out/p521-calc-tool-follow --gates-mode report
+          jq -e '.passed == true' eval/out/p521-calc-tool-follow/gate.json
+      - name: Phase 5.2.1 calculation gate, trailing-block fake (every step listed, one number per paraphrase group)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/calc-block-follow.json --out eval/out/p521-calc-block-follow --gates-mode report
+          jq -e '.passed == true' eval/out/p521-calc-block-follow/gate.json
+      - name: Negative control, the rule-skipping fake with RAG_CALC_CHECK off must fail the numeric gate with exit code 10
+        shell: bash
+        run: |
+          set +e
+          npm run test-rag -- --run-config eval/config/runs/calc-skip-rule-check-off.json --out eval/out/p521-calc-skip-rule-check-off --gates-mode report
+          code=$?
+          set -e
+          echo "negative control exit code: $code"
+          test "$code" -eq 10
+          jq -e '.passed == false and (.mismatches | length == 0) and ([.offenders[] | select(.reason == "negative_control_failed" and .metric == "numeric_correctness_effective")] | length > 0) and ([.offenders[] | select(.reason == "negative_control_passed")] | length == 0)' eval/out/p521-calc-skip-rule-check-off/gate.json
+      - name: Phase 5.2.1 calculation gate, rule-skipping fake with RAG_CALC_CHECK on (corrected, with a review reason)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/calc-skip-rule-check-on.json --out eval/out/p521-calc-skip-rule-check-on --gates-mode report
+          jq -e '.passed == true' eval/out/p521-calc-skip-rule-check-on/gate.json
+      - name: Phase 5.2.1 calculation gate, missing-operand fake (not verified)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/calc-missing-operand.json --out eval/out/p521-calc-missing-operand --gates-mode report
+          jq -e '.passed == true' eval/out/p521-calc-missing-operand/gate.json
+      - name: Phase 5.2.1 prompt-budget gate, legacy assembly with the small-window fake (no overflow error, history first, must_keep kept)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/budget-overflow-legacy.json --out eval/out/p521-budget-overflow-legacy --gates-mode report
+          jq -e '.passed == true' eval/out/p521-budget-overflow-legacy/gate.json
+      - name: Phase 5.2.1 prompt-budget gate, v2 assembly with the small-window fake (no overflow error, history first, must_keep kept)
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/budget-overflow-v2.json --out eval/out/p521-budget-overflow-v2 --gates-mode report
+          jq -e '.passed == true' eval/out/p521-budget-overflow-v2/gate.json
+      - name: Upload Phase 5.2.1 smoke output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-smoke-p521
+          path: |
+            eval/out/p521-calc-tool-follow
+            eval/out/p521-calc-block-follow
+            eval/out/p521-calc-skip-rule-check-off
+            eval/out/p521-calc-skip-rule-check-on
+            eval/out/p521-calc-missing-operand
+            eval/out/p521-budget-overflow-legacy
+            eval/out/p521-budget-overflow-v2
           if-no-files-found: warn
 
   gate-negative-control:
@@ -604,7 +675,7 @@ jobs:
 
   pr-smoke:
     if: always()
-    needs: [ts-vitest, ts-db, ts-tsx, ts-checks, next-build, sibling-types, voice-agent, schema-parity, python, eval-smoke, eval-smoke-p52, gate-negative-control, docker-build, backend-canary]
+    needs: [ts-vitest, ts-db, ts-tsx, ts-checks, next-build, sibling-types, voice-agent, schema-parity, python, eval-smoke, eval-smoke-p52, eval-smoke-p521, gate-negative-control, docker-build, backend-canary]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

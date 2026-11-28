@@ -413,7 +413,9 @@ def test_committed_manifests_start_at_version_one_all_active():
     # and version 9 of the ingest manifest added only the 33 q62 tenant items of plan 06.2-22 (tag phase62). Version 8 of the
     # fixture manifest and version 10 of the ingest manifest added only the 8 dominant-language items of plan 06.2-41 (tags
     # phase62 and dominant_language). Version 9 of the fixture manifest and version 11 of the ingest manifest
-    # (owner decision 2026-11-28, quick-41-p52-band) changed only en-off-topic-context-002's score band. Every item is still active.
+    # (owner decision 2026-11-28, quick-41-p52-band) changed only en-off-topic-context-002's score band. Version 10 of the fixture manifest and version 12 of the ingest
+    # manifest (quick 5221-mustkeep, owner decision 1a, 2026-11-28) changed only the nine context_overflow items -001 to
+    # -003 per language. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -424,6 +426,9 @@ def test_committed_manifests_start_at_version_one_all_active():
         if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
     )
     phase521 = sorted(item.id for item in golden if item.category in ("multi_step_calc", "context_overflow"))
+    mustkeep_fix = sorted(
+        f"{language}-context-overflow-{number:03d}" for language in ("en", "it", "zh") for number in (1, 2, 3)
+    )
     assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
     assert len(phase521) == 57
     dominant = sorted(item.id for item in golden if "dominant_language" in item.tags)
@@ -441,10 +446,11 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 11 if path == INGEST_MANIFEST else 9
+        expected = 12 if path == INGEST_MANIFEST else 10
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
-        assert manifest.changelog[-1].changed == ["en-off-topic-context-002"] and not manifest.changelog[-1].added
+        assert manifest.changelog[-2].changed == ["en-off-topic-context-002"] and not manifest.changelog[-2].added
+        assert sorted(manifest.changelog[-1].changed) == mustkeep_fix and not manifest.changelog[-1].added
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
             assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed

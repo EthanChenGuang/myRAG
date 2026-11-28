@@ -2047,3 +2047,113 @@ class PromoteProductionWorkflowTest(unittest.TestCase):
         data = self.workflow()
         data["concurrency"]["cancel-in-progress"] = True
         self.assert_error(data, "cancel-in-progress false")
+
+
+class Phase521SmokeJobTest(unittest.TestCase):
+    """05.2.1-23 (D-62, D-78, D-88): the Phase 5.2.1 runs gate every pull request, and the negative control must fail."""
+
+    def jobs(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke_p521(job, errors)
+        return errors
+
+    def step(self, job: dict, name: str) -> dict:
+        return next(step for step in job["steps"] if f"eval/config/runs/{name}.json" in str(step.get("run", "")))
+
+    def test_repository_workflow_gates_every_phase521_run(self):
+        self.assertEqual(self.errors_for(self.jobs()[check_workflows.P521_JOB]), [])
+        errors: list[str] = []
+        check_workflows.check_pr(errors)
+        self.assertEqual(errors, [])
+
+    def test_a_missing_run_is_reported(self):
+        for name in (*check_workflows.P521_GATED_RUNS, check_workflows.P521_NEGATIVE_CONTROL):
+            job = self.jobs()[check_workflows.P521_JOB]
+            job["steps"] = [step for step in job["steps"] if f"eval/config/runs/{name}.json" not in str(step.get("run", ""))]
+            self.assertTrue(any(f"runs/{name}.json" in e for e in self.errors_for(job)), name)
+
+    def test_a_gated_run_without_its_jq_check_or_softened_is_reported(self):
+        for name in check_workflows.P521_GATED_RUNS:
+            job = self.jobs()[check_workflows.P521_JOB]
+            step = self.step(job, name)
+            step["run"] = step["run"].replace(f"jq -e '.passed == true' eval/out/p521-{name}/gate.json", "true")
+            self.assertTrue(any("must gate, fail the job" in e for e in self.errors_for(job)), name)
+        job = self.jobs()[check_workflows.P521_JOB]
+        self.step(job, "budget-overflow-v2")["continue-on-error"] = True
+        self.assertTrue(any("budget-overflow-v2 step must gate" in e for e in self.errors_for(job)))
+
+    def test_the_negative_control_must_assert_its_failure(self):
+        for needle, replacement in (
+            ('test "$code" -eq 10', "true"),
+            ('select(.reason == "negative_control_failed"', 'select(.reason == "anything"'),
+            ('select(.reason == "negative_control_passed")] | length == 0', 'select(.reason == "x")] | length == 0'),
+        ):
+            job = self.jobs()[check_workflows.P521_JOB]
+            step = self.step(job, check_workflows.P521_NEGATIVE_CONTROL)
+            step["run"] = step["run"].replace(needle, replacement)
+            self.assertTrue(any("is the negative control" in e for e in self.errors_for(job)), needle)
+
+    def test_outputs_must_be_uploaded_and_the_job_needed_by_the_aggregate(self):
+        job = self.jobs()[check_workflows.P521_JOB]
+        for step in job["steps"]:
+            if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                step["with"]["path"] = "eval/out/p521-calc-tool-follow"
+        self.assertTrue(any("must upload eval/out/p521-budget-overflow-v2" in e for e in self.errors_for(job)))
+        data = check_workflows.load(check_workflows.PR)[0]
+        data["jobs"]["pr-smoke"]["needs"] = [n for n in data["jobs"]["pr-smoke"]["needs"] if n != check_workflows.P521_JOB]
+        errors: list[str] = []
+        check_workflows.check_pr_aggregate(data, errors)
+        self.assertTrue(any(check_workflows.P521_JOB in e for e in errors))
+
+    def test_the_all_off_smoke_step_must_assert_paired_zero(self):
+        job = self.jobs()["eval-smoke"]
+        job["steps"] = [step for step in job["steps"] if check_workflows.SMOKE_ALL_ZERO not in str(step.get("run", ""))]
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        self.assertTrue(any("paired.all_zero" in e for e in errors), errors)
+
+
+class CalcLiveNightlyJobTest(unittest.TestCase):
+    """05.2.1-23 (D-78): the live calculation error rate without and with the tool, behind the generator key, not gated."""
+
+    def nightly(self) -> dict:
+        return check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_calc_live_nightly(data, errors)
+        return errors
+
+    def runner(self, data: dict, config: str) -> dict:
+        steps = data["jobs"][check_workflows.CALC_LIVE_JOB]["steps"]
+        return next(step for step in steps if f"--calc-live eval/config/runs/{config}.json" in str(step.get("run", "")))
+
+    def test_repository_nightly_has_a_valid_calc_live_job(self):
+        self.assertEqual(self.errors_for(self.nightly()), [])
+        errors: list[str] = []
+        check_workflows.check_nightly(errors)
+        self.assertEqual(errors, [])
+
+    def test_missing_job_or_run_is_reported(self):
+        data = self.nightly()
+        del data["jobs"][check_workflows.CALC_LIVE_JOB]
+        self.assertTrue(any("'calc-live' missing" in e for e in self.errors_for(data)))
+        for config, _ in check_workflows.CALC_LIVE_RUNS:
+            data = self.nightly()
+            steps = data["jobs"][check_workflows.CALC_LIVE_JOB]["steps"]
+            data["jobs"][check_workflows.CALC_LIVE_JOB]["steps"] = [s for s in steps if config not in str(s.get("run", ""))]
+            self.assertTrue(any(f"{config}.json" in e for e in self.errors_for(data)), config)
+
+    def test_the_key_comes_from_secrets_by_name_and_every_run_step_is_gated(self):
+        data = self.nightly()
+        del self.runner(data, "calc-live-tool-on")["env"]["OPENROUTER_API_KEY"]
+        self.assertTrue(any("OPENROUTER_API_KEY from repository secrets" in e for e in self.errors_for(data)))
+        data = self.nightly()
+        del self.runner(data, "calc-live-tool-off")["if"]
+        self.assertTrue(any("skip-notice step of calc-live" in e for e in self.errors_for(data)))
+        data = self.nightly()
+        self.runner(data, "calc-live-tool-off")["run"] += " ${{ secrets.OPENROUTER_API_KEY }}"
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
