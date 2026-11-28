@@ -4,7 +4,7 @@ import type { RpcClient, RpcRequest, RpcResponse } from '../../src/lib/rag/backe
 import { chunkLexicalText } from '../../src/lib/rag/lexical/chunk-text';
 import type { TenantScope } from '../../src/lib/rag/tenant/scope';
 import { embedText } from './fixture-embedder.mts';
-import { runFixtureRelex } from './pglite-supabase.mts';
+import { runFixtureRelex, seedTerminology } from './pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from './two-tenant.mts';
 
 export const V2_CANARY_PROFILE_ID = 'p128-canary';
@@ -766,6 +766,155 @@ export function v2CacheServiceRoleRpc(db: PGlite): RpcClient {
         abortSignal: () => request,
         then: (onFulfilled, onRejected) => pending.then(onFulfilled, onRejected),
       };
+      return request;
+    },
+  };
+}
+
+/**
+ * 06.2-36: seeds for the Phase 6.2 canary rows (sub-question filters, glossary, scope centroids and examples, WhatsApp history), in
+ * either deployment mode. Tenant A is s:default in single-tenant mode and user A in multi-tenant mode; tenant B (multi-tenant only)
+ * holds the same token under values tenant A does not have. Synthetic neutral text only.
+ */
+export type Q62Mode = 'single-tenant' | 'multi-tenant';
+export const Q62_TOKEN = 'vellumcrest';
+export const Q62_QUESTION = `How did the ${Q62_TOKEN} register entries differ between the first and the second synthetic period?`;
+export const Q62_SUB_FOREIGN = `What were the ${Q62_TOKEN} register entries in the first synthetic period?`;
+export const Q62_SUB_OWN = `What were the ${Q62_TOKEN} register entries in the second synthetic period?`;
+/** A doc type only tenant B holds, and one only tenant A holds. */
+export const Q62_FOREIGN_DOC_TYPE = 'invoice_receipt';
+export const Q62_OWN_DOC_TYPE = 'contract_legal';
+export const Q62_GLOSSARY_SOURCE = '栅格转发单元';
+export const Q62_GLOSSARY_TARGET: Record<'a' | 'b', string> = { a: 'lattice forward unit', b: 'mesh forward block' };
+export const Q62_EXAMPLE_TEXT: Record<'a' | 'b', string> = {
+  a: 'A neutral synthetic question tenant alpha marks out of scope',
+  b: 'A neutral synthetic question tenant bravo marks out of scope',
+};
+
+export interface Q62Tenant {
+  label: 'a' | 'b';
+  key: string;
+  userId: string | null;
+  chunkIds: string[];
+  docTypes: string[];
+}
+
+export interface Q62Seed {
+  a: Q62Tenant;
+  /** Null in single-tenant mode: the only tenant key there is s:default. */
+  b: Q62Tenant | null;
+}
+
+const Q62_DOCS: Record<'a' | 'b', Array<{ docType: string; language: string; docDate: string }>> = {
+  a: [
+    { docType: 'general', language: 'en', docDate: '2024-03-10' },
+    { docType: Q62_OWN_DOC_TYPE, language: 'en', docDate: '2024-09-01' },
+    { docType: Q62_OWN_DOC_TYPE, language: 'en', docDate: '2025-02-14' },
+  ],
+  b: [
+    { docType: Q62_FOREIGN_DOC_TYPE, language: 'en', docDate: '2024-04-04' },
+    { docType: 'general', language: 'en', docDate: '2025-06-06' },
+  ],
+};
+
+/** The text of a seeded tenant's n-th chunk. */
+export function q62ChunkText(label: 'a' | 'b', index: number): string {
+  return `${Q62_TOKEN} register entries for the synthetic period, row ${index} of tenant ${label}`;
+}
+
+async function seedQ62Tenant(db: PGlite, mode: Q62Mode, label: 'a' | 'b'): Promise<Q62Tenant> {
+  const userId = mode === 'multi-tenant' ? (label === 'a' ? TWO_TENANT_IDS.userA : TWO_TENANT_IDS.userB) : null;
+  const key = userId ? `u:${userId}` : 's:default';
+  if (userId) await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [userId, `q62-${label}@example.invalid`]);
+  const chunkIds: string[] = [];
+  for (const [index, spec] of Q62_DOCS[label].entries()) {
+    const docId = crypto.randomUUID();
+    const chunkId = crypto.randomUUID();
+    const content = q62ChunkText(label, index);
+    if (userId) {
+      await db.query(
+        `INSERT INTO documents (id, filename, content, metadata, user_id, lineage_id, source_key, status, is_current, doc_type, doc_date, language)
+         VALUES ($1, $2, $3, '{}'::jsonb, $4, $1, $5, 'ready', true, $6, $7, $8)`,
+        [docId, `q62-${label}-${index}.md`, content, userId, `legacy:${docId}`, spec.docType, spec.docDate, spec.language],
+      );
+    } else {
+      await db.query(
+        `INSERT INTO documents (id, filename, content, metadata, lineage_id, source_key, status, is_current, doc_type, doc_date, language)
+         VALUES ($1, $2, $3, '{}'::jsonb, $1, $4, 'ready', true, $5, $6, $7)`,
+        [docId, `q62-${label}-${index}.md`, content, `legacy:${docId}`, spec.docType, spec.docDate, spec.language],
+      );
+    }
+    await db.query(
+      `INSERT INTO document_chunks (id, document_id, content, chunk_index, metadata, embedding, lexical_text, tenant_key, is_current, status, source, doc_date, doc_type, language)
+       VALUES ($1, $2, $3, 0, '{}'::jsonb, $4::vector, $3, $5, true, 'ready', 'manual', $6, $7, $8)`,
+      [chunkId, docId, content, `[${embedText(content).join(',')}]`, key, spec.docDate, spec.docType, spec.language],
+    );
+    chunkIds.push(chunkId);
+  }
+  await seedTerminology(db, [
+    { layer: key, canonical: Q62_GLOSSARY_TARGET[label], variants: [Q62_GLOSSARY_SOURCE], language: 'zh', kind: 'translation', mode: 'one_way', source_language: 'zh', target_language: 'en' },
+  ]);
+  return { label, key, userId, chunkIds, docTypes: [...new Set(Q62_DOCS[label].map((spec) => spec.docType))] };
+}
+
+/** Tenant A in both modes, tenant B in multi-tenant mode only; each with its chunks, doc types and one glossary translation pair. */
+export async function seedQ62CanaryRows(db: PGlite, mode: Q62Mode): Promise<Q62Seed> {
+  const a = await seedQ62Tenant(db, mode, 'a');
+  const b = mode === 'multi-tenant' ? await seedQ62Tenant(db, mode, 'b') : null;
+  await runFixtureRelex(db);
+  return { a, b };
+}
+
+/** The scope of a seeded tenant, minted as the resolvers mint it. */
+export async function q62Scope(tenant: Pick<Q62Tenant, 'userId'>): Promise<TenantScope> {
+  const { mintScope } = await import('../../src/lib/rag/tenant/scope');
+  return tenant.userId ? mintScope('personal', tenant.userId, null) : mintScope('single', null, null);
+}
+
+/** The decompose answer for Q62_QUESTION: one part names tenant B's doc type, the other tenant A's own. */
+export function q62DecomposeTable(): { version: 1; entries: Array<Record<string, unknown>> } {
+  const filter = (docType: string) => ({ date_range: null, doc_types: [docType], languages: null, scopes: null });
+  return {
+    version: 1,
+    entries: [
+      {
+        transform: 'decompose',
+        item_id: 'q62-canary-subq-filters',
+        query: Q62_QUESTION,
+        output: {
+          questions: [
+            { text: Q62_SUB_FOREIGN, filter: filter(Q62_FOREIGN_DOC_TYPE) },
+            { text: Q62_SUB_OWN, filter: filter(Q62_OWN_DOC_TYPE) },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+const Q62_RPC_CASTS: Record<string, string> = { p_embedding: 'public.halfvec', p_actor: 'uuid', p_id: 'uuid' };
+const Q62_RPC_SCALAR = new Set(['rag_scope_example_delete']);
+
+/** Service-role access over PGlite for the scope centroid, example and terminology services (halfvec and uuid casts). */
+export function q62ServiceRoleRpc(db: PGlite): RpcClient {
+  return {
+    rpc(fn, args) {
+      const names = Object.keys(args);
+      const params = names.map((name, index) => `${name} => $${index + 1}${Q62_RPC_CASTS[name] ? `::${Q62_RPC_CASTS[name]}` : ''}`).join(', ');
+      const scalar = Q62_RPC_SCALAR.has(fn);
+      const sql = scalar ? `SELECT public.${fn}(${params}) AS value` : `SELECT * FROM public.${fn}(${params})`;
+      const values = names.map((name) => {
+        const value = args[name];
+        return value !== null && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : value;
+      });
+      const pending: Promise<RpcResponse> = db
+        .transaction(async (tx) => {
+          await tx.exec('SET LOCAL ROLE service_role');
+          return (await tx.query<Record<string, unknown>>(sql, values)).rows;
+        })
+        .then((rows): RpcResponse => ({ data: scalar ? (rows[0]?.value ?? null) : rows, error: null }))
+        .catch((error: unknown): RpcResponse => ({ data: null, error: { message: error instanceof Error ? error.message : String(error), code: sqlState(error) || 'P0001' } }));
+      const request: RpcRequest = { abortSignal: () => request, then: (onFulfilled, onRejected) => pending.then(onFulfilled, onRejected) };
       return request;
     },
   };

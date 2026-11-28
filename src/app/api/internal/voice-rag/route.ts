@@ -12,6 +12,7 @@ import {
     labelledUntaggedVoiceContext,
     labelTaggedVoiceContext,
     planPromptBudget,
+    factorFor,
     promptBudgetConfig,
     readAnswerConfig,
     readFeedbackLoopConfig,
@@ -107,6 +108,8 @@ function voiceCalcOffer(
 interface VoiceBudget {
     status: 'ok' | 'exceeded';
     documentBudget: number;
+    /** The same budget in raw counter tokens, the unit packing counts in. */
+    packingBudget: number;
     counts: Record<string, number>;
 }
 
@@ -118,7 +121,12 @@ interface VoiceBudget {
 function voiceBudget(query: string, modelContextLength: number | undefined, historyTokens: number | undefined): VoiceBudget {
     const config = promptBudgetConfig();
     if (modelContextLength === undefined) {
-        return { status: 'ok', documentBudget: config.voice_document_budget, counts: { documents: config.voice_document_budget, fixed: 1 } };
+        return {
+            status: 'ok',
+            documentBudget: config.voice_document_budget,
+            packingBudget: Math.floor(config.voice_document_budget / factorFor(null).factor),
+            counts: { documents: config.voice_document_budget, fixed: 1 },
+        };
     }
     const plan = planPromptBudget({
         window: modelContextLength,
@@ -134,6 +142,7 @@ function voiceBudget(query: string, modelContextLength: number | undefined, hist
     return {
         status: plan.status,
         documentBudget: plan.documentBudget,
+        packingBudget: plan.packingBudget,
         counts: {
             window: plan.trace.window,
             documents: plan.documentBudget,
@@ -241,7 +250,7 @@ export async function POST(req: NextRequest) {
             scope: ragScope,
             query,
             profile: 'voice',
-            options: { maxResults: matchCount, ...(budget ? { documentTokenBudget: budget.documentBudget } : {}) },
+            options: { maxResults: matchCount, ...(budget ? { documentTokenBudget: budget.packingBudget } : {}) },
             signal: req.signal,
             ...(logged
                 ? { logContext: { channel: 'voice', userId: scope.scope.userId, organizationId: scope.scope.organizationId } as const }

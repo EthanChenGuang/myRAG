@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ChatMessage } from '@/components/ui/chat-message';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useLanguage } from '@/components/providers/language-provider';
+import { isBlankAssistantMessage } from '@/lib/chat/blank-message';
 
 interface SharedChatLayoutProps {
   chat: {
@@ -48,11 +49,11 @@ export function SharedChatLayout({ chat }: SharedChatLayoutProps) {
       >
         <div className="container px-4">
           <div className="space-y-4 py-4 mb-4">
-            {chat.messages.map((message: any, index: number) => (
+            {chat.messages.filter((message: any) => !isBlankAssistantMessage(message)).map((message: any, index: number, shown: any[]) => (
               <ChatMessage
                 key={message.id || index}
                 message={message}
-                isLastMessage={index === chat.messages.length - 1}
+                isLastMessage={index === shown.length - 1}
               />
             ))}
           </div>

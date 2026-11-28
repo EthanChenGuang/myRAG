@@ -293,3 +293,51 @@ test('listChangeRecords filters by since, orders newest first and limits', async
   const select = ops.find((op) => op[0] === 'select')[1];
   assert.equal(select.includes('*'), false);
 });
+
+// W-1 (05.3-SECURITY, quick-53): in enforce mode, a save that lowers RAG_CONFIG_GATE needs a typed override reason.
+const W1_NAMES = ['RAG_CONFIG_GATE', 'RAG_PRE_CONTEXT'];
+const W1_REASON = 'switching the setting check off for a planned maintenance window';
+
+function w1Check(after) {
+  return { check_id: PASS_ID, status: 'done', result: 'pass', rag_settings_hash: ragSettingsHash(after, W1_NAMES) };
+}
+
+test('W-1: the generated RAG-affecting list includes RAG_CONFIG_GATE', () => {
+  const generated = JSON.parse(fs.readFileSync(path.join(REPO, 'src/lib/rag/config-gate/rag-affecting.generated.json'), 'utf8'));
+  assert.ok(generated.names.includes('RAG_CONFIG_GATE'));
+});
+
+test('W-1: lowering RAG_CONFIG_GATE in enforce is refused without an override reason, even with a passed check', async () => {
+  const before = { RAG_CONFIG_GATE: 'enforce', RAG_PRE_CONTEXT: 'a' };
+  for (const lowered of [{ RAG_CONFIG_GATE: 'off' }, { RAG_CONFIG_GATE: 'warn' }, { RAG_CONFIG_GATE: '' }, { RAG_CONFIG_GATE: undefined }]) {
+    const after = { ...before, ...lowered };
+    if (lowered.RAG_CONFIG_GATE === undefined) delete after.RAG_CONFIG_GATE;
+    for (const ragGate of [undefined, { check_id: PASS_ID }, { skipped: true }]) {
+      const decision = await core.decideSave({ mode: 'enforce', before, after, ragGate, readCheck: () => w1Check(after), names: W1_NAMES });
+      assert.deepEqual(decision, { kind: 'refuse', status: 409, error: 'rag_gate_override_required' }, JSON.stringify({ lowered, ragGate }));
+    }
+  }
+});
+
+test('W-1: lowering RAG_CONFIG_GATE with a typed reason is written with the reason, so a change record follows', async () => {
+  const before = { RAG_CONFIG_GATE: 'enforce' };
+  const after = { RAG_CONFIG_GATE: 'off' };
+  const decision = await core.decideSave({ mode: 'enforce', before, after, ragGate: { override: { reason: W1_REASON } }, readCheck: () => null, names: W1_NAMES });
+  assert.deepEqual(decision, { kind: 'write', gateResult: 'skipped', checkId: null, overrideReason: W1_REASON });
+  const short = await core.decideSave({ mode: 'enforce', before, after, ragGate: { override: { reason: 'too short' } }, names: W1_NAMES });
+  assert.deepEqual(short, { kind: 'refuse', status: 400, error: 'invalid_reason' });
+  const row = core.buildChangeRecord({ actor: 'local-config-ui', source: 'config_ui', before, after, names: W1_NAMES, gateResult: 'skipped', overrideReason: W1_REASON });
+  assert.deepEqual(row.changed_keys, ['RAG_CONFIG_GATE']);
+  assert.equal(row.override_reason, W1_REASON);
+});
+
+test('W-1: keeping enforce, warn and off modes and other changes behave as before', async () => {
+  const before = { RAG_CONFIG_GATE: 'enforce', RAG_PRE_CONTEXT: 'a' };
+  const after = { RAG_CONFIG_GATE: 'enforce', RAG_PRE_CONTEXT: 'b' };
+  const pass = await core.decideSave({ mode: 'enforce', before, after, ragGate: { check_id: PASS_ID }, readCheck: () => w1Check(after), names: W1_NAMES });
+  assert.deepEqual(pass, { kind: 'write', gateResult: 'pass', checkId: PASS_ID, overrideReason: null });
+  const warn = await core.decideSave({ mode: 'warn', before: { RAG_CONFIG_GATE: 'warn' }, after: { RAG_CONFIG_GATE: 'off' }, names: W1_NAMES });
+  assert.equal(warn.kind, 'write');
+  const off = await core.decideSave({ mode: 'off', before: { RAG_CONFIG_GATE: 'off' }, after: { RAG_CONFIG_GATE: 'enforce' }, names: W1_NAMES });
+  assert.deepEqual(off, { kind: 'write', gateResult: 'not_required', checkId: null, overrideReason: null });
+});

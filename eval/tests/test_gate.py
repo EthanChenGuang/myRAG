@@ -896,3 +896,33 @@ def test_p52_a_violating_run_reports_its_noise_band_movement_without_failing_on_
 RULE_FOLLOWING_OPTIONS = EvalReport.model_validate(
     _report(request_options={"generator_model": RULE_FOLLOWING}).model_dump(mode="json")
 ).request_options
+
+
+# Gap 3 (quick-53): --gates-report-only lists ceilings that are reported; every other absolute check still gates.
+def _false_refusal_failing_report() -> EvalReport:
+    failing = _clean(false_refusal_rate=0.5)
+    return _clean_report(overall=failing, languages={"en": failing, "zh": failing})
+
+
+def test_gates_report_only_reports_the_listed_ceiling_and_gates_the_rest(tmp_path, capsys):
+    gates = ("--gates", str(GATES_PATH))
+    assert _gate_run(tmp_path, _false_refusal_failing_report(), None, *gates) == 11
+    code = _gate_run(tmp_path, _false_refusal_failing_report(), None, *gates, "--gates-report-only", "false_refusal_rate")
+    assert code != 11 and code in (0, 10)
+    absolute = _gate_json(tmp_path)["absolute"]
+    assert absolute["mode"] == "enforce" and absolute["exit_code"] == 0
+    rows = [row for row in absolute["checks"] if row["check"] == "false_refusal_rate" and row["slice"] == "overall"]
+    assert rows[0]["result"] == "report_only"
+    both = _clean_report(overall=_ceiling_failing(false_refusal_rate=0.5))
+    assert _gate_run(tmp_path, both, None, *gates, "--gates-report-only", "false_refusal_rate") == 11
+    assert "false_answer_rate_exceeded" in capsys.readouterr().err
+
+
+def test_gates_report_only_needs_gates_enforce_mode_and_ceiling_names(tmp_path, capsys):
+    assert _gate_run(tmp_path, _clean_report(), None, "--gates-report-only", "false_refusal_rate") == 2
+    assert "--gates-report-only needs --gates" in capsys.readouterr().err
+    gates = ("--gates", str(GATES_PATH))
+    assert _gate_run(tmp_path, _clean_report(), None, *gates, "--gates-mode", "report", "--gates-report-only", "false_refusal_rate") == 2
+    assert "--gates-report-only applies in enforce mode" in capsys.readouterr().err
+    assert _gate_run(tmp_path, _clean_report(), None, *gates, "--gates-report-only", "recall_at_5") == 2
+    assert _gate_run(tmp_path, _clean_report(), None, *gates, "--gates-report-only", "") == 2

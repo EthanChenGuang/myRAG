@@ -14,13 +14,52 @@ const REPO_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
 const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const VERCEL_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
 const STATUS_PAGES = 10;
+export const GATE_WORKFLOW_PATH = '.github/workflows/rag-release-gate.yml';
+const GATE_EVENTS = new Set(['push', 'workflow_dispatch']);
+const DEFAULT_SERVER = 'https://github.com';
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** The run id of a target_url that points at a workflow run of this repository, or null. */
+export function runIdFromTargetUrl(targetUrl, repo, serverUrl = DEFAULT_SERVER) {
+  if (typeof targetUrl !== 'string' || typeof repo !== 'string' || !REPO_RE.test(repo)) return null;
+  const server = String(serverUrl || DEFAULT_SERVER).replace(/\/+$/, '');
+  if (!/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(server)) return null;
+  const match = targetUrl.match(new RegExp(`^${escapeRegExp(server)}/${escapeRegExp(repo)}/actions/runs/([1-9][0-9]{0,19})$`));
+  return match ? match[1] : null;
+}
+
+/**
+ * T-05.3-391: why a bot status's run does not prove a release gate run of this sha on the default branch, or null when it does.
+ * The run must be rag-release-gate.yml of this repository on the default branch, started by push or workflow_dispatch, completed
+ * with success; its run-name names the gated sha, and a push run's head is that sha.
+ */
+export function runProblem(run, { repo, sha, defaultBranch, runId }) {
+  if (!run || typeof run !== 'object') return 'the run it links cannot be read';
+  if (String(run.id) !== String(runId)) return 'the run it links is another run';
+  if (run.repository?.full_name !== repo) return 'its run belongs to another repository';
+  if (typeof defaultBranch !== 'string' || defaultBranch === '') return 'the default branch cannot be read';
+  const runPath = String(run.path ?? '');
+  const allowedPaths = new Set([GATE_WORKFLOW_PATH, `${GATE_WORKFLOW_PATH}@${defaultBranch}`, `${GATE_WORKFLOW_PATH}@refs/heads/${defaultBranch}`]);
+  if (!allowedPaths.has(runPath)) return `its run is not ${GATE_WORKFLOW_PATH}`;
+  if (run.head_branch !== defaultBranch) return `its run is not on the default branch ${defaultBranch}`;
+  if (!GATE_EVENTS.has(run.event)) return `its run was started by ${run.event || 'an unknown event'}, not push or workflow_dispatch`;
+  if (run.status !== 'completed' || run.conclusion !== 'success') return `its run is ${run.status || 'unknown'}/${run.conclusion || 'none'}, not completed/success`;
+  if (run.display_title !== `${STATUS_CONTEXT} ${sha}`) return 'its run gated another sha';
+  if (run.event === 'push' && run.head_sha !== sha) return 'its push run is for another sha';
+  return null;
+}
 
 /**
  * Decides on the newest rag-release-gate status of a commit (statuses newest first). Only success counts, and only
- * when posted by the Actions bot or by a user whose repository permission is admin (O-5, research Pitfall 10).
+ * when posted by a user whose repository permission is admin (O-5, research Pitfall 10) or by the Actions bot through a run
+ * that runProblem accepts (T-05.3-391: any workflow can post as the bot, so the bot login alone proves nothing).
  * `permissionOf(login)` resolves to the permission string, or null when it cannot be read (treated as not admin).
+ * `provenance` is `{ repo, sha, serverUrl?, runOf(id), defaultBranchOf() }`; without it no bot status is accepted.
  */
-export async function acceptedStatus(statuses, permissionOf) {
+export async function acceptedStatus(statuses, permissionOf, provenance = null) {
   const list = Array.isArray(statuses) ? statuses : [];
   const newest = list.find((s) => s && typeof s.context === 'string' && s.context.toLowerCase() === STATUS_CONTEXT);
   if (!newest) return { accepted: false, reason: `no ${STATUS_CONTEXT} status on this commit` };
@@ -28,7 +67,24 @@ export async function acceptedStatus(statuses, permissionOf) {
   const login = String(newest.creator?.login ?? '');
   const type = String(newest.creator?.type ?? '');
   if (state !== 'success') return { accepted: false, state, creator: login, reason: `newest ${STATUS_CONTEXT} status is ${state || 'unknown'}` };
-  if (type === 'Bot' && login === ACTIONS_BOT) return { accepted: true, state, creator: login };
+  if (type === 'Bot' && login === ACTIONS_BOT) {
+    const refused = (reason) => ({ accepted: false, state, creator: login, reason: `${ACTIONS_BOT} status refused: ${reason}` });
+    if (!provenance || typeof provenance.runOf !== 'function' || typeof provenance.defaultBranchOf !== 'function') {
+      return refused('its run cannot be checked');
+    }
+    const runId = runIdFromTargetUrl(newest.target_url, provenance.repo, provenance.serverUrl);
+    if (runId === null) return refused('it carries no run URL of this repository');
+    let run = null;
+    let defaultBranch = null;
+    try {
+      [run, defaultBranch] = await Promise.all([provenance.runOf(runId), provenance.defaultBranchOf()]);
+    } catch {
+      return refused('the run it links cannot be read');
+    }
+    const problem = runProblem(run, { repo: provenance.repo, sha: provenance.sha, defaultBranch, runId });
+    if (problem !== null) return refused(problem);
+    return { accepted: true, state, creator: login, runId };
+  }
   if (type !== 'User' || !LOGIN_RE.test(login)) {
     return { accepted: false, state, creator: login, reason: `status creator ${login || 'unknown'} is neither ${ACTIONS_BOT} nor a repository admin` };
   }
@@ -86,6 +142,18 @@ function githubClient(fetchImpl, api, token, repo) {
         if (batch.some((s) => s && typeof s.context === 'string' && s.context.toLowerCase() === STATUS_CONTEXT)) break;
       }
       return all;
+    },
+    async run(id) {
+      if (!/^[1-9][0-9]{0,19}$/.test(String(id))) return null;
+      const response = await fetchImpl(`${api}/repos/${repo}/actions/runs/${id}`, { method: 'GET', headers });
+      if (response.status !== 200) return null;
+      return response.json();
+    },
+    async defaultBranch() {
+      const response = await fetchImpl(`${api}/repos/${repo}`, { method: 'GET', headers });
+      if (response.status !== 200) return null;
+      const body = await response.json();
+      return typeof body?.default_branch === 'string' ? body.default_branch : null;
     },
     async permission(login) {
       const response = await fetchImpl(`${api}/repos/${repo}/collaborators/${encodeURIComponent(login)}/permission`, { method: 'GET', headers });
@@ -155,7 +223,13 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
 
   let decision;
   try {
-    decision = await acceptedStatus(await github.statuses(sha), (login) => github.permission(login));
+    decision = await acceptedStatus(await github.statuses(sha), (login) => github.permission(login), {
+      repo,
+      sha,
+      serverUrl: String(env.GITHUB_SERVER_URL || DEFAULT_SERVER),
+      runOf: (id) => github.run(id),
+      defaultBranchOf: () => github.defaultBranch(),
+    });
   } catch (exc) {
     error(`[Promote] ${short}: cannot read the ${STATUS_CONTEXT} status (${exc && exc.message ? exc.message : 'Error'}); nothing promoted`);
     return EXIT_STOPPED;
@@ -164,7 +238,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     error(`[Promote] ${short}: ${decision.reason}; nothing promoted`);
     return EXIT_STOPPED;
   }
-  log(`[Promote] ${short}: ${STATUS_CONTEXT} success by ${decision.creator}`);
+  log(`[Promote] ${short}: ${STATUS_CONTEXT} success by ${decision.creator}${decision.runId ? ` (run ${decision.runId})` : ''}`);
 
   let deployment;
   try {

@@ -26,6 +26,7 @@ export type ParsedSyncArgs =
   | { ok: true; command: 'requeue-dead'; target: VectorSyncTarget }
   | { ok: true; command: 'status' }
   | { ok: true; command: 'reconcile' }
+  | { ok: true; command: 'rebuild-lexical'; target: VectorSyncTarget; confirm: boolean }
   | { ok: false; error: string };
 
 export const USAGE = [
@@ -34,6 +35,7 @@ export const USAGE = [
   '       npm run rag:vector-sync -- targets enable|disable weaviate|qdrant',
   '       npm run rag:vector-sync -- requeue-dead --target weaviate|qdrant',
   '       npm run rag:vector-sync -- status',
+  '       npm run rag:vector-sync -- rebuild-lexical --target weaviate|qdrant [--confirm]',
   '       npm run rag:reconcile',
 ].join('\n');
 
@@ -68,6 +70,13 @@ export function parseSyncArgs(argv: string[]): ParsedSyncArgs {
     case 'requeue-dead': {
       const flag = targetFlag(command, rest);
       return flag.ok ? { ok: true, command, target: flag.target } : flag;
+    }
+    case 'rebuild-lexical': {
+      const confirms = rest.filter((arg) => arg === '--confirm').length;
+      if (confirms > 1) return { ok: false, error: 'rebuild-lexical takes --target weaviate|qdrant [--confirm]' };
+      const flag = targetFlag(command, rest.filter((arg) => arg !== '--confirm'));
+      if (!flag.ok) return { ok: false, error: 'rebuild-lexical takes --target weaviate|qdrant [--confirm]' };
+      return { ok: true, command, target: flag.target, confirm: confirms === 1 };
     }
     case 'targets': {
       const [action, name, ...extra] = rest;
@@ -157,6 +166,88 @@ async function drainAll(rpc: RpcClient, targets: VectorSyncTarget[], deps: Vecto
   return failed === 0;
 }
 
+interface LexicalPlanRow {
+  profileId: string;
+  dims: number;
+  collection: string;
+  recorded: { k1: number; b: number } | null;
+  configured: { k1: number; b: number };
+  action: 'rebuild' | 'refresh' | 'matches' | 'no_collection';
+}
+
+function pairText(pair: { k1: number; b: number } | null): string {
+  return pair ? `k1 ${pair.k1}, b ${pair.b}` : 'none';
+}
+
+const LEXICAL_ACTION_TEXT: Record<LexicalPlanRow['action'], { dry: string; done: string }> = {
+  rebuild: { dry: 'would rebuild', done: 'rebuilt' },
+  refresh: { dry: 'would refresh the record (k1 and b are sent per query; no rebuild)', done: 'record refreshed' },
+  matches: { dry: 'matches', done: 'matches' },
+  no_collection: { dry: 'no collection', done: 'no collection' },
+};
+
+/**
+ * LEX-05: the BM25 pair of every synced profile's collection on one target. Index-bound stores (Weaviate) are dropped and re-created
+ * with the configured pair, then reconcile, drain and reconcile again re-sync them from Supabase; a query-bound store (Qdrant) only
+ * gets its record refreshed. Prints collection names, pairs and counts only.
+ */
+async function rebuildLexical(
+  rpc: RpcClient,
+  target: VectorSyncTarget,
+  confirm: boolean,
+  deps: VectorSyncCliDeps,
+  io: CliIo,
+): Promise<number> {
+  const [{ isLexicalParamsStore, sameLexicalParams }, { readSyncProfiles }, { buildVectorSyncStores, readEnabledTargets }, names] =
+    await Promise.all([import('@/lib/rag/backend/lexical-params'), import('./claim'), import('./targets'), import('@/lib/rag/backend/tenant-key')]);
+  let enabled: VectorSyncTarget[] = [];
+  if (confirm) {
+    enabled = await readEnabledTargets(rpc);
+    if (!enabled.includes(target)) {
+      io.err(`[Vector Sync] ${target} is disabled; run targets enable ${target} first`);
+      return 1;
+    }
+  }
+  const [store] = await buildVectorSyncStores([target], deps.factories);
+  if (!store || !isLexicalParamsStore(store)) {
+    io.err(`[Vector Sync] ${target} store unavailable`);
+    return 1;
+  }
+  const collectionOf = target === 'weaviate' ? names.weaviateCollectionName : names.qdrantCollectionName;
+  const configured = await store.configuredLexicalParams();
+  const profiles = [...(await readSyncProfiles(rpc))].sort((a, b) => (a.profile_id < b.profile_id ? -1 : 1));
+  const plan: LexicalPlanRow[] = [];
+  for (const profile of profiles) {
+    const recorded = await store.recordedLexicalParams(profile.profile_id);
+    const action: LexicalPlanRow['action'] =
+      recorded === null ? 'no_collection' : sameLexicalParams(recorded, configured) ? 'matches' : store.lexicalBinding === 'index' ? 'rebuild' : 'refresh';
+    plan.push({ profileId: profile.profile_id, dims: profile.dims, collection: collectionOf(profile.profile_id), recorded, configured, action });
+  }
+  const line = (row: LexicalPlanRow, done: boolean) =>
+    `[Vector Sync] rebuild-lexical ${target} ${row.collection}: recorded ${pairText(row.recorded)}, configured ${pairText(row.configured)}: ` +
+    LEXICAL_ACTION_TEXT[row.action][done ? 'done' : 'dry'];
+  const rebuilds = plan.filter((row) => row.action === 'rebuild');
+  if (!confirm) {
+    for (const row of plan) io.out(line(row, false));
+    io.out(
+      `[Vector Sync] rebuild-lexical ${target}: ${rebuilds.length} to rebuild, ${plan.filter((row) => row.action === 'refresh').length} to refresh, ` +
+        `${plan.filter((row) => row.action === 'matches').length} matching; dry run, nothing written` +
+        (rebuilds.length > 0 ? '; on --confirm every tenant of this profile is served by pgvector until the rebuild finishes' : ''),
+    );
+    return 2;
+  }
+  for (const row of plan) {
+    if (row.action === 'rebuild' || row.action === 'refresh') await store.rebuildLexical(row.profileId, row.dims);
+    io.out(line(row, true));
+  }
+  if (rebuilds.length === 0) return 0;
+  // The recreated collections are empty: reconcile enqueues every document, the drain re-syncs them and the second reconcile checks.
+  await reconcileAll(rpc, [target], deps, io);
+  const drained = await drainAll(rpc, enabled, deps, io);
+  const reconciled = await reconcileAll(rpc, [target], deps, io);
+  return drained && reconciled.allReady ? 0 : 1;
+}
+
 /**
  * The CLI body (D-04 c, D-05, D-24). Prints targets, counts and slice reports only: never a key, a tenant key or stored text.
  * Exit codes: 0 done, 1 failed or not ready, 2 wrong arguments, 3 the service-role client cannot be built.
@@ -216,6 +307,8 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         const reconciled = await reconcileAll(rpc, [parsed.target], deps, io);
         return drained && reconciled.allReady ? 0 : 1;
       }
+      case 'rebuild-lexical':
+        return await rebuildLexical(rpc, parsed.target, parsed.confirm, deps, io);
       case 'reconcile': {
         const targets = await readEnabledTargets(rpc);
         if (targets.length === 0) {

@@ -256,6 +256,32 @@ def test_all_synthetic_slice_or_fixture_embedder_adds_fixture_note():
     assert BINDING_FIXTURE_NOTE in fixture.notes
 
 
+def _real_slice_report() -> EvalReport:
+    items = [_item(f"h-{i}", "en", DOC, i % 2 == 0, provenance="human") for i in range(20)]
+    items += [_item(f"p-{i}", "en", DOC, i % 2 == 0, provenance="production") for i in range(10)]
+    items += [_item(f"g-{i}", "en", "general", True, provenance="synthetic_fixture") for i in range(5)]
+    return _report(items)
+
+
+def test_population_is_real_only_for_a_live_deployment_run_with_an_all_real_doc_type_slice():
+    # quick-311 (I-2): record-binding-evidence accepts only population "real".
+    report = _real_slice_report()
+    real = _compare({WIDE: report}, baseline=report, control=report, live_deployment=True)
+    assert real.population == "real"
+    assert _compare({WIDE: report}, baseline=report, control=report).population == "fixture"
+    fixture_db = _compare({WIDE: report}, baseline=report, control=report, live_deployment=True, fixture_embedder=True)
+    assert fixture_db.population == "fixture"
+    mixed = _compare({WIDE: _good()}, live_deployment=True)
+    assert mixed.population == "fixture"
+
+
+def test_population_defaults_to_fixture_for_older_comparison_files():
+    report = _real_slice_report()
+    payload = json.loads(_compare({WIDE: report}, baseline=report, control=report).model_dump_json())
+    payload.pop("population")
+    assert BindingComparison.model_validate(payload).population == "fixture"
+
+
 def test_no_language_code_is_hard_coded_in_the_rule():
     source = (Path(__file__).resolve().parents[1] / "src" / "rag_eval" / "binding_compare.py").read_text(encoding="utf-8")
     for code in ('"zh"', '"en"', '"it"', "'zh'", "'en'", "'it'"):

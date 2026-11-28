@@ -35,6 +35,9 @@ const COMMANDS: Readonly<Record<StartRebuildResult['mechanism'], string>> = Obje
   reembed: 'npm run rag:reembed',
   recaption: 'npm run rag:reembed -- --recaption',
   retranslate: 'npm run rag:translate',
+  reindex_tables: MECHANISM_COMMANDS.reindex_tables,
+  reindex_identifiers: MECHANISM_COMMANDS.reindex_identifiers,
+  recluster: MECHANISM_COMMANDS.recluster,
 });
 
 function commandOf(mechanism: StartRebuildResult['mechanism']): string {

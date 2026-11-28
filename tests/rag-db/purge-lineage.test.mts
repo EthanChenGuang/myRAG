@@ -76,10 +76,12 @@ for (const mode of MODES) {
       const after = await storeSnapshot(world, seeded);
       for (const [store, n] of Object.entries(after)) assert.equal(n, 0, `${store} emptied`);
       const result = await verify(world.db, world.tenantA.key, seeded.lineageId);
+      const stores = result.filter((row) => !row.store.startsWith('external:')).map((row) => row.store);
       assert.deepEqual(
-        result.filter((row) => !row.store.startsWith('external:')).map((row) => row.store).sort(),
+        stores.filter((store) => DB_STORES.includes(store)).sort(),
         [...DB_STORES].sort(),
       );
+      assert.equal(new Set(stores).size, stores.length, 'one row per store');
       for (const row of result) {
         if (row.store.startsWith('external:')) continue;
         assert.equal(row.remaining, 0, `${row.store} remaining`);
@@ -91,7 +93,8 @@ for (const mode of MODES) {
       const seeded = await nangoLineage();
       const before = await storeSnapshot(world, seeded);
       const result = await purge(world.db, world.tenantA.key, seeded.lineageId, adminActor(world.adminA));
-      assert.deepEqual(result.counts, {
+      // Foreign stores of other phases (0728) add their own keys; this test pins the 0727 stores.
+      assert.deepEqual(Object.fromEntries(Object.entries(result.counts).filter(([key]) => DB_STORES.includes(key))), {
         documents: 2,
         chunks: before.chunks,
         vectors: before.vectors,

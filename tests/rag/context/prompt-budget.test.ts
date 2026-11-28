@@ -224,6 +224,20 @@ describe('planPromptBudget', () => {
     expect(fallback.trace.estimator).toMatchObject({ family: 'unrecorded', factor: 1.25, factor_source: 'default' });
   });
 
+  it('gives the packing budget in raw counter tokens: the document budget divided by the family factor, rounded down', () => {
+    const calibration = parseTokenizerCalibration({
+      ...rawCalibration,
+      families: [{ family: 'fixture', factor: 1.25, quantile: 0.95, samples: 20, source: 'measured', run_ids: ['unit'] }],
+    });
+    const plan = planPromptBudget(input({ calibration, history: [], documentTarget: 1001 }));
+    expect(plan.documentBudget).toBe(1001);
+    expect(plan.packingBudget).toBe(800);
+    expect(planPromptBudget(input({ history: [], documentTarget: 1001 })).packingBudget).toBe(1001);
+    const exceeded = planPromptBudget(input({ calibration, answerReserve: 100000 }));
+    expect(exceeded.status).toBe('exceeded');
+    expect(exceeded.packingBudget).toBe(0);
+  });
+
   it('records the overflow mode, truncate by default', () => {
     expect(planPromptBudget(input()).trace.overflow_mode).toBe('truncate');
     expect(planPromptBudget(input({ overflowMode: 'refine' })).trace.overflow_mode).toBe('refine');

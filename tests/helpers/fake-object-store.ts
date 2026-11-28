@@ -1,6 +1,6 @@
 import { OBJECT_KEY_PATTERN, ObjectStoreError, setObjectStoreForTests, type ObjectStore, type StoredObject } from '@/lib/rag/ingest/object-store';
 
-type Operation = 'put' | 'get' | 'remove' | 'exists';
+type Operation = 'put' | 'get' | 'remove' | 'exists' | 'list';
 
 export interface FakeObjectStore extends ObjectStore {
   readonly objects: Map<string, { bytes: Uint8Array; contentType: string }>;
@@ -62,6 +62,11 @@ export function createFakeObjectStore(): FakeObjectStore {
     async exists(key, options) {
       enter('exists', key, options?.signal);
       return objects.has(key);
+    },
+    async list(prefix, options) {
+      enter('list', prefix, options?.signal);
+      if (!prefix.endsWith('/')) throw new ObjectStoreError('list', 400);
+      return [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
     },
   };
 }

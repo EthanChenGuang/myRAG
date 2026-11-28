@@ -323,9 +323,15 @@ def evaluate(
     running_fingerprints: Mapping[str, str] | None = None,
     today: date | None = None,
     mode: Mode = "enforce",
+    report_only_checks: Iterable[str] = (),
 ) -> AbsoluteGateResult:
-    """Pure: no I/O and no baseline. Ceilings follow report.rag_mode (D-07); floors apply to the tier's judge metrics."""
-    checks = _ceiling_rows(report, gates)
+    """Pure: no I/O and no baseline. Ceilings follow report.rag_mode (D-07); floors apply to the tier's judge metrics.
+
+    report_only_checks (quick-53, gap 3) names ceilings whose failed rows are recorded as report_only with the reason
+    '<code>_report_only'; every other check, composition and the stale share still gate.
+    """
+    listed = validate_report_only_checks(report_only_checks)
+    checks = [_as_report_only(row) if row.check in listed and row.result == "failed" else row for row in _ceiling_rows(report, gates)]
     composition, pooled, composition_failed = _composition(report, gates)
     checks.append(pooled)
     checks.extend(
@@ -347,6 +353,19 @@ def evaluate(
         failed=failed,
         exit_code=EXIT_PASS if mode == "report" else _code(failed),
     )
+
+
+def validate_report_only_checks(names: Iterable[str]) -> frozenset[str]:
+    """Only ceilings may be report-only; composition, stale share and floors always gate in enforce mode."""
+    listed = [str(name) for name in names]
+    for name in listed:
+        if name not in CEILING_METRICS:
+            raise ValueError(f"report-only check {name!r} is not one of {', '.join(CEILING_METRICS)}")
+    return frozenset(listed)
+
+
+def _as_report_only(row: GateCheckRow) -> GateCheckRow:
+    return row.model_copy(update={"result": "report_only", "reason": f"{row.reason or FAILED_CODES[row.check]}_report_only"})
 
 
 def exit_code_for(result: AbsoluteGateResult) -> int:
@@ -485,9 +504,16 @@ def _composition_result(result: AbsoluteGateResult) -> str:
     return next((row.result for row in result.checks if row.check == "no_answer_share"), "skipped")
 
 
-def _tier_entry(name: str, raw_path: str, report: EvalReport, gates: QualityGates, stage: str) -> dict[str, object]:
+def _tier_entry(
+    name: str, raw_path: str, report: EvalReport, gates: QualityGates, stage: str, report_only: list[str] | None = None
+) -> dict[str, object]:
     enforced = evaluate(report, gates, tier=_floor_tier(name))
+    extra: dict[str, object] = {}
+    if report_only:
+        restricted = evaluate(report, gates, tier=_floor_tier(name), report_only_checks=report_only)
+        extra = {"report_only_checks": sorted(report_only), "enforced_exit_code": exit_code_for(restricted)}
     return {
+        **extra,
         "name": name,
         "stage": stage,
         "report": raw_path,
@@ -521,7 +547,8 @@ def render_measurement_markdown(record: Mapping[str, object]) -> str:
         "",
         "Would-be exit code: the absolute gate in enforce mode (0 pass, 11 ceiling or floor, 12 composition or stale share).",
         "Gate exit: the exit code of the gate run itself (noise band; absolute gate in report mode). The wall time of each run is in seconds.",
-        "Mode (stage after): enforce when the would-be exit code is 0, report otherwise (O-1).",
+        "Mode (stage after): enforce when the would-be exit code is 0, report otherwise (O-1). A tier with report-only checks is "
+        "enforce when the exit code without those checks is 0; its listed ceilings are reported, every other check gates.",
         "",
         "| Tier | Stage | Mode | Out | False-answer rate | False-refusal rate | Composition | Would-be exit code | Gate exit | Wall time (s) |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -540,6 +567,12 @@ def render_measurement_markdown(record: Mapping[str, object]) -> str:
     for entry in record.get("tiers", []):  # type: ignore[union-attr]
         failed = ", ".join(entry.get("failed") or []) or "none"
         lines.append(f"- {entry['name']} ({entry['stage']}): {failed}")
+    partial = [e for e in record.get("tiers", []) if e.get("stage") == "after" and e.get("report_only_checks")]  # type: ignore[union-attr]
+    if partial:
+        lines += ["", "## Tiers with report-only checks (stage after)", ""]
+        for entry in partial:
+            checks = ", ".join(entry["report_only_checks"])
+            lines.append(f"- {entry['name']}: {entry.get('mode')}; report-only checks: {checks} (exit without them {entry.get('enforced_exit_code')}).")
     report_only = [e for e in record.get("tiers", []) if e.get("stage") == "after" and e.get("mode") == "report"]  # type: ignore[union-attr]
     if report_only:
         lines += ["", "## Report-only tiers (stage after)", ""]
@@ -602,6 +635,16 @@ def _measure(args: argparse.Namespace) -> int:
             if name in tiers or name in not_measured:
                 raise ValueError(f"--not-measured {name} is also a measured tier or given twice")
             not_measured[name] = reason
+        report_only: dict[str, list[str]] = {}
+        for entry in args.report_only or []:
+            name, sep, raw = entry.partition("=")
+            if not sep or not name or not raw:
+                raise ValueError(f"--report-only expects <name>=<check>[,<check>], got {entry!r}")
+            if name not in tiers or name in report_only:
+                raise ValueError(f"--report-only {name} must name a measured --tier once")
+            if args.stage != "after":
+                raise ValueError("--report-only applies to stage after only")
+            report_only[name] = sorted(validate_report_only_checks(raw.split(",")))
         out = resolve_cli_path(args.out)
         previous: list[dict[str, object]] = []
         if out.exists():
@@ -617,12 +660,14 @@ def _measure(args: argparse.Namespace) -> int:
         entry for entry in previous if not (entry.get("name") in recorded and entry.get("stage") == args.stage)
     ]
     for name in sorted(tiers):
-        entry = _tier_entry(name, paths[name], tiers[name], gates, args.stage)
+        entry = _tier_entry(name, paths[name], tiers[name], gates, args.stage, report_only.get(name))
         entry["wall_time_s"] = wall.get(name)
         entry["gate_exit"] = gate_exit.get(name)
         if args.stage == "after":
-            # O-1: a tier is enforced in CI only when the measurement shows it passing every ceiling and composition check.
-            entry["mode"] = "enforce" if entry["exit_code"] == EXIT_PASS else "report"
+            # O-1: a tier is enforced in CI only when the measurement shows it passing every ceiling and composition check,
+            # apart from the ceilings it lists as report-only (gap 3).
+            code = entry.get("enforced_exit_code", entry["exit_code"])
+            entry["mode"] = "enforce" if code == EXIT_PASS else "report"
         entries.append(entry)
     for name in sorted(not_measured):
         entries.append(_not_measured_entry(name, not_measured[name], args.stage))
@@ -656,6 +701,9 @@ def _parser() -> argparse.ArgumentParser:
     measure.add_argument("--gate-exit", action="append", metavar="NAME=CODE", help="exit code of a tier's gate run")
     measure.add_argument("--markdown", type=Path, help="also write the Markdown twin of the whole record")
     measure.add_argument("--not-measured", action="append", metavar="NAME=REASON", help="a tier recorded without a run")
+    measure.add_argument(
+        "--report-only", action="append", metavar="NAME=CHECK[,CHECK]", help="stage after: ceilings of a tier that stay report-only"
+    )
     return parser
 
 

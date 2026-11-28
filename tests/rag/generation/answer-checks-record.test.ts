@@ -97,7 +97,7 @@ function sentence(overrides: Partial<AnswerSentence> = {}): AnswerSentence {
     cited: true,
     factual: true,
     support: 'not_checked',
-    reason: null,
+    reason: 'claim_check_off',
     scorer: null,
     text_hash: hash(ANSWER_TEXT),
     ...overrides,

@@ -4,7 +4,7 @@ import type { RebuildMechanism } from '../fingerprint';
 import { countImpact, MECHANISM_COMMANDS, type FingerprintGroup } from '../fingerprint/impact';
 
 /** The mechanisms `rag:rebuild start` accepts; the security rescan has its own action (plan 03.2-40). */
-export const REBUILDABLE_MECHANISMS = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate'] as const;
+export const REBUILDABLE_MECHANISMS = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'reindex_tables', 'reindex_identifiers', 'recluster'] as const;
 export type RebuildableMechanism = (typeof REBUILDABLE_MECHANISMS)[number];
 
 export function isRebuildableMechanism(value: unknown): value is RebuildableMechanism {
@@ -102,12 +102,17 @@ export function rebuildProfileId(settingsHash: string): string {
   return `rb-${settingsHash.slice(0, 12)}`;
 }
 
+type CommandMechanism = Exclude<RebuildableMechanism, 'reparse' | 'rechunk'>;
+
 /** Fixed command prefixes; only the tenant key of a selected document is appended, never request input. */
-const TENANT_COMMANDS: Readonly<Record<'relex' | 'reembed' | 'recaption' | 'retranslate', string>> = Object.freeze({
+const TENANT_COMMANDS: Readonly<Record<CommandMechanism, string>> = Object.freeze({
   relex: 'npm run rag:relex --',
   reembed: 'npm run rag:reembed --',
   recaption: 'npm run rag:reembed -- --recaption',
   retranslate: 'npm run rag:translate --',
+  reindex_tables: 'npm run rag:table-rows --',
+  reindex_identifiers: 'npm run rag:identifiers --',
+  recluster: 'npm run rag:dup-clusters --',
 });
 
 function inOrder<T>(values: Iterable<T>): T[] {
@@ -119,7 +124,7 @@ export type RebuildPlan =
   | { kind: 'held_batch'; mechanism: 'reparse'; activation: 'rebuild_batch'; affected: number; documents: RebuildTarget[] }
   | { kind: 'needs_async'; mechanism: 'reparse'; affected: number; command: string }
   | { kind: 'chunking_profile'; mechanism: 'rechunk'; activation: 'chunking_profiles'; affected: number; profiles: ProfileBuild[]; documents: RebuildTarget[] }
-  | { kind: 'command'; mechanism: 'relex' | 'reembed' | 'recaption' | 'retranslate'; activation: 'embedding_profiles' | 'none'; affected: number; commands: string[] };
+  | { kind: 'command'; mechanism: CommandMechanism; activation: 'embedding_profiles' | 'none'; affected: number; commands: string[] };
 
 /** A chunking profile a rechunk rebuild creates: the legacy child size of the doc type and no parents (research F-9). */
 export interface ProfileBuild {
@@ -136,7 +141,8 @@ export interface ProfileBuild {
  * queue is on (RAG_INGEST_ASYNC=on), otherwise it lists the count and the command. rechunk builds one chunking profile per affected doc type
  * with the legacy child size and no parents, from stored parse output (research F-9); the profile covers every current document of the doc
  * type, because the pointer flip (rag:chunking activate) is per doc type and requires a complete profile. relex, reembed, recaption
- * (the D-24 recaption job of plan 03.2-33) and retranslate are existing commands, one per tenant of the affected documents.
+ * (the D-24 recaption job of plan 03.2-33), retranslate and the lookup and duplicate-cluster backfills (rag:table-rows,
+ * rag:identifiers, rag:dup-clusters) are existing commands, one per tenant of the affected documents.
  */
 export function planRebuild(mechanism: RebuildableMechanism, selection: RebuildSelection, options: PlanOptions): RebuildPlan {
   const affected = selection.documents.length;

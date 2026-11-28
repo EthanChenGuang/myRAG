@@ -5,6 +5,7 @@
 -- A malformed payload raises 22023 and writes nothing. The tenant key is checked first by rag_assert_tenant_key.
 -- Without the Phase 5.1.1 review queue the function returns 0 (to_regclass guard). SECURITY INVOKER, empty search_path,
 -- service_role only (O-3). Idempotent, not folded (D-56).
+-- Re-run order: re-running this file after 0986 restores the body without access_sets; re-run 0986, 0990 and 0410 after it.
 
 BEGIN;
 

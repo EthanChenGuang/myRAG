@@ -8,7 +8,8 @@ import type { TenantScope } from '@/lib/rag/tenant/scope';
 import type { QdrantApi } from './client';
 import { qdrantErrorStatus } from './errors';
 import { QDRANT_DENSE_VECTOR, QDRANT_LEXICAL_FIELD } from './collection';
-import { qdrantScopedBatch, type QdrantCondition, type QdrantFilter, type QdrantQueryNode } from './scoped-request';
+import { qdrantScopedBatch, type QdrantCondition, type QdrantFilter, type QdrantQuery, type QdrantQueryNode } from './scoped-request';
+import { configuredLexicalParams, defaultLexicalParams, isDefaultLexicalParams, type LexicalParams, type LexicalParamsSource } from '../lexical-params';
 
 const RPC_NAME = 'qdrant.query_batch';
 
@@ -102,11 +103,24 @@ function hitsOf(response: { points?: Array<{ id: string | number; score?: number
 }
 
 /**
+ * LEX-05: Qdrant 1.20 takes BM25 k and b per query (TextQueryInput.scoring.bm25). The default pair is the server's own default, so
+ * it is left out and the default request stays byte-identical to the one sent before LEX-05.
+ */
+export function qdrantLexicalQuery(text: string, params: LexicalParams): QdrantQuery {
+  if (isDefaultLexicalParams(params)) return { text };
+  return { text: { query: text, scoring: { bm25: { k: params.k1, b: params.b } } } };
+}
+
+/**
  * One query batch per request: the dense search (ACORN on, so selective filters keep recall) and the BM25 text search over
  * lexical_text with the query built from the shared tokenizer's tokens. Both go through qdrantScopedBatch, which adds the tenant clause
  * to each filter and scopes the IDF corpus to the tenant. An empty token list sends no text search.
  */
-export async function searchQdrantLegs(client: QdrantApi, req: StoreSearchRequest): Promise<StoreLegs> {
+export async function searchQdrantLegs(
+  client: QdrantApi,
+  req: StoreSearchRequest,
+  lexicalParams: LexicalParams = defaultLexicalParams(),
+): Promise<StoreLegs> {
   const scope: TenantScope = req.scope;
   canonicalTenantKey(scope);
   req.signal.throwIfAborted();
@@ -133,7 +147,7 @@ export async function searchQdrantLegs(client: QdrantApi, req: StoreSearchReques
     searches.push({
       leg: 'lexical',
       node: {
-        query: { text: tokens.join(' ') },
+        query: qdrantLexicalQuery(tokens.join(' '), lexicalParams),
         using: QDRANT_LEXICAL_FIELD,
         limit: req.lexicalLimit,
         filter: filter(),
@@ -173,10 +187,20 @@ export async function qdrantHealth(client: QdrantApi): Promise<StoreHealth> {
   }
 }
 
-export function createQdrantReader(readClient: QdrantApi): ExternalStoreReader {
+export interface QdrantReaderOptions {
+  /** LEX-05: the configured BM25 pair; default externalLexicalParams of the loaded configuration. */
+  lexicalParams?: LexicalParamsSource;
+}
+
+/** Query-bound: the configured pair travels on every lexical query, so the reader never refuses on the recorded pair. */
+export function createQdrantReader(readClient: QdrantApi, options: QdrantReaderOptions = {}): ExternalStoreReader {
+  const lexicalParams = options.lexicalParams ?? configuredLexicalParams;
   return {
     target: 'qdrant',
-    searchLegs: (req) => searchQdrantLegs(readClient, req),
+    async searchLegs(req) {
+      const wantLexical = req.lexicalLimit > 0 && req.lexicalTokens.some((token) => token.length > 0);
+      return searchQdrantLegs(readClient, req, wantLexical ? await lexicalParams() : defaultLexicalParams());
+    },
     health: () => qdrantHealth(readClient),
   };
 }
@@ -187,12 +211,13 @@ export interface QdrantBackendDeps {
   /** Injected by the factory (07-12); absent means not ready, so the factory falls back to pgvector. */
   readiness?: (scope: TenantScope) => Promise<boolean>;
   securityLog?: SecurityLogSink;
+  lexicalParams?: LexicalParamsSource;
 }
 
 /** Qdrant as a RetrievalBackend: every id from both legs is re-validated and hydrated from Supabase by createExternalBackend. */
 export function createQdrantBackend(deps: QdrantBackendDeps): RetrievalBackend {
   const external = createExternalBackend({
-    reader: createQdrantReader(deps.readClient),
+    reader: createQdrantReader(deps.readClient, { lexicalParams: deps.lexicalParams }),
     adminClient: deps.adminClient,
     isReady: deps.readiness,
     securityLog: deps.securityLog,

@@ -71,7 +71,8 @@ function capture() {
   return { lines, log: (...args) => lines.push(args.join(' ')), error: (...args) => lines.push(args.join(' ')) };
 }
 
-const ENV = { GITHUB_REPOSITORY: 'example-owner/example-repo', GATE_SHA: SHA, GH_TOKEN: TOKEN };
+const ENV = { GITHUB_REPOSITORY: 'example-owner/example-repo', GATE_SHA: SHA, GH_TOKEN: TOKEN, GITHUB_SERVER_URL: 'https://github.com', GITHUB_RUN_ID: '4242' };
+const RUN_URL = 'https://github.com/example-owner/example-repo/actions/runs/4242';
 
 test('passed is success', () => {
   assert.deepEqual(statusFromResult(result(), SHA), { state: 'success', description: 'passed' });
@@ -142,13 +143,13 @@ test('no result, a bad sha or another commit is error: no result', () => {
 
 test('postStatus sends one statuses request with the context', async () => {
   const { fetch, calls } = fakeFetch(201);
-  const status = await postStatus({ repo: 'example-owner/example-repo', sha: SHA, state: 'failure', description: 'error: no result', token: TOKEN, fetch });
+  const status = await postStatus({ repo: 'example-owner/example-repo', sha: SHA, state: 'failure', description: 'error: no result', token: TOKEN, targetUrl: RUN_URL, fetch });
   assert.equal(status, 201);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, `https://api.github.com/repos/example-owner/example-repo/statuses/${SHA}`);
   assert.equal(calls[0].init.method, 'POST');
   assert.equal(calls[0].init.headers.Authorization, `Bearer ${TOKEN}`);
-  assert.deepEqual(calls[0].body, { state: 'failure', context: STATUS_CONTEXT, description: 'error: no result' });
+  assert.deepEqual(calls[0].body, { state: 'failure', context: STATUS_CONTEXT, description: 'error: no result', target_url: RUN_URL });
   assert.equal(STATUS_CONTEXT, 'rag-release-gate');
 });
 
@@ -159,7 +160,7 @@ test('main posts the mapped status once and returns 0 on 201', async () => {
   const code = await main([file], ENV, { fetch, ...out });
   assert.equal(code, 0);
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].body, { state: 'success', context: 'rag-release-gate', description: 'passed' });
+  assert.deepEqual(calls[0].body, { state: 'success', context: 'rag-release-gate', description: 'passed', target_url: RUN_URL });
   assert.ok(!out.lines.join('\n').includes(TOKEN));
 });
 
@@ -199,6 +200,9 @@ test('main refuses to post without token, repository or a valid GATE_SHA', async
     { ...ENV, GITHUB_REPOSITORY: 'not a repo/../x' },
     { ...ENV, GATE_SHA: 'main' },
     { ...ENV, GATE_SHA: '' },
+    { ...ENV, GITHUB_RUN_ID: '' },
+    { ...ENV, GITHUB_RUN_ID: '12; rm' },
+    { ...ENV, GITHUB_SERVER_URL: 'http://github.com' },
   ]) {
     const { fetch, calls } = fakeFetch(201);
     assert.equal(await main([file], env, { fetch, ...capture() }), 1);
@@ -245,6 +249,6 @@ test('the script posts the status of a result file when spawned', async () => {
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, `/repos/example-owner/example-repo/statuses/${SHA}`);
   assert.equal(requests[0].method, 'POST');
-  assert.deepEqual(requests[0].body, { state: 'failure', context: 'rag-release-gate', description: 'skipped: judge_keys_missing' });
+  assert.deepEqual(requests[0].body, { state: 'failure', context: 'rag-release-gate', description: 'skipped: judge_keys_missing', target_url: RUN_URL });
   assert.ok(!`${child.stdout}${child.stderr}`.includes(TOKEN));
 });

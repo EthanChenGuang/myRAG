@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
 import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
 import { syncDocumentsForConnection } from '@/lib/nango/sync-manager';
+import { isSharePointBlocked, isSharePointProvider, sharePointIntegrationKey } from '@/lib/nango/sharepoint/config';
+import { parseSourceScope, type DriveSelection } from '@/lib/nango/sharepoint/scope';
 import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
@@ -16,6 +18,15 @@ function nangoErrorStatus(error: unknown): number | undefined {
 
 function isNangoNotFound(error: unknown): boolean {
   return nangoErrorStatus(error) === 404;
+}
+
+function integrationIdOf(provider: SupportedProvider): string {
+  if (isSharePointProvider(provider)) return sharePointIntegrationKey(provider);
+  return PROVIDER_CONFIG[provider]?.integrationId || provider;
+}
+
+function notFound() {
+  return NextResponse.json({ error: 'Not found' }, { status: 404 });
 }
 
 /**
@@ -39,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get connections from our database
-    const { data: connections, error } = await supabaseAdmin
+    const { data: allConnections, error } = await supabaseAdmin
       .from('nango_connections')
       .select('*')
       .eq('user_id', userId)
@@ -48,6 +59,9 @@ export async function GET(request: NextRequest) {
     if (error) {
       throw error;
     }
+
+    // D-24: with the SharePoint switch off its two providers are not listed.
+    const connections = allConnections?.filter((conn: { provider?: unknown }) => !isSharePointBlocked(conn.provider));
 
     // Optionally verify with Nango that connections are still valid
     // This can be slow, so we may want to do this in the background
@@ -123,6 +137,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (isSharePointBlocked(provider)) return notFound();
+
     const supabaseAdmin = getSupabaseAdmin();
 
     if (!supabaseAdmin) {
@@ -131,7 +147,7 @@ export async function POST(request: NextRequest) {
 
     // Verify the connection exists in Nango
     const nango = getNango();
-    const integrationId = PROVIDER_CONFIG[provider]?.integrationId || provider;
+    const integrationId = integrationIdOf(provider);
     let nangoConnection: Awaited<ReturnType<typeof nango.getConnection>>;
     try {
       nangoConnection = await nango.getConnection(integrationId, connectionId);
@@ -232,6 +248,7 @@ export async function PATCH(request: NextRequest) {
       syncFolderPath?: string;
       syncFileIds?: string[];
       syncFileNames?: string[];
+      sourceScope?: unknown;
     };
 
     const { provider, syncFolderId, syncFolderName, syncFolderPath, syncFileIds, syncFileNames } = body;
@@ -249,6 +266,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Provider is required' }, { status: 400 });
     }
 
+    if (isSharePointBlocked(provider)) return notFound();
+
+    // D-22: the SharePoint / OneDrive picker selection, stored as metadata.source_scope.
+    let sourceScope: DriveSelection | undefined;
+    if (body.sourceScope !== undefined) {
+      if (!isSharePointProvider(provider)) {
+        return NextResponse.json({ error: 'sourceScope is only accepted for SharePoint and OneDrive' }, { status: 400 });
+      }
+      const parsed = parseSourceScope(body.sourceScope, provider);
+      if (!parsed) {
+        return NextResponse.json({ error: 'Invalid sourceScope' }, { status: 400 });
+      }
+      sourceScope = parsed;
+    }
+
     const supabaseAdmin = getSupabaseAdmin();
 
     if (!supabaseAdmin) {
@@ -259,6 +291,30 @@ export async function PATCH(request: NextRequest) {
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
+
+    if (sourceScope) {
+      const { data: existing, error: readError } = await supabaseAdmin
+        .from('nango_connections')
+        .select('metadata')
+        .eq('user_id', userId)
+        .eq('provider', provider)
+        .maybeSingle();
+      if (readError) {
+        throw readError;
+      }
+      if (!existing) {
+        return NextResponse.json({ error: 'Connection not found' }, { status: 404 });
+      }
+      const current = (existing as { metadata?: unknown }).metadata;
+      const metadata = current && typeof current === 'object' && !Array.isArray(current) ? (current as Record<string, unknown>) : {};
+      updateData.metadata = { ...metadata, source_scope: sourceScope };
+      console.log('[Nango] Saving source scope', {
+        provider,
+        sites: sourceScope.sites.length,
+        drives: sourceScope.drives.length,
+        folders: sourceScope.folders.length,
+      });
+    }
 
     // Check if BOTH folder and file data are provided (multi-folder/multi-page mode)
     const hasBothFields = syncFolderId !== undefined && syncFileIds !== undefined;
@@ -333,6 +389,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Provider is required' }, { status: 400 });
     }
 
+    if (isSharePointBlocked(provider)) return notFound();
+
     const supabaseAdmin = getSupabaseAdmin();
 
     if (!supabaseAdmin) {
@@ -350,7 +408,7 @@ export async function DELETE(request: NextRequest) {
     if (connRecord) {
       // Delete from Nango
       const nango = getNango();
-      const integrationId = PROVIDER_CONFIG[provider]?.integrationId || provider;
+      const integrationId = integrationIdOf(provider);
       try {
         await nango.deleteConnection(integrationId, connRecord.connection_id);
       } catch (e) {

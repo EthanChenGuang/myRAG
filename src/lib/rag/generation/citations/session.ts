@@ -13,7 +13,8 @@ import type { GenerationConfig } from '../config';
 import { createEnhancedRAGPrompt } from '../prompt';
 import { createMarkerParser, type MarkerParser } from './marker-parser';
 import { buildAliasMap, createCitationLabeler, type AliasMap } from './blocks';
-import { createClaudeProvider, startClaudeCitationStream, type ClaudeCitationStream } from './claude';
+import { claudeDecomposedAnswerBlock, createClaudeProvider, startClaudeCitationStream, type ClaudeCitationStream } from './claude';
+import type { DecomposedAnswerInput } from '../decomposed-answer';
 import type { FallbackReason } from './fallback';
 import { attachedDocumentsText, citationInstructionFor, groundingPerSentenceText } from './instructions';
 import { anthropicIdFor } from './models';
@@ -102,7 +103,7 @@ export interface CitationSession {
   /** On a Claude turn the OpenRouter prompt is the fallback prompt, so it carries the alias instruction too. */
   decorateSystemPrompt(prompt: string): string;
   /** D-09: {{context}} becomes the attached-documents sentence, the image captions and the links section; with RAG_CONTEXT_TAGGING the notice, reminder and a documents element wrap them (5.1 D-05). */
-  claudeSystemPrompt(basePrompt: string): string;
+  claudeSystemPrompt(basePrompt: string, options?: { decomposedAnswer?: DecomposedAnswerInput }): string;
   /** Starts the direct call; only on a claude-citations turn. */
   startClaude(input: ClaudeStartInput): ClaudeCitationStream;
   /** D-10: one switch from the direct call to chunk-alias on the OpenRouter path. */
@@ -302,9 +303,11 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       if (strategy !== 'chunk-alias' && strategy !== 'claude-citations') return prompt;
       return `${prompt}\n\n${citationInstructionFor(input.language, input.textsSource, perSentence)}`;
     },
-    claudeSystemPrompt(basePrompt) {
+    claudeSystemPrompt(basePrompt, options) {
       const prompt = claudeBasePrompt(basePrompt);
-      return perSentence ? `${prompt}\n\n${groundingPerSentenceText(input.language)}` : prompt;
+      const grounded = perSentence ? `${prompt}\n\n${groundingPerSentenceText(input.language)}` : prompt;
+      const block = options?.decomposedAnswer ? claudeDecomposedAnswerBlock(options.decomposedAnswer, aliasMap) : null;
+      return block ? `${grounded}\n\n${block}` : grounded;
     },
     startClaude(start) {
       if (strategy !== 'claude-citations' || !aliasMap || claude) {

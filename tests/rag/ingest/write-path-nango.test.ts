@@ -1016,7 +1016,7 @@ describe('nango webhook', () => {
   const syncDocumentsForConnection = vi.fn(async () => ({ processed: 0, failed: 0, skipped: 0, deleted: 0 }));
   const SECRET = 'placeholder-webhook-secret';
 
-  async function post(body: string, signature: string | null, secret: string | null = SECRET) {
+  async function post(body: string, signature: string | null, secret: string | null = SECRET, header = 'x-nango-hmac-sha256') {
     vi.resetModules();
     if (secret === null) vi.stubEnv('NANGO_WEBHOOK_SECRET', '');
     else vi.stubEnv('NANGO_WEBHOOK_SECRET', secret);
@@ -1026,7 +1026,7 @@ describe('nango webhook', () => {
     vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => createMemoryDb().admin }));
     const { POST } = await import('@/app/api/nango/webhook/route');
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (signature !== null) headers['x-nango-signature'] = signature;
+    if (signature !== null) headers[header] = signature;
     const { NextRequest } = await import('next/server');
     return POST(new NextRequest('http://localhost/api/nango/webhook', { method: 'POST', headers, body }));
   }
@@ -1072,11 +1072,17 @@ describe('nango webhook', () => {
     expect(syncDocumentsForConnection).not.toHaveBeenCalled();
   });
 
-  it('a signed event syncs the connection by id and provider only; no owner from the payload reaches the sync', async () => {
+  it('refuses the legacy x-nango-signature header even when it carries the right HMAC (D-32)', async () => {
+    const response = await post(body, await sign(body), SECRET, 'x-nango-signature');
+
+    expect(response.status).toBe(401);
+    expect(syncDocumentsForConnection).not.toHaveBeenCalled();
+  });
+
+  it('a signed legacy sync.success event is acknowledged and starts no sync (D-32, Pitfall 2)', async () => {
     const response = await post(body, await sign(body));
 
     expect(response.status).toBe(200);
-    expect(syncDocumentsForConnection).toHaveBeenCalledTimes(1);
-    expect(syncDocumentsForConnection.mock.calls[0]).toEqual([CONNECTION, 'google-drive']);
+    expect(syncDocumentsForConnection).not.toHaveBeenCalled();
   });
 });

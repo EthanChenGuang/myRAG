@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { PGlite } from '@electric-sql/pglite';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
-import { createFixtureDatabase, runFixtureRelex, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { createEmptyFixtureDatabase, createFixtureDatabase, runFixtureRelex, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
 import {
@@ -30,7 +30,33 @@ import {
   type TwoTenantV2Database,
   type TwoTenantV2Tenant,
   type V2TenantLabel,
+  Q62_EXAMPLE_TEXT,
+  Q62_FOREIGN_DOC_TYPE,
+  Q62_GLOSSARY_SOURCE,
+  Q62_GLOSSARY_TARGET,
+  Q62_OWN_DOC_TYPE,
+  Q62_QUESTION,
+  Q62_SUB_OWN,
+  Q62_TOKEN,
+  q62ChunkText,
+  q62DecomposeTable,
+  q62Scope,
+  q62ServiceRoleRpc,
+  seedQ62CanaryRows,
+  type Q62Mode,
+  type Q62Seed,
+  type Q62Tenant,
 } from '../../eval/harness/two-tenant-v2.mts';
+import {
+  SENDER_A as WA_SENDER_A,
+  SENDER_B as WA_SENDER_B,
+  SESSION_A as WA_SESSION_A,
+  SESSION_B as WA_SESSION_B,
+  createWhatsAppHarness,
+  inboundText,
+  seedConversation,
+  settleTitles,
+} from '../whatsapp/harness.ts';
 import { hit } from '../rag/fusion/helpers.ts';
 import type { FakeQueryLlm } from '../../eval/harness/fake-query-llm.mts';
 import type { FakeLangChainChatModel } from '@/lib/rag/query/langchain/fake';
@@ -1551,3 +1577,270 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
     assert.match((await call(`o:${TWO_TENANT_IDS.orgO}`)) ?? 'accepted', /not valid for this deployment mode/);
   });
 });
+
+/**
+ * 06.2-36 (T-06.2-86; D-06, D-13, D-24, D-25): the Phase 6.2 components that touch a tenant, in both deployment modes. Each row turns on
+ * only its own 6.2 switch (RAG_QUERY_SUBQ_FILTERS, RAG_TRANSLATION_GLOSSARY, RAG_SCOPE_GATE, RAG_WHATSAPP_HISTORY) on top of the query
+ * layer; in single-tenant mode the other tenant is a personal key, which every component refuses.
+ */
+for (const mode of ['multi-tenant', 'single-tenant'] as Q62Mode[]) {
+  describe(`Phase 6.2 canary rows stay inside the caller tenant (${mode})`, () => {
+    let db: PGlite;
+    let edge: FakeEdge;
+    let client: SupabaseClient;
+    let seed: Q62Seed;
+    let rag: typeof import('@/lib/rag');
+    let scopeModule: typeof import('@/lib/rag/tenant/scope');
+    let depsModule: typeof import('@/lib/rag/deps');
+    let registryModule: typeof import('@/lib/rag/backend/registry');
+    let configModule: typeof import('@/lib/rag/config');
+    let vocabularyModule: typeof import('@/lib/rag/query/tenant-vocabulary');
+    let languageSettings: typeof import('@/lib/rag/lang/settings');
+    let terminologyLoad: typeof import('@/lib/rag/terminology/load');
+    let lexiconModule: typeof import('@/lib/rag/terminology/lexicon');
+    let fakeQueryLlmModule: typeof import('../../eval/harness/fake-query-llm.mts');
+    const previousEnv = { ...process.env } as Record<string, string | undefined>;
+    const BASE_ENV: Record<string, string> = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_QUERY_LAYER: 'true' };
+    /** A personal key of a user with no rows: in single-tenant mode it stands for "another tenant" and must be refused. */
+    const foreignPersonal = () => scopeModule.mintScope('personal', TWO_TENANT_IDS.userB, null);
+    const others = (): Q62Tenant[] => (seed.b ? [seed.b] : []);
+
+    before(async () => {
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
+      edge = await startFakeEdge({ db });
+      const processEnv = fixtureProcessEnv(edge.url);
+      Object.assign(process.env, processEnv, CI_LANGUAGES);
+      process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
+      process.env.MYRAG_DEPLOYMENT_MODE = mode;
+      seed = await seedQ62CanaryRows(db, mode);
+      rag = await import('@/lib/rag');
+      scopeModule = await import('@/lib/rag/tenant/scope');
+      depsModule = await import('@/lib/rag/deps');
+      registryModule = await import('@/lib/rag/backend/registry');
+      configModule = await import('@/lib/rag/config');
+      vocabularyModule = await import('@/lib/rag/query/tenant-vocabulary');
+      languageSettings = await import('@/lib/rag/lang/settings');
+      terminologyLoad = await import('@/lib/rag/terminology/load');
+      lexiconModule = await import('@/lib/rag/terminology/lexicon');
+      fakeQueryLlmModule = await import('../../eval/harness/fake-query-llm.mts');
+      languageSettings.resetLanguageSettingsForTests();
+      client = createClient(edge.url, processEnv.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
+    });
+
+    after(async () => {
+      depsModule?.resetRagDepsForTests();
+      registryModule?.resetRetrievalBackendForTests();
+      configModule?.resetRagConfigForTests();
+      vocabularyModule?.resetTenantVocabularyCacheForTests();
+      terminologyLoad?.invalidateTerminologyCache('all');
+      lexiconModule?.resetTerminologyLexiconForTests();
+      await edge?.close();
+      await db?.close();
+      for (const name of Object.keys(process.env)) {
+        if (!(name in previousEnv)) delete process.env[name];
+      }
+      Object.assign(process.env, previousEnv);
+      languageSettings?.resetLanguageSettingsForTests();
+    });
+
+    /** Turns on the query layer plus exactly the given 6.2 switches, with the fixture embedder and the given clients. */
+    function useSwitches(switches: Record<string, string>, extra: Partial<Parameters<typeof depsModule.setRagDepsForTests>[0]> = {}): void {
+      depsModule.resetRagDepsForTests();
+      depsModule.setRagDepsForTests({ ragEnv: () => ({ ...BASE_ENV, ...switches }), adminClient: () => client, embedder: async (text) => embedText(text), ...extra });
+      registryModule.resetRetrievalBackendForTests();
+      configModule.resetRagConfigForTests();
+      vocabularyModule.resetTenantVocabularyCacheForTests();
+      terminologyLoad.invalidateTerminologyCache('all');
+      lexiconModule.resetTerminologyLexiconForTests();
+    }
+
+    async function keysOf(chunkIds: readonly string[]): Promise<string[]> {
+      if (chunkIds.length === 0) return [];
+      const rows = await db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [[...chunkIds]]);
+      return rows.rows.map((row) => row.tenant_key).sort();
+    }
+
+    const idsOf = (result: RetrievalResult): string[] => [...new Set([...result.candidates.map((row) => row.chunk_id), ...result.kept.map((row) => row.chunk_id)])];
+    const run = (scope: TenantScope, query: string, extra: Partial<import('@/lib/rag').RunRetrievalInput> = {}) =>
+      rag.runRetrieval({ scope, query, profile: 'chat', options: OPTIONS, signal: new AbortController().signal, ...extra });
+
+    test(`RAG_QUERY_SUBQ_FILTERS: a sub-question filter naming another tenant's doc type is dropped and never widens tenant A's search (${mode})`, async () => {
+      const fake = fakeQueryLlmModule.createFakeQueryLlm({ table: q62DecomposeTable() as never });
+      useSwitches({ RAG_QUERY_DECOMPOSE: 'true', RAG_QUERY_SUBQ_FILTERS: 'true', RAG_QUERY_CONDENSE: 'false', RAG_QUERY_EXPAND: 'false', RAG_QUERY_TRANSLATE: 'false', RAG_QUERY_DATE_NORMALIZE: 'false' }, { queryLlm: () => fake });
+      const where = `${mode}/subq_filters`;
+      const scopeA = await q62Scope(seed.a);
+      assert.ok(!(await vocabularyModule.loadTenantDocTypes(scopeA))?.includes(Q62_FOREIGN_DOC_TYPE), `${where}: tenant A's doc-type vocabulary holds none of B's`);
+
+      const result = await run(scopeA, Q62_QUESTION);
+      assert.ok(['ok', 'degraded'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
+      assert.ok(fake.calls.some((call) => call.transform === 'decompose'), `${where}: the scripted decomposer ran`);
+      const plan = result.queryPlan;
+      assert.ok(plan?.variants, `${where}: a query plan`);
+      const statuses = (plan.filter_trace ?? []).map((entry) => entry.status);
+      assert.deepEqual(statuses, ['dropped_unknown_values', 'applied'], `${where}: filter trace ${JSON.stringify(plan.filter_trace)}`);
+      const ids = idsOf(result);
+      assert.ok(ids.length > 0, `${where}: tenant A's own chunks come back`);
+      assert.deepEqual(await keysOf(ids), [seed.a.key], `${where}: only tenant A chunks`);
+      const ownIndex = plan.variants.findIndex((variant) => variant.text === Q62_SUB_OWN);
+      const viaOwn = result.candidates.filter((row) => Object.keys(row.legs ?? {}).some((leg) => leg.endsWith(`:${ownIndex}`))).map((row) => row.chunk_id);
+      assert.ok(viaOwn.length > 0, `${where}: the narrowed part retrieved`);
+      const types = await db.query<{ doc_type: string }>('SELECT DISTINCT doc_type FROM document_chunks WHERE id = ANY($1::uuid[])', [viaOwn]);
+      assert.deepEqual(types.rows.map((row) => row.doc_type), [Q62_OWN_DOC_TYPE], `${where}: the applied filter narrowed to the own doc type`);
+
+      const direct = await run(scopeA, `${Q62_TOKEN} register entries`, { retrievalFilters: { docTypes: [Q62_FOREIGN_DOC_TYPE] } });
+      assert.deepEqual(idsOf(direct), [], `${where}: a filter on another tenant's doc type reads nothing of that tenant`);
+      for (const other of others()) {
+        const own = await run(await q62Scope(other), q62ChunkText(other.label, 0), { retrievalFilters: { docTypes: [Q62_FOREIGN_DOC_TYPE] } });
+        assert.ok(idsOf(own).length > 0, `${where}: the owner still finds its own doc type`);
+        assert.deepEqual(await keysOf(idsOf(own)), [other.key], `${where}: the owner gets only its own rows`);
+      }
+      if (mode === 'single-tenant') {
+        const refused = await run(foreignPersonal(), Q62_QUESTION);
+        assert.equal(refused.status, 'error', `${where}: a personal key is refused`);
+        assert.equal(refused.candidates.length, 0);
+      }
+    });
+
+    test(`RAG_TRANSLATION_GLOSSARY: the effective glossary read and the translation glossary of tenant A hold only tenant A's pair (${mode})`, async () => {
+      useSwitches({ RAG_TRANSLATION_GLOSSARY: 'true' }, { adminClient: () => q62ServiceRoleRpc(db) as never });
+      const where = `${mode}/translation_glossary`;
+      const { loadTenantGlossary } = await import('@/lib/rag/query/glossary');
+      const { glossaryFor, GlossaryUnavailable } = await import('@/lib/rag/ingest/translate/glossary');
+      for (const tenant of [seed.a, ...others()]) {
+        const own = Q62_GLOSSARY_TARGET[tenant.label];
+        const foreign = Object.entries(Q62_GLOSSARY_TARGET).filter(([label]) => label !== tenant.label).map(([, target]) => target);
+        const effective = await loadTenantGlossary(await q62Scope(tenant));
+        assert.ok(effective, `${where}/${tenant.label}: the effective glossary loads`);
+        assert.equal(effective.tenantKey, tenant.key);
+        assert.deepEqual(effective.pairs.map((pair) => pair.target), [own], `${where}/${tenant.label}: effective pairs`);
+        const translation = await glossaryFor({ tenantKey: tenant.key }, 'zh', 'en');
+        assert.deepEqual(translation.terms, [{ source: Q62_GLOSSARY_SOURCE, target: own }], `${where}/${tenant.label}: translation terms`);
+        for (const target of foreign) assert.ok(!JSON.stringify([effective, translation]).includes(target), `${where}/${tenant.label}: holds the other tenant's pair`);
+      }
+      if (mode === 'single-tenant') {
+        assert.equal(await loadTenantGlossary(foreignPersonal()), null, `${where}: a personal key reads no glossary`);
+        await assert.rejects(() => glossaryFor({ tenantKey: `u:${TWO_TENANT_IDS.userB}` }, 'zh', 'en'), GlossaryUnavailable, `${where}: a personal key is refused`);
+      }
+    });
+
+    test(`RAG_SCOPE_GATE: tenant A's centroid snapshot and out-of-scope examples never include another tenant's (${mode})`, async () => {
+      const embedded: string[] = [];
+      useSwitches(
+        { RAG_SCOPE_GATE: 'true' },
+        {
+          adminClient: () => q62ServiceRoleRpc(db) as never,
+          embedder: async (text) => {
+            embedded.push(text);
+            return embedText(text);
+          },
+        },
+      );
+      const where = `${mode}/scope_gate`;
+      const { scopeCentroidsAfterPublishOn } = await import('@/lib/rag/scope/post-publish');
+      const { rebuildScopeCentroids } = await import('@/lib/rag/scope/build');
+      const { centroidRefreshesSettledForTests, getCentroidSnapshot, resetCentroidCacheForTests } = await import('@/lib/rag/scope/centroids');
+      const { addScopeExample, deleteScopeExample, scopeGateStatus } = await import('@/lib/rag/scope/admin');
+      const { LEGACY_PROFILE } = await import('@/lib/rag/embeddings/active-profile');
+      assert.equal(scopeCentroidsAfterPublishOn(), true, `${where}: the scope gate switch is effective`);
+      resetCentroidCacheForTests();
+      const tenants = [seed.a, ...others()];
+      const examples = new Map<string, string>();
+      try {
+        for (const tenant of tenants) {
+          const scope = await q62Scope(tenant);
+          const built = await rebuildScopeCentroids(scope, { profile: LEGACY_PROFILE });
+          assert.equal(built.tenantKey, tenant.key, `${where}/${tenant.label}: rebuild keyed by the caller`);
+          const added = await addScopeExample(scope, { text: Q62_EXAMPLE_TEXT[tenant.label], actorId: tenant.userId ?? TWO_TENANT_IDS.userA });
+          assert.ok(added.ok, `${where}/${tenant.label}: example saved (${JSON.stringify(added)})`);
+          examples.set(tenant.key, added.example.id);
+        }
+        for (const tenant of tenants) {
+          const scope = await q62Scope(tenant);
+          getCentroidSnapshot(scope, LEGACY_PROFILE.id);
+          await centroidRefreshesSettledForTests();
+          const snapshot = getCentroidSnapshot(scope, LEGACY_PROFILE.id);
+          assert.ok(snapshot, `${where}/${tenant.label}: a snapshot`);
+          assert.equal(snapshot.tenantKey, tenant.key);
+          const ownTypes = new Set(tenant.docTypes);
+          for (const centroid of snapshot.centroids.filter((entry) => entry.kind === 'doc_type')) {
+            assert.ok(ownTypes.has(centroid.key.split('/')[0]!), `${where}/${tenant.label}: centroid ${centroid.key} is not the caller's`);
+          }
+          const stored = await db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM public.rag_scope_centroids WHERE tenant_key = $1', [tenant.key]);
+          assert.deepEqual(stored.rows.map((row) => row.tenant_key), [tenant.key]);
+          const status = await scopeGateStatus(scope);
+          assert.ok(status.ok);
+          assert.equal(status.status.examples, 1, `${where}/${tenant.label}: only its own example is counted`);
+          for (const other of tenants.filter((entry) => entry !== tenant)) {
+            assert.deepEqual(await deleteScopeExample(scope, examples.get(other.key)!), { ok: false, code: 'not_found' }, `${where}/${tenant.label}: cannot delete the other tenant's example`);
+          }
+        }
+        const rows = await db.query<{ tenant_key: string; n: number }>('SELECT tenant_key, count(*)::int AS n FROM public.rag_scope_negative_examples GROUP BY tenant_key ORDER BY tenant_key');
+        assert.deepEqual(rows.rows.map((row) => [row.tenant_key, row.n]), tenants.map((tenant) => [tenant.key, 1]).sort(), `${where}: one example per tenant, each under its own key`);
+        if (mode === 'single-tenant') {
+          await assert.rejects(() => rebuildScopeCentroids(foreignPersonal(), { profile: LEGACY_PROFILE }), `${where}: a personal key cannot build centroids`);
+          const refused = await addScopeExample(foreignPersonal(), { text: 'A neutral synthetic refused question', actorId: TWO_TENANT_IDS.userB });
+          assert.equal(refused.ok, false, `${where}: a personal key cannot save an example`);
+        }
+      } finally {
+        await centroidRefreshesSettledForTests();
+        await db.exec('DELETE FROM public.rag_scope_negative_examples; DELETE FROM public.rag_scope_centroids;');
+        resetCentroidCacheForTests();
+      }
+    });
+
+    test(`RAG_WHATSAPP_HISTORY: tenant A's owner gets only its own turns; another owner's and a second sender's are excluded (${mode})`, async () => {
+      const where = `${mode}/whatsapp_history`;
+      const harness = createWhatsAppHarness({
+        post: () => async () => new Response('data: {"type":"text-delta","id":"t","delta":"A neutral synthetic reply."}\n\ndata: [DONE]\n\n', { status: 200 }),
+      });
+      const ownerA = TWO_TENANT_IDS.userA;
+      const ownerB = TWO_TENANT_IDS.userB;
+      const owners: Record<string, string> = { [WA_SESSION_A]: ownerA, [WA_SESSION_B]: ownerB };
+      harness.deps.sessionManager = {
+        async getSessionById(id: string) {
+          return owners[id] ? { sessionId: id, userId: owners[id], status: 'connected' } : null;
+        },
+        async updateSessionStatus() {},
+      };
+      for (const [owner, sender] of [
+        [ownerA, WA_SENDER_A],
+        [ownerB, WA_SENDER_A],
+        [ownerA, WA_SENDER_B],
+      ] as const) {
+        seedConversation(harness, sender, owner);
+      }
+      const saved = process.env.RAG_WHATSAPP_HISTORY;
+      process.env.RAG_WHATSAPP_HISTORY = 'true';
+      try {
+        const { WhatsAppWebhookHandler } = await import('@/lib/whatsapp/webhook-handler');
+        const handler = new WhatsAppWebhookHandler(harness.deps as never);
+        const say = async (text: string, sessionId: string, from: string) => {
+          await handler.handleWebhook(inboundText(text, { sessionId, from }) as never);
+          settleTitles(harness);
+        };
+        await say('Alpha first synthetic question.', WA_SESSION_A, WA_SENDER_A);
+        await say('Bravo owner synthetic question.', WA_SESSION_B, WA_SENDER_A);
+        await say('Second sender synthetic question.', WA_SESSION_A, WA_SENDER_B);
+        const chatA = harness.tables.whatsapp_conversations.find((row) => row.user_id === ownerA && row.whatsapp_jid === WA_SENDER_A)!.chat_id;
+        const stored = harness.tables.chats.find((row) => row.id === chatA)!.messages as Array<Record<string, unknown>>;
+        stored.push(
+          { role: 'user', content: 'Planted turn of the other owner.', metadata: { whatsapp: { sessionId: WA_SESSION_B, senderJid: WA_SENDER_A } } },
+          { role: 'user', content: 'Planted turn of the second sender.', metadata: { whatsapp: { sessionId: WA_SESSION_A, senderJid: WA_SENDER_B } } },
+        );
+        await say('Alpha follow-up synthetic question.', WA_SESSION_A, WA_SENDER_A);
+        const last = harness.chatRequests.at(-1)!.body.messages as Array<{ content?: unknown; parts?: unknown }>;
+        const sent = JSON.stringify(last);
+        assert.ok(sent.includes('Alpha first synthetic question.'), `${where}: the own earlier turn is in the window (${sent.slice(0, 300)})`);
+        assert.ok(sent.includes('Alpha follow-up synthetic question.'), `${where}: the current turn is last`);
+        for (const foreign of ['Bravo owner synthetic question.', 'Second sender synthetic question.', 'Planted turn of the other owner.', 'Planted turn of the second sender.']) {
+          assert.ok(!sent.includes(foreign), `${where}: the window holds "${foreign}"`);
+        }
+        const bravo = harness.chatRequests.find((request) => JSON.stringify(request.body.messages).includes('Bravo owner synthetic question.'));
+        assert.ok(bravo && !JSON.stringify(bravo.body.messages).includes('Alpha'), `${where}: the other owner's request holds no tenant A turn`);
+      } finally {
+        if (saved === undefined) delete process.env.RAG_WHATSAPP_HISTORY;
+        else process.env.RAG_WHATSAPP_HISTORY = saved;
+      }
+    });
+  });
+}

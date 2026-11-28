@@ -93,11 +93,15 @@ def pre_count():
 
 # Later plans append their own categories (05.2.1-12: multi_step_calc, context_overflow); they are not this plan's items.
 LATER_PLAN_CATEGORIES = ("multi_step_calc", "context_overflow")
+# Plan 06.2-22 items (tag phase62, isolated q62 tenant); test_golden_phase62.py covers them.
+LATER_PLAN_TAG = "phase62"
 
 
 @pytest.fixture(scope="module")
 def new_items(golden, pre_count):
-    return [item for item in golden[pre_count:] if item.category not in LATER_PLAN_CATEGORIES]
+    return [
+        item for item in golden[pre_count:] if item.category not in LATER_PLAN_CATEGORIES and LATER_PLAN_TAG not in item.tags
+    ]
 
 
 @pytest.fixture(scope="module")

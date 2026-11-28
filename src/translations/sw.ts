@@ -446,4 +446,5 @@ export const sw = {
   executingTool: "Inaendesha zana, tafadhali subiri...",
   toolError: "Hitilafu imetokea wakati wa kuendesha zana.",
   voiceUnavailable: "Sauti haipatikani kwa muda. Tafadhali jaribu tena baadaye.",
+  emptyReply: "Sikuweza kutoa jibu wakati huu. Tafadhali jaribu tena au uliza swali kwa njia nyingine.",
 };

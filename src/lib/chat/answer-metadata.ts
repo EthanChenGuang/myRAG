@@ -14,6 +14,7 @@ import {
   type RagTurnMetadata,
   type RefusalFeedbackRequest,
 } from '@/lib/rag-eval/contracts.generated';
+import { withLegacyChecksSentenceReasons, withLegacySentenceReasons } from '@/lib/answers/sentence-reason';
 
 export type { RagTurnMetadata };
 
@@ -98,7 +99,7 @@ function validEntries<T>(value: unknown, schema: z.ZodType<T, z.ZodTypeDef, unkn
 
 function pickTurnFields(source: Record<string, unknown>): AnswerTurnMetadata {
   const picked: AnswerTurnMetadata = {};
-  const sentences = validEntries(source.sentences, AnswerSentenceSchema);
+  const sentences = validEntries(withLegacySentenceReasons(source.sentences), AnswerSentenceSchema);
   if (sentences) picked.sentences = sentences;
   const notices = validEntries(source.notices, AnswerNoticeSchema);
   if (notices) picked.notices = notices;
@@ -130,7 +131,7 @@ export function pickAnswerMetadata(metadata: unknown): AnswerMessageMetadata {
   const source = asRecord(metadata);
   if (!source) return {};
   const picked: AnswerMessageMetadata = { ...pickCitationFields(source), ...pickTurnFields(source) };
-  const checks = ChecksSchema.safeParse(source.checks);
+  const checks = ChecksSchema.safeParse(withLegacyChecksSentenceReasons(source.checks));
   if (checks.success) picked.checks = checks.data;
   const textsSource = TextsSourceSchema.safeParse(source.textsSource);
   if (textsSource.success) picked.textsSource = textsSource.data;

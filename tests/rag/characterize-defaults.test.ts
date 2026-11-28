@@ -11,6 +11,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
+import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
 import { chatRequest } from '../helpers/chat-route-fakes';
 import {
   expectCharacterization,
@@ -126,7 +127,9 @@ function readGolden(): GoldenItem[] {
     .readFileSync(GOLDEN_PATH, 'utf8')
     .split('\n')
     .filter((line) => line.trim() !== '')
-    .map((line) => JSON.parse(line) as GoldenItem);
+    .map((line) => JSON.parse(line) as GoldenItem & { category: string; tags?: string[] })
+    // The 06.2-22 items run only against the isolated q62 fixture tenant.
+    .filter((item) => !isQ62Item(item));
 }
 
 function configuredModelIds(): string[] {

@@ -395,6 +395,7 @@ export const pt = {
   executingTool: "Executando ferramenta, por favor aguarde...",
   toolError: "Ocorreu um erro ao executar a ferramenta.",
   voiceUnavailable: "A voz está temporariamente indisponível. Tente novamente mais tarde.",
+  emptyReply: "Desta vez não consegui gerar uma resposta. Tente novamente ou reformule a pergunta.",
   
   // Chat message action tooltips
   copyTooltip: "Copiar",

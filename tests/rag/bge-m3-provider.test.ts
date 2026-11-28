@@ -269,7 +269,8 @@ describe('BGE-M3 in the registry, catalog and prices', () => {
       inputTypes: [],
       usdPerMillionTokens: 0.01,
       tokensAreEstimates: true,
-      servingModes: ['hosted'],
+      servingModes: ['hosted', 'sidecar'],
+      sidecarPath: '/v1/embed',
       hostedEndpoint: { host: 'api.deepinfra.com', apiKeyEnv: 'DEEPINFRA_API_KEY', baseUrlEnv: 'DEEPINFRA_BASE_URL' },
     });
     expect([...(catalogEntry('bge-m3', 'BAAI/bge-m3')?.supportedLanguages ?? [])].sort()).toEqual(['en', 'it', 'zh']);

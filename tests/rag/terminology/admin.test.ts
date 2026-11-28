@@ -161,7 +161,7 @@ describe('terminologyEnabledLanguages and listEntries (D-35)', () => {
     expect(result.items[0]).not.toHaveProperty('normalized_variants');
     expect(fake.calls[0]).toEqual({
       fn: 'rag_term_list_entries',
-      args: { p_actor: ACTOR, p_layer_key: 'shared', p_limit: 100, p_offset: 0, p_search: 'alpha', p_kind: null, p_source_language: null, p_target_language: null },
+      args: { p_actor: ACTOR, p_layer_key: 'shared', p_limit: 100, p_offset: 0, p_search: 'alpha' },
     });
   });
 
@@ -173,6 +173,98 @@ describe('terminologyEnabledLanguages and listEntries (D-35)', () => {
   it('reports version 0 and no hash for a layer without a row', async () => {
     const result = await admin.listEntries({ actorUserId: ACTOR, layerKey: TENANT, signal });
     expect(result).toMatchObject({ ok: true, items: [], total: 0, layerVersion: 0, entriesSha256: null });
+  });
+});
+
+const FIVE = ['p_actor', 'p_layer_key', 'p_limit', 'p_offset', 'p_search'];
+const EIGHT = [...FIVE, 'p_kind', 'p_source_language', 'p_target_language'];
+const listCalls = () => fake.calls.filter((call) => call.fn === 'rag_term_list_entries');
+const argNames = (call: { args: Record<string, unknown> }) => Object.keys(call.args).sort();
+
+/** A schema where rag_term_list_entries has the 0472 and the 0980 signature at once: five named arguments match both (PGRST203). */
+function ambiguousFiveArgumentList(): void {
+  const page = (args: Record<string, unknown>): Outcome => {
+    const layer = fake.layers[args.p_layer_key as string] ?? { version: 0, sha: null, rows: [] };
+    const offset = args.p_offset as number;
+    const rows = layer.rows.slice(offset, offset + (args.p_limit as number)).map((row) => ({ ...row, layer_version: layer.version, total_count: layer.rows.length }));
+    return { data: rows, error: null };
+  };
+  fake.outcomes.rag_term_list_entries = (args) =>
+    Object.keys(args).length === 5 ? { data: null, error: { message: 'Could not choose the best candidate function', code: 'PGRST203' } } : page(args);
+}
+
+describe('list call shape across the 0472 and 0980 signatures (W-1, W-5)', () => {
+  it('sends the five 0472 arguments when no Glossary filter is set, so a schema without 0980 still lists', async () => {
+    await admin.listEntries({ actorUserId: ACTOR, layerKey: 'shared', kind: null, sourceLanguage: '', targetLanguage: undefined, signal });
+    expect(listCalls().map(argNames)).toEqual([[...FIVE].sort()]);
+  });
+
+  it('sends all eight arguments once any Glossary filter is set', async () => {
+    await admin.listEntries({ actorUserId: ACTOR, layerKey: 'shared', kind: 'translation', signal });
+    expect(listCalls().map(argNames)).toEqual([[...EIGHT].sort()]);
+    expect(listCalls()[0]!.args).toMatchObject({ p_kind: 'translation', p_source_language: null, p_target_language: null });
+  });
+
+  it('resends an ambiguous five-argument list with all eight arguments (both signatures present)', async () => {
+    ambiguousFiveArgumentList();
+    fake.layers.shared!.rows = [stored('shared', 'term alpha beta', ['termalpha'])];
+    const listed = await admin.listEntries({ actorUserId: ACTOR, layerKey: 'shared', signal });
+    expect(listed).toMatchObject({ ok: true, total: 1 });
+    expect(listCalls().map(argNames)).toEqual([[...FIVE].sort(), [...EIGHT].sort()]);
+    expect(listCalls()[1]!.args).toMatchObject({ p_kind: null, p_source_language: null, p_target_language: null });
+  });
+
+  it('loads a whole layer and reads the versions while both signatures are present', async () => {
+    ambiguousFiveArgumentList();
+    fake.layers.shared!.rows = [stored('shared', 'term alpha beta', ['termalpha']), stored('shared', 'term gamma delta', ['termgamma'])];
+    const loaded = await admin.loadLayer(ACTOR, 'shared', signal);
+    expect(loaded).toMatchObject({ ok: true, layer: { version: 3 } });
+    if (loaded.ok) expect(loaded.layer.entries).toHaveLength(2);
+    const versions = await admin.getVersions({ actorUserId: ACTOR, workspaceLayerKey: null, signal });
+    expect(versions).toMatchObject({ ok: true, shared: { version: 3 } });
+  });
+});
+
+describe('schema_outdated for a missing or ambiguous function signature (W-6)', () => {
+  it('maps PGRST202 on a filtered list (no 0980) to schema_outdated and logs the signature it looked for', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fake.outcomes.rag_term_list_entries = { data: null, error: { message: 'Could not find the function', code: 'PGRST202' } };
+    const result = await admin.listEntries({ actorUserId: ACTOR, layerKey: 'shared', kind: 'translation', signal });
+    expect(result).toEqual({ ok: false, reason: 'schema_outdated' });
+    expect(errors).toHaveBeenCalledWith('[RAG Admin] terminology schema outdated', {
+      rpc: 'rag_term_list_entries',
+      code: 'PGRST202',
+      signature: `rag_term_list_entries(${EIGHT.join(', ')})`,
+    });
+    errors.mockRestore();
+  });
+
+  for (const code of ['PGRST202', 'PGRST203', '42883']) {
+    it(`maps ${code} on any terminology call to schema_outdated`, async () => {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      fake.outcomes.rag_term_list_audit = { data: null, error: { message: 'function lookup failed', code } };
+      const result = await admin.listAudit({ actorUserId: ACTOR, layerKey: 'shared', signal });
+      expect(result).toEqual({ ok: false, reason: 'schema_outdated' });
+      expect(errors.mock.calls[0]?.[1]).toMatchObject({ rpc: 'rag_term_list_audit', code, signature: 'rag_term_list_audit(p_actor, p_layer_key, p_limit, p_offset)' });
+      errors.mockRestore();
+    });
+  }
+
+  it('keeps other database failures as unavailable', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    fake.outcomes.rag_term_list_audit = { data: null, error: { message: 'permission denied', code: '42501' } };
+    expect(await admin.listAudit({ actorUserId: ACTOR, layerKey: 'shared', signal })).toEqual({ ok: false, reason: 'unavailable' });
+    errors.mockRestore();
+  });
+
+  it('answers 503 with error schema_outdated from the route failure mapping, distinct from unavailable', async () => {
+    const { failure } = await import('@/app/api/rag/admin/terminology/_lib');
+    const outdated = failure({ ok: false, reason: 'schema_outdated' } as never);
+    const unavailable = failure({ ok: false, reason: 'unavailable' });
+    expect(outdated.status).toBe(503);
+    expect(await outdated.json()).toEqual({ success: false, error: 'schema_outdated' });
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toEqual({ success: false, error: 'Terminology is unavailable' });
   });
 });
 

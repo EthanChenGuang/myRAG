@@ -1,3 +1,4 @@
+import { cachedSourceDocumentIds } from '../cache/sources';
 import { readFeedbackLoopConfig } from '../feedback-loop/config';
 import type { LogContext, RetrievalResult } from '../types';
 import { traceLanguagesOf, type TraceCollector } from './collector';
@@ -94,9 +95,10 @@ function collect(
   } else if (config.captureContent) {
     trace.content = { ...(query !== undefined ? { query } : {}), chunks: [] };
   }
-  // D-25: while access is on (an access state was recorded), restricted or unlabelled chunks export ids and scores only.
+  // D-25: while access is on (an access state was recorded), restricted or unlabelled chunks export ids and scores only; a cache hit's
+  // cached sources count as kept (T-04.3-143).
   const accessOn = typeof collector.access === 'function' && collector.access() !== null;
-  return stripRestrictedContent(trace, accessOn ? (result.accessLabels ?? new Map()) : null, result.kept);
+  return stripRestrictedContent(trace, accessOn ? (result.accessLabels ?? new Map()) : null, result.kept, cachedSourceDocumentIds(result.cacheHit));
 }
 
 /** Sampled requests are replayed to Langfuse after the response; everything else, and any export failure, writes the single `[RAG Trace]` line. Never throws. */

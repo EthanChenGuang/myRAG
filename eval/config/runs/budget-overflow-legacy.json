@@ -1,0 +1,9 @@
+{
+  "name": "budget-overflow-legacy",
+  "env": {
+    "RAG_PIPELINE": "legacy",
+    "RAG_PROMPT_BUDGET": "true"
+  },
+  "overrides": null,
+  "generator_model": "fixture/small-window-4k"
+}

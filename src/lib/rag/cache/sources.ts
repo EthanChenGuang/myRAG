@@ -4,6 +4,15 @@ import { scopeKey, type TenantScope } from '../tenant/scope';
 import type { CacheHit } from './types';
 import { SemanticCacheBackendError } from './wire';
 
+/** D-25 (T-04.3-143): the documents a cached answer was built from; on a hit they count as the kept sources for access checks. */
+export function cachedSourceDocumentIds(hit: Pick<CacheHit, 'answer'> | null | undefined): string[] {
+  const ids = new Set<string>();
+  const answer = hit?.answer;
+  for (const source of answer?.sources ?? []) if (typeof source?.document_id === 'string' && source.document_id.length > 0) ids.add(source.document_id);
+  for (const source of answer?.source_versions ?? []) if (typeof source?.document_id === 'string' && source.document_id.length > 0) ids.add(source.document_id);
+  return [...ids].sort();
+}
+
 export interface ResolvedSource {
   name: string;
   version: number;

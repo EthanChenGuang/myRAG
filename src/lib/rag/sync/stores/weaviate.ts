@@ -4,7 +4,15 @@ import {
   describeWeaviateCollection,
   ensureWeaviateCollection,
   ensureWeaviateTenant,
+  recreateWeaviateCollection,
 } from '@/lib/rag/backend/weaviate/collection';
+import {
+  LexicalParamsMismatchError,
+  configuredLexicalParams,
+  type LexicalParams,
+  type LexicalParamsSource,
+  type LexicalParamsStore,
+} from '@/lib/rag/backend/lexical-params';
 import { mapWeaviateError } from '@/lib/rag/backend/weaviate/errors';
 import type { WeaviateClientLike, WeaviateFilterValue, WeaviateTenantCollection } from '@/lib/rag/backend/weaviate/types';
 import { BackendNotReadyError } from '@/lib/rag/backend/external';
@@ -28,6 +36,9 @@ export interface WeaviateStoreOptions {
   /** Pitfall 13: deleteMany removes at most QUERY_MAXIMUM_RESULTS per call, so deletes loop; this caps the loop. */
   maxDeleteRounds?: number;
   pageSize?: number;
+  /** LEX-05: the BM25 pair collections are built with; default externalLexicalParams of the loaded configuration. */
+  lexicalParams?: LexicalParamsSource;
+  warn?: (line: string) => void;
 }
 
 /** D-03: the only properties an object carries. A null field is left out (Weaviate stores absent as null). */
@@ -87,8 +98,16 @@ function numberOrNull(value: unknown): number | null {
  * tenantCollection; collection and tenant creation are the only tenant-less calls. A missing tenant reads as empty and deletes
  * as zero, as in the fake store; a search on it is "not ready".
  */
-export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore {
+export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore & LexicalParamsStore {
   const { client } = options;
+  const lexicalParams = options.lexicalParams ?? configuredLexicalParams;
+  const warn = options.warn ?? ((line: string) => console.warn(line));
+  const mismatchLogged = new Set<string>();
+
+  async function configured(): Promise<LexicalParams> {
+    const params = await lexicalParams();
+    return { k1: params.k1, b: params.b };
+  }
   const maxDeleteRounds = options.maxDeleteRounds ?? 1000;
   const pageSize = options.pageSize ?? 1000;
   const knownTenants = new Set<string>();
@@ -166,8 +185,28 @@ export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore 
 
   return {
     target: 'weaviate',
+    lexicalBinding: 'index',
     async ensureCollection(spec: CollectionSpec): Promise<void> {
-      await ensureWeaviateCollection(client, spec.profileId, spec.dims);
+      try {
+        await ensureWeaviateCollection(client, spec.profileId, spec.dims, await configured());
+      } catch (error) {
+        if (error instanceof LexicalParamsMismatchError) {
+          const memo = `${spec.profileId}|${error.configured.k1}|${error.configured.b}`;
+          if (!mismatchLogged.has(memo)) {
+            mismatchLogged.add(memo);
+            warn(error.message.replace('[RAG Backend]', '[Vector Sync]'));
+          }
+        }
+        throw error;
+      }
+    },
+    async recordedLexicalParams(profileId: string): Promise<LexicalParams | null> {
+      return (await describeWeaviateCollection(client, profileId)).lexicalParams;
+    },
+    configuredLexicalParams: configured,
+    async rebuildLexical(profileId: string, dims: number): Promise<void> {
+      await recreateWeaviateCollection(client, profileId, dims, await configured());
+      for (const memo of [...knownTenants]) if (memo.startsWith(`${weaviateCollectionName(profileId)}/`)) knownTenants.delete(memo);
     },
     async describeCollection(profileId: string): Promise<CollectionInfo | null> {
       const state = await describeWeaviateCollection(client, profileId);

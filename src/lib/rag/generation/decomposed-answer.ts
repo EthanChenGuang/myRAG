@@ -18,6 +18,11 @@ export interface DecomposedAnswerInput {
   language: string | null;
   /** A citation strategy labelled the blocks (aliases exist). */
   citationsActive: boolean;
+  /**
+   * GEN-01 Citations path: the block aliases in the order the documents are attached. When set, a part names its
+   * documents by their 1-based position in this list instead of by alias.
+   */
+  documentOrder?: readonly string[];
 }
 
 type QueryLayerTexts = NonNullable<LanguagePack['texts']['query_layer']>;
@@ -60,9 +65,27 @@ export function uncoveredSubQuestions(count: number, blocks: readonly Decomposed
   return Array.from({ length: Math.max(0, count) }, (_, index) => index).filter((index) => !covered.has(index));
 }
 
+/**
+ * 06.2 G2: the fixed texts buildDecomposedAnswerBlock uses for a plan of `count` sub-questions in `language`, joined in one
+ * string, or null when it would return null for every input of that plan (fewer than two sub-questions, no pack). The semantic
+ * cache folds it into systemPromptHash, so a text change in the language pack also gives a new key.
+ */
+export function decomposedAnswerTemplate(count: number, language: string | null): string | null {
+  if (count < 2) return null;
+  const resolved = resolvePack(language);
+  if (!resolved) return null;
+  const { code, pack, texts } = resolved;
+  return [code, texts.label, texts.intro, texts.parts, texts.citeOwn, texts.compareOrder, fixedText('labels.not_covered', code), pack.list_separator].join('\u0000');
+}
+
 /** A sub-question is data: one line, whitespace collapsed. */
 function dataLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function documentPositions(aliases: readonly string[], order: readonly string[]): string[] {
+  const positions = aliases.map((alias) => order.indexOf(alias)).filter((index) => index >= 0);
+  return [...new Set(positions)].sort((a, b) => a - b).map((index) => String(index + 1));
 }
 
 /**
@@ -94,7 +117,8 @@ export function buildDecomposedAnswerBlock(input: DecomposedAnswerInput): string
           ),
         ]
       : [];
-    lines.push(aliases.length > 0 ? `${head} [${aliases.join(pack.list_separator)}]` : head);
+    const refs = input.documentOrder ? documentPositions(aliases, input.documentOrder) : aliases;
+    lines.push(refs.length > 0 ? `${head} [${refs.join(pack.list_separator)}]` : head);
   });
   lines.push(texts.parts);
   if (input.citationsActive) lines.push(texts.citeOwn);

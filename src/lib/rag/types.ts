@@ -2,7 +2,7 @@ import type { ExtractedURL } from '@/lib/url-extractor';
 import type { QueryClassification } from '@/lib/query-classifier';
 import type { QueryPlan, RagTrace, ScopeGateResult } from '@/lib/rag-eval/contracts.generated';
 import type { QueryParamsOverrides } from './query/query-params';
-import type { BackendId, RetrievalFilterInput, RetrievalFilters } from './backend/types';
+import type { BackendId, RetrievalFilterInput, RetrievalFilters, VersionScope } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
@@ -235,6 +235,8 @@ export interface QueryVariant {
   filters?: RetrievalFilters;
   /** Phase 6.2 D-05: whether filters narrowed this variant's search. */
   filterApplied?: boolean;
+  /** Phase 6.2 P-35: a sub-question's narrowed version scope; the search stage applies it to this variant only, under RAG_VERSION_SCOPE. */
+  versionScope?: VersionScope;
 }
 
 export interface RetrievalOverrides {
@@ -242,7 +244,7 @@ export interface RetrievalOverrides {
   rerankInputCap?: number;
   finalTopK?: number;
   rrfK?: number;
-  legWeights?: { dense?: number; lexical?: number; exactId?: number };
+  legWeights?: { dense?: number; lexical?: number; exactId?: number; domain?: number };
   reranker?: RerankProviderId | 'none';
   rerankModel?: string;
   rerankTier?: 'fast' | 'quality';
@@ -299,6 +301,12 @@ export interface RetrievalCacheContext {
   webSearch: boolean;
   mcpTools: boolean;
   chatId: string | null;
+  /**
+   * 06.2 G2: true only when the entry point passes the GEN-13 decomposed-answer block to the prompt (RAG_DECOMPOSED_ANSWER effective).
+   * The cache stage then folds the block template into systemPromptHash for a plan of two or more sub-questions; absent or false
+   * leaves the key unchanged.
+   */
+  decomposedAnswer?: boolean;
 }
 
 export interface RunRetrievalInput {
@@ -311,6 +319,8 @@ export interface RunRetrievalInput {
   trace?: TraceCollector;
   stageOverrides?: StageOverrides;
   retrievalFilters?: RetrievalFilterInput;
+  /** Phase 6.2 P-35: the caller's retrievalFilters asked for versions current; a sub-question version proposal is then ignored. */
+  callerVersionsCurrent?: true;
   queryVariants?: QueryVariant[];
   /** When absent the context is rendered exactly as without citations. */
   citationLabeler?: CitationLabeler;

@@ -82,7 +82,8 @@ const SQLSTATE_STATUS: Record<string, number> = { '42501': 403, '23503': 409, '2
 // Input arguments of the public function with this name (PostgREST resolves named arguments against the same list); one row per overload.
 const RPC_SIGNATURE_SQL = `
 SELECT COALESCE(jsonb_agg(jsonb_build_object('name', a.name, 'type', format_type(a.type, NULL)) ORDER BY a.ord) FILTER (WHERE a.name IS NOT NULL), '[]'::jsonb) AS args,
-  (NOT p.proretset AND (SELECT t.typtype FROM pg_type t WHERE t.oid = p.prorettype) = 'c') AS single_composite
+  (NOT p.proretset AND (SELECT t.typtype FROM pg_type t WHERE t.oid = p.prorettype) = 'c') AS single_composite,
+  p.pronargdefaults AS defaults
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
 LEFT JOIN LATERAL (
@@ -97,6 +98,8 @@ GROUP BY p.oid, p.proretset, p.prorettype`;
 
 interface RpcSignature {
   args: Map<string, string>;
+  /** Input arguments without a default: a call must name all of them to match this overload. */
+  required: Set<string>;
   /** Non-SETOF composite: PostgREST answers one JSON object (or null), not an array. */
   singleComposite: boolean;
 }
@@ -512,20 +515,38 @@ function createHandlers(
   calls: FakeEdgeCall[],
   extras: { documentFilenameFilter: boolean; serviceKeys: string[]; anonKey: string },
 ) {
-  const signatures = new Map<string, RpcSignature>();
+  const signatures = new Map<string, RpcSignature[]>();
 
-  async function signatureOf(fn: string): Promise<RpcSignature | null> {
+  async function overloadsOf(fn: string): Promise<RpcSignature[]> {
     const cached = signatures.get(fn);
     if (cached) return cached;
-    const result = await db.query<{ args: Array<{ name: string; type: string }>; single_composite: boolean }>(RPC_SIGNATURE_SQL, [fn]);
-    if (result.rows.length === 0) return null;
-    if (result.rows.length > 1) throw new Rejection(400, `overloaded rpc function is not supported: ${fn}`);
-    const signature: RpcSignature = {
-      args: new Map(result.rows[0].args.map((arg) => [arg.name, arg.type])),
-      singleComposite: result.rows[0].single_composite === true,
-    };
-    signatures.set(fn, signature);
-    return signature;
+    const result = await db.query<{ args: Array<{ name: string; type: string }>; single_composite: boolean; defaults: number }>(RPC_SIGNATURE_SQL, [fn]);
+    const overloads = result.rows.map((row) => ({
+      args: new Map(row.args.map((arg) => [arg.name, arg.type])),
+      required: new Set(row.args.slice(0, Math.max(row.args.length - Number(row.defaults ?? 0), 0)).map((arg) => arg.name)),
+      singleComposite: row.single_composite === true,
+    }));
+    signatures.set(fn, overloads);
+    return overloads;
+  }
+
+  /**
+   * PostgREST's choice among overloads by argument names: an overload matches when it has every named argument and every argument the
+   * call leaves out has a default. No match answers PGRST202 (404), more than one PGRST203 (300), as PostgREST does.
+   */
+  function chooseOverload(fn: string, overloads: RpcSignature[], names: string[]): RpcSignature {
+    const accepting = overloads.filter((signature) => names.every((name) => signature.args.has(name)));
+    const matching = accepting.filter((signature) => [...signature.required].every((name) => names.includes(name)));
+    if (matching.length > 1) {
+      const message = `Could not choose the best candidate function between: ${matching.map((signature) => `public.${fn}(${[...signature.args.keys()].join(', ')})`).join(', ')}`;
+      throw new Rejection(300, message, { code: 'PGRST203', message, details: null, hint: 'Try renaming the parameters or the function itself in the database so function overloading can be resolved' });
+    }
+    const chosen = matching[0] ?? (accepting.length === 1 ? accepting[0] : undefined);
+    if (!chosen) {
+      const message = `Could not find the function public.${fn}(${[...names].sort().join(', ')}) in the schema cache`;
+      throw new Rejection(404, message, { code: 'PGRST202', message, details: null, hint: null });
+    }
+    return chosen;
   }
 
   function bindArgument(name: string, type: string, value: unknown): unknown {
@@ -640,12 +661,13 @@ function createHandlers(
 
   async function genericRpc(fn: string, body: Record<string, unknown>, role?: RpcRole): Promise<unknown> {
     if (!GENERIC_RPC_NAME.test(fn)) throw new Rejection(404, `unsupported rpc function: ${fn}`);
-    const signature = await signatureOf(fn);
-    if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
+    const overloads = await overloadsOf(fn);
+    if (overloads.length === 0) throw new Rejection(404, `unsupported rpc function: ${fn}`);
     const names = Object.keys(body);
     const registered = VECTOR_SYNC_RPC_ARGUMENTS[fn];
-    const unknown = names.filter((name) => !signature.args.has(name) || (registered !== undefined && !registered.includes(name)));
-    if (unknown.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unknown.join(', ')}`);
+    const unregistered = registered === undefined ? [] : names.filter((name) => !registered.includes(name));
+    if (unregistered.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unregistered.join(', ')}`);
+    const signature = chooseOverload(fn, overloads, names);
     const values = names.map((name) => bindArgument(name, signature.args.get(name) as string, body[name]));
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
     const sql = `SELECT * FROM ${fn}(${names.map((name, i) => `${name} => $${i + 1}`).join(', ')})`;

@@ -32,8 +32,9 @@ import {
 
 /**
  * D-07: every entry point of validateLanguageSettings runs the same case file.
- * The script adapters (plan 03.2-09) never read the active embedding profile, so they report
- * verifiedAgainstActiveProfile false; every other field equals the app adapter's result.
+ * The script adapters (plan 03.2-09) never read the active embedding profile. Their fixture default profile is not the
+ * legacy model, so they report verifiedAgainstActiveProfile false with a notVerifiedReason; every other field equals the
+ * app adapter's result.
  */
 interface EntryPointAdapter {
   name: string;
@@ -171,7 +172,7 @@ describe.each(ENTRY_POINT_ADAPTERS)('$name', (adapter) => {
     it(entry.name, async () => {
       const expected = expectedResult(entry);
       expect(await adapter.validate(entry)).toEqual(
-        adapter.readsActiveProfile ? expected : { ...expected, verifiedAgainstActiveProfile: false },
+        adapter.readsActiveProfile ? expected : { ...expected, verifiedAgainstActiveProfile: false, notVerifiedReason: expect.any(String) },
       );
     });
   }
@@ -230,6 +231,19 @@ function scriptRootFor(entry: ActiveProfileCase): string {
   return root;
 }
 
+/**
+ * What a script reports for an active-profile case. With RAG_EMBEDDING_PROFILES off (these adapters set no value) the app uses
+ * the legacy profile, so a script whose default profile is that model is verified against the active profile; any other
+ * default profile is reported as default_not_active.
+ */
+function scriptExpectation(entry: ActiveProfileCase): Record<string, unknown> {
+  const checked = entry.database === 'reachable' ? entry.activeProfile : SHIPPED_DECLARATIONS.default_profile;
+  const legacy = checked.provider === 'openai' && checked.model === 'text-embedding-3-small';
+  return legacy
+    ? { ...entry.expect, verifiedAgainstActiveProfile: true, notVerifiedReason: null }
+    : { ...entry.expect, verifiedAgainstActiveProfile: false, notVerifiedReason: 'default_not_active' };
+}
+
 interface ActiveProfileAdapter {
   name: string;
   readsActiveProfile: boolean;
@@ -285,9 +299,7 @@ describe.each(ACTIVE_PROFILE_ADAPTERS)('$name with the active embedding profile'
 
   for (const entry of loadActiveProfileCases()) {
     it(entry.name, async () => {
-      expect(await adapter.validate(entry)).toEqual(
-        adapter.readsActiveProfile ? entry.expect : { ...entry.expect, verifiedAgainstActiveProfile: false },
-      );
+      expect(await adapter.validate(entry)).toEqual(adapter.readsActiveProfile ? entry.expect : scriptExpectation(entry));
     });
   }
 });

@@ -33,7 +33,7 @@ def _rejects(model: Any, data: dict[str, Any]) -> bool:
 # --- query.py -----------------------------------------------------------------------------------------------------
 
 
-def test_sub_question_filter_accepts_exactly_the_four_fields():
+def test_sub_question_filter_accepts_exactly_the_allowlisted_fields():
     sub_filter = _symbol("query", "SubQuestionFilter")
     value = sub_filter.model_validate(
         {
@@ -44,7 +44,19 @@ def test_sub_question_filter_accepts_exactly_the_four_fields():
         }
     )
     assert value.scopes == {"region": ["north"]}
-    assert set(sub_filter.model_fields) == {"date_range", "scopes", "doc_types", "languages"}
+    assert value.versions is None
+    assert set(sub_filter.model_fields) == {"date_range", "scopes", "doc_types", "languages", "versions"}
+
+
+@pytest.mark.parametrize("versions", ["current", "all", {"from": "2023-01-01"}, {"from": "2023-01-01", "to": "2024-12-31"}])
+def test_sub_question_filter_versions_takes_the_ret11_values(versions):
+    """06.2-25 (P-17): versions reuses the RET-11 VersionScope; a range needs a bound and ordered bounds."""
+    sub_filter = _symbol("query", "SubQuestionFilter")
+    base = {"date_range": None, "scopes": None, "doc_types": None, "languages": None}
+    assert sub_filter.model_validate({**base, "versions": versions}).versions is not None
+    for bad in ("superseded", {}, {"from": "2024-01-01", "to": "2023-01-01"}):
+        with pytest.raises(ValidationError):
+            sub_filter.model_validate({**base, "versions": bad})
 
 
 @pytest.mark.parametrize(
@@ -309,7 +321,20 @@ def test_rag_turn_metadata_caps_the_standalone_query():
     assert metadata.model_validate({"standaloneQuery": "alpha beta", "queryLanguage": None})
     assert _rejects(metadata, {"standaloneQuery": "a" * 1001, "queryLanguage": None})
     assert _rejects(metadata, {"standaloneQuery": "alpha", "queryLanguage": None, "filters": {}})
-    assert set(metadata.model_fields) == {"standaloneQuery", "queryLanguage"}
+    assert set(metadata.model_fields) == {"standaloneQuery", "queryLanguage", "scopeGate"}
+
+
+def test_rag_turn_metadata_scope_gate_is_the_label_only():
+    metadata = _symbol("query_additions", "RagTurnMetadata")
+    labelled = metadata.model_validate(
+        {"standaloneQuery": "alpha", "queryLanguage": "en", "scopeGate": "out_of_scope"}
+    )
+    assert labelled.scopeGate == "out_of_scope"
+    unlabelled = metadata.model_validate({"standaloneQuery": "alpha", "queryLanguage": None})
+    assert "scopeGate" not in unlabelled.model_dump()
+    base = {"standaloneQuery": "alpha", "queryLanguage": None}
+    assert _rejects(metadata, {**base, "scopeGate": "outside"})
+    assert _rejects(metadata, {**base, "scopeGate": {"label": "out_of_scope", "score": 0.1}})
 
 
 def test_decision_record():
@@ -349,6 +374,15 @@ def test_decision_record():
             ],
         },
     )
+
+
+def test_decision_record_switch_names_take_an_optional_value_suffix():
+    """06.2-39: a list-valued switch is decided per added value, e.g. RAG_QUERY_VOICE_TRANSFORMS:translate (D-16)."""
+    decision = _symbol("query_additions", "SwitchDecision")
+    assert decision.model_validate({"name": "RAG_QUERY_VOICE_TRANSFORMS:translate", "eligible": False})
+    assert decision.model_validate({"name": "RAG_QUERY_DECOMPOSE", "eligible": True})
+    for bad in ("RAG_QUERY_VOICE_TRANSFORMS:", "RAG_X:Translate", "RAG_X:a:b", "rag_x", "RAG_X:a-b"):
+        assert _rejects(decision, {"name": bad, "eligible": False}), bad
 
 
 # --- golden.py ----------------------------------------------------------------------------------------------------
@@ -421,7 +455,12 @@ def test_every_golden_line_validates_unchanged():
             continue
         raw = json.loads(line)
         assert GoldenItem.model_validate(raw).model_dump(mode="json", exclude_none=False) is not None
-        assert "sub_questions" not in GoldenItem.model_validate(raw).model_dump(mode="json")
+        dumped = GoldenItem.model_validate(raw).model_dump(mode="json")
+        if "sub_questions" in raw:
+            # 06.2-22 items carry their gold sub-questions; they round-trip as written.
+            assert len(dumped["sub_questions"]) == len(raw["sub_questions"])
+        else:
+            assert "sub_questions" not in dumped
 
 
 # --- report.py ----------------------------------------------------------------------------------------------------

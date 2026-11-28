@@ -37,6 +37,8 @@ EXIT_CRASH = 70
 
 FIXTURE_DIR = REPO_ROOT / "eval" / "fixtures"
 FIXTURE_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
+# Isolated fixture tenants whose documents the fixture set also quotes (06.2-34: scoped, glossary, off-domain items).
+FIXTURE_ISOLATED_CORPUS_DIRS = (REPO_ROOT / "eval" / "fixtures" / "q62-corpus",)
 FIXTURE_SET_ID = "fixture"
 QUALITY_GATES_PATH = REPO_ROOT / "eval" / "config" / "quality-gates.json"
 DEFAULT_RE_REVIEW_DAYS = 90
@@ -678,12 +680,14 @@ def _cmd_stale_scan(args: argparse.Namespace) -> int:
         return _cmd_stale_scan_real(args)
     items, manifest_path, manifest = _load_matching(args)
     if args.corpus:
-        corpus_dir = resolve_cli_path(args.corpus)
+        corpus = load_corpus(resolve_cli_path(args.corpus))
     elif manifest.set_id == FIXTURE_SET_ID:
-        corpus_dir = FIXTURE_CORPUS_DIR
+        corpus = load_corpus(FIXTURE_CORPUS_DIR)
+        for isolated in FIXTURE_ISOLATED_CORPUS_DIRS:
+            corpus = corpus + load_corpus(isolated)
     else:
         raise LifecycleError(f"set {manifest.set_id} has no default corpus; pass --corpus <dir> or --base-url <url>")
-    scanned, findings = stale_scan_fixture(items, manifest, corpus_documents(load_corpus(corpus_dir)), today=args.date)
+    scanned, findings = stale_scan_fixture(items, manifest, corpus_documents(corpus), today=args.date)
     if scanned is None:
         print(f"stale-scan: 0 newly stale; {_summary(manifest)}")
         return EXIT_OK

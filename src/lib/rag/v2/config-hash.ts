@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import rawOutputCaps from '../../../../eval/config/output-caps.json';
 import glossaryPrompt from '../query/prompts/shared.glossary.v1.json';
+import terminologyPrompt from '../query/prompts/shared.terminology.v1.json';
 import type { AnswerConfig } from '../generation/answer-config';
 import { calcLimitsVersion } from '../calc/limits';
 import { promptBudgetConfigVersion, tokenizerCalibrationVersion } from '../context/prompt-budget-config';
@@ -188,6 +189,8 @@ export interface RetrievalConfigHashQueryLayer {
   /** Prompt file id to version. */
   prompts: Record<string, number>;
   transforms: Record<string, boolean>;
+  /** 06.2 G5: present only while a query-addition switch differs from its default (queryAdditionsHashBlock). */
+  additions?: Record<string, boolean>;
 }
 
 /** D-34: only the entries of the Phase 4.2 switches that are on; absent while every switch is off. */
@@ -214,10 +217,15 @@ export interface RetrievalConfigHashTerminology {
   /** SHA-256 over the canonical TerminologyParams, config_hash and provenance left out. */
   params_sha256: string;
   dense: boolean;
+  /** QRY-01, QRY-03: the shared.terminology addendum version; present only when a condense or HyDE prompt of the request carried it. */
+  prompt_version?: number;
 }
 
-/** The terminology stage as the hash sees it: disabled for the request, or enabled with the version it ended with (null: skipped). */
-export type TerminologyHashStage = { enabled: false } | { enabled: true; version: string | null };
+/**
+ * The terminology stage as the hash sees it: disabled for the request, or enabled with the version it ended with (null: skipped)
+ * and `prompt` set when the request's condense or HyDE prompt carried the terminology glossary.
+ */
+export type TerminologyHashStage = { enabled: false } | { enabled: true; version: string | null; prompt?: true };
 
 export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
 
@@ -340,6 +348,7 @@ export function terminologyHashBlock(
     version: stage.version ?? TERMINOLOGY_UNAVAILABLE,
     params_sha256: createHash('sha256').update(canonicalJson(rest), 'utf8').digest('hex'),
     dense,
+    ...(stage.prompt ? { prompt_version: terminologyPrompt.version } : {}),
   };
 }
 

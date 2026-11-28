@@ -5,6 +5,7 @@ import rawRules from '../../../config/rag/output-guard-rules.json';
 import { OutputGuardRulesSchema } from '@/lib/rag-eval/contracts.generated';
 import {
   classifyCandidate,
+  compileOutputGuardRules,
   createOutputLinkPolicy,
   isLinkAllowed,
   isPublicTld,
@@ -35,6 +36,22 @@ describe('data files', () => {
     const rules = OutputGuardRulesSchema.parse(rawRules);
     expect(rules.opaque_schemes).toEqual(expect.arrayContaining(['javascript', 'data']));
     expect((rules.credential_rules ?? []).length).toBeGreaterThan(0);
+  });
+});
+
+describe('compileOutputGuardRules', () => {
+  it('compiles the committed rules', () => {
+    expect(compileOutputGuardRules(rawRules).version).toBe(OutputGuardRulesSchema.parse(rawRules).version);
+  });
+
+  it('runs the rules-file validation: malformed rules, back-references and duplicate ids throw', () => {
+    expect(() => compileOutputGuardRules({ ...rawRules, version: 7 })).toThrow();
+    const backref = { ...rawRules, obfuscation_patterns: [{ id: 'obf.backref', pattern: '^(a)\\1$' }] };
+    expect(() => compileOutputGuardRules(backref)).toThrow(/back-?reference/i);
+    const named = { ...rawRules, obfuscation_patterns: [{ id: 'obf.named', pattern: '^(?<x>a)\\k<x>$' }] };
+    expect(() => compileOutputGuardRules(named)).toThrow(/back-?reference/i);
+    const duplicate = { ...rawRules, obfuscation_patterns: [{ id: 'obf.same', pattern: 'a' }, { id: 'obf.same', pattern: 'b' }] };
+    expect(() => compileOutputGuardRules(duplicate)).toThrow(/unique/i);
   });
 });
 

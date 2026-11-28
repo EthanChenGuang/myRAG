@@ -8,6 +8,7 @@ import path from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import { buildIngestFixtureDatabase, partitionIngestModeItems } from '../../eval/harness/ingest-mode.mts';
 import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
 
 const ROOT = process.cwd();
 const CORPUS_DIR = path.join(ROOT, 'eval/fixtures/corpus');
@@ -71,6 +72,11 @@ function lines(file: string): string[] {
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter((line) => line.trim() !== '');
+}
+
+/** The golden lines that run against the main tenant; the committed q62 items (06.2-22) are left out of the comparison. */
+function oldLines(file: string): string[] {
+  return lines(file).filter((line) => !isQ62Item(JSON.parse(line) as { category: string; tags?: string[] }));
 }
 
 function writeGolden(dir: string, name: string, content: string[]): string {
@@ -210,11 +216,15 @@ describe('routing', () => {
     assert.deepEqual((routed.q62 ?? []).map((item) => item.id), ['b', 'c', 'd', 'e']);
   });
 
-  test('no committed golden item is routed to the q62 tenant yet, so the default runs load nothing new', () => {
-    const items = [...lines(PRECHUNKED_GOLDEN), ...lines(INGEST_GOLDEN)].map((line) => JSON.parse(line) as { category: string; tags?: string[] });
-    const routed = partitionIngestModeItems(items) as { q62?: unknown[]; main: unknown[]; tableSplit: unknown[] };
+  test('the committed golden items routed to the q62 tenant are exactly the 06.2-22 items (tag phase62)', () => {
+    const items = [...lines(PRECHUNKED_GOLDEN), ...lines(INGEST_GOLDEN)].map(
+      (line) => JSON.parse(line) as { id: string; category: string; tags?: string[] },
+    );
+    const routed = partitionIngestModeItems(items) as { q62?: typeof items; main: typeof items; tableSplit: typeof items };
     assert.ok(routed.q62, 'the partition has a q62 group');
-    assert.equal(routed.q62.length, 0);
+    const tagged = items.filter((item) => (item.tags ?? []).includes('phase62')).map((item) => item.id).sort();
+    assert.equal(tagged.length, 33);
+    assert.deepEqual(routed.q62.map((item) => item.id).sort(), tagged);
   });
 });
 
@@ -226,7 +236,7 @@ describe('prechunked mode: the q62 documents load into an isolated tenant and le
 
   before(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'q62-isolation-prechunked-'));
-    const old = lines(PRECHUNKED_GOLDEN);
+    const old = oldLines(PRECHUNKED_GOLDEN);
     without = runSmoke('prechunked', writeGolden(tmp, 'old.jsonl', old), path.join(tmp, 'without'));
     withQ62 = runSmoke('prechunked', writeGolden(tmp, 'with.jsonl', [...old, JSON.stringify(Q62_ITEM)]), path.join(tmp, 'with'));
   });
@@ -265,7 +275,7 @@ describe('ingest mode: the q62 documents load into an isolated tenant and leave 
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'q62-isolation-ingest-'));
     // table_split and templated_collection items run against builds of their own (table-split.mts, the 03.3 templated collection),
     // which this q62 build does not load, so only the other items are compared.
-    const old = [...lines(PRECHUNKED_GOLDEN), ...lines(INGEST_GOLDEN)].filter((line) => {
+    const old = [...oldLines(PRECHUNKED_GOLDEN), ...oldLines(INGEST_GOLDEN)].filter((line) => {
       const category = (JSON.parse(line) as { category: string }).category;
       return category !== 'table_split' && category !== 'templated_collection';
     });

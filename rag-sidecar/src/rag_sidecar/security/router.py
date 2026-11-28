@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import logging
 import tempfile
+import threading
 import time
 from collections import Counter
 from pathlib import Path
@@ -35,6 +36,9 @@ from rag_sidecar.settings import SidecarSettings
 logger = logging.getLogger("rag_sidecar.security")
 
 CHECK_TIMEOUT_S = 60.0
+# At most this many checker threads run at once. A slot is released when the thread ends, not when the request
+# times out, so repeated pathological files cannot fill the shared thread pool (UF-5).
+MAX_CONCURRENT_CHECKS = 2
 UNAVAILABLE = "checker_unavailable"
 
 
@@ -50,8 +54,19 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_hidden_text_router(settings: SidecarSettings, timeout_s: float = CHECK_TIMEOUT_S) -> APIRouter:
+def build_hidden_text_router(
+    settings: SidecarSettings,
+    timeout_s: float = CHECK_TIMEOUT_S,
+    max_concurrent: int = MAX_CONCURRENT_CHECKS,
+) -> APIRouter:
     router = APIRouter()
+    slots = threading.BoundedSemaphore(max(1, max_concurrent))
+
+    def run_check(data: bytes, mime_type: str, rules):
+        try:
+            return check_hidden_text(data, mime_type, rules)
+        finally:
+            slots.release()
 
     @router.post("/hidden-text", response_model=HiddenTextReport)
     async def hidden_text(request: Request) -> JSONResponse:
@@ -86,9 +101,12 @@ def build_hidden_text_router(settings: SidecarSettings, timeout_s: float = CHECK
                 logger.warning("[RAG Security] hidden-text rules unavailable", extra={"error": type(exc).__name__})
                 return _error(503, UNAVAILABLE)
             data = upload_path.read_bytes()
+            if not slots.acquire(blocking=False):
+                logger.warning("[RAG Security] hidden-text checker busy", extra={"max_concurrent": max_concurrent})
+                return _error(503, UNAVAILABLE)
             try:
                 report = await asyncio.wait_for(
-                    run_in_threadpool(check_hidden_text, data, payload.mime_type, rules), timeout=timeout_s
+                    run_in_threadpool(run_check, data, payload.mime_type, rules), timeout=timeout_s
                 )
             except CheckerUnavailable:
                 return _error(503, UNAVAILABLE)

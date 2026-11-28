@@ -411,6 +411,8 @@ def test_existing_golden_lines_are_unchanged_the_file_only_grows():
     prefix = b"".join(line + b"\n" for line in lines[:count])
     assert hashlib.sha256(prefix).hexdigest() == previous["golden_sha256"]
     added = [json.loads(line) for line in lines[count:] if line.strip()]
+    # Plan 06.2-22 appends its q62 items (tag phase62) after these; test_golden_phase62.py covers them.
+    added = [row for row in added if "phase62" not in (row.get("tags") or [])]
     assert added and {row["category"] for row in added} == {"multi_step_calc", "context_overflow"}
 
 

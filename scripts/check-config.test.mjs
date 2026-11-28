@@ -1162,10 +1162,14 @@ test('the D-11 true list is RAG-affecting and the extra names are listed', () =>
   assert.deepEqual([...(manifest.ragAffectingExtra ?? [])].sort(), D11_EXTRA);
 });
 
-test('LANGFUSE_*, the six Phase 5.3 switches and the log and feedback switches are not RAG-affecting (D-11)', () => {
+// W-1 (05.3-SECURITY, quick-53): RAG_CONFIG_GATE is RAG-affecting, so lowering it is a recorded change that needs a reason.
+const W1_GATE = 'RAG_CONFIG_GATE';
+
+test('LANGFUSE_*, the Phase 5.3 switches other than RAG_CONFIG_GATE and the log and feedback switches are not RAG-affecting (D-11, W-1)', () => {
   const manifest = realManifest();
+  assert.equal(manifest.vars.find((entry) => entry.name === W1_GATE)?.ragAffecting, true);
   const falseNames = [
-    ...PHASE53_SWITCHES,
+    ...PHASE53_SWITCHES.filter((name) => name !== W1_GATE),
     'RAG_RETRIEVAL_LOG',
     'RAG_ANSWER_FEEDBACK',
     'RAG_REFUSAL_FEEDBACK',
@@ -1190,7 +1194,7 @@ test('the committed generated list equals the true entries plus ragAffectingExtr
   const generated = JSON.parse(fs.readFileSync(path.join(REPO, GENERATED), 'utf8'));
   assert.deepEqual(generated.names, expected);
   assert.ok(generated.names.includes('RAG_BEHAVIOR_MODE'));
-  for (const name of PHASE53_SWITCHES) assert.equal(generated.names.includes(name), false, name);
+  for (const name of PHASE53_SWITCHES) assert.equal(generated.names.includes(name), name === W1_GATE, name);
 });
 
 test('fails with a manifest violation when a RAG_* entry omits ragAffecting', () => {

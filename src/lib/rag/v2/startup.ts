@@ -42,6 +42,10 @@ export interface V2StartupDeps {
   pgvectorVersion?: (client: SupabaseClient) => Promise<string | null>;
   chunkingCoverage?: (signal: AbortSignal) => Promise<ChunkingCoverageRow[]>;
   chunkingCoverageTimeoutMs?: number;
+  /** RAG_INGEST_PIPELINE as set; unset means legacy (src/lib/env.ts). */
+  ingestPipeline?: () => string | undefined;
+  /** Chunks of bound doc types that lack their binding's vector, summed over backfilling and active bindings (the admin completeness count). */
+  bindingVectorsMissing?: (signal: AbortSignal) => Promise<number | null>;
 }
 
 /** The coverage read is informational: it never holds startup longer than this, and a slow or failing read is only recorded. */
@@ -115,6 +119,55 @@ async function readChunkingCoverage(deps: V2StartupDeps): Promise<V2ChunkingCove
     );
   }
   return { state: 'checked', missing };
+}
+
+async function defaultBindingVectorsMissing(signal: AbortSignal): Promise<number | null> {
+  const { listBindingRows } = await import('../embeddings/bindings');
+  const { getBindingCompleteness } = await import('../embeddings/binding-ops');
+  const rows = (await listBindingRows()).filter((row) => row.status === 'active' || row.status === 'backfilling');
+  const completeness = await getBindingCompleteness(rows, signal);
+  let missing = 0;
+  for (const entry of Object.values(completeness)) {
+    if (entry.state !== 'measured') return null;
+    missing += entry.missing;
+  }
+  return missing;
+}
+
+/** Informational: never holds startup longer than the coverage read does; any failure reads as unknown. */
+async function readBindingVectorsMissing(deps: V2StartupDeps): Promise<number | null> {
+  const read = deps.bindingVectorsMissing ?? defaultBindingVectorsMissing;
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, deps.chunkingCoverageTimeoutMs ?? COVERAGE_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([read(controller.signal), timeout]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * quick-311 (I-1): the legacy writers never write binding vectors, so documents of a bound type uploaded through them are not searched by
+ * the binding leg until a scoped re-embed. A warning only: readiness and the reasons list are unchanged.
+ */
+async function checkDomainBindingsLegacyIngest(deps: V2StartupDeps, config: RagConfig, admin: SupabaseClient | null): Promise<void> {
+  if (!config.v2.domainEmbeddings.enabled) return;
+  const ingest = (deps.ingestPipeline ? deps.ingestPipeline() : getRagDeps().rawPipelineEnv().RAG_INGEST_PIPELINE)?.trim().toLowerCase() || 'legacy';
+  if (ingest !== 'legacy') return;
+  const missing = admin ? await readBindingVectorsMissing(deps) : null;
+  logOnce(
+    'domain_embeddings_legacy_ingest',
+    'warn',
+    `RAG_DOMAIN_EMBEDDINGS=on with RAG_INGEST_PIPELINE=legacy: legacy ingest writes no binding vectors, so documents of a bound type uploaded this way are not searched by the binding leg until npm run rag:reembed -- --profile <profileId> fills them; chunks missing binding vectors: ${missing ?? 'unknown'}`,
+  );
 }
 
 function switchRequested(raw: string | undefined): boolean {
@@ -192,6 +245,7 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
   }
 
   checkSwitchCombinations(env, config, reasons);
+  await checkDomainBindingsLegacyIngest(deps, config, admin);
 
   // D-30: a hard attribute filter narrows the approximate dense leg; without an exact scan or iterative scan it can come back short.
   // A warning only: readiness and the reasons list are unchanged.
@@ -238,6 +292,8 @@ export function verifyV2Startup(deps?: Partial<V2StartupDeps>): Promise<V2Startu
     ...(deps?.pgvectorVersion ? { pgvectorVersion: deps.pgvectorVersion } : {}),
     ...(deps?.chunkingCoverage ? { chunkingCoverage: deps.chunkingCoverage } : {}),
     ...(deps?.chunkingCoverageTimeoutMs !== undefined ? { chunkingCoverageTimeoutMs: deps.chunkingCoverageTimeoutMs } : {}),
+    ...(deps?.ingestPipeline ? { ingestPipeline: deps.ingestPipeline } : {}),
+    ...(deps?.bindingVectorsMissing ? { bindingVectorsMissing: deps.bindingVectorsMissing } : {}),
   };
   if (!startupRun) {
     startupRun = runChecks(resolved).catch(() => {

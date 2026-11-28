@@ -448,6 +448,16 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
             assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
             assert dumped.pop("evidence_groups") == item.evidence_groups, f"{name}:{number}"
             item = GoldenItem.model_validate(dumped)
+        if "phase62" in item.tags:
+            # Plan 06.2-22: scoped_compound items carry sub_questions (06.2-01) and the drafted zh and it items carry
+            # native_review llm_drafted/pending (03.2-31); the rest of their key set is unchanged.
+            assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+            assert ("sub_questions" in dumped) == (item.category == "scoped_compound"), f"{name}:{number}"
+            assert ("native_review" in dumped) == (item.language in ("zh", "it")), f"{name}:{number}"
+            dumped.pop("sub_questions", None)
+            dumped.pop("native_review", None)
+            assert set(dumped) == _PRE_PHASE32_ITEM_KEYS, f"{name}:{number}"
+            continue
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"
         # 05.2-29 answer-rule items and 05.2.1-12 calculation and overflow items carry exactly their category's structure

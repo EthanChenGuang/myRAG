@@ -10,7 +10,7 @@ const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 export const MANIFEST_FILE = 'scripts/rag/env-manifest.json';
 export const CLASSIFICATION_FILE = 'config/rag/settings-classification.json';
 export const SIDES = new Set(['ingestion', 'query', 'both']);
-export const MECHANISMS = new Set(['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'rescan']);
+export const MECHANISMS = new Set(['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'reindex_tables', 'reindex_identifiers', 'recluster', 'rescan']);
 const NAME_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
 
 function readJson(root, rel) {
