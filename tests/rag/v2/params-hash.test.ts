@@ -528,6 +528,13 @@ describe('requestRetrievalConfigHash with every Phase 4.2 switch off (04.2-06, D
     expect(await requestRetrievalConfigHash(withAccess)).toBe(PINNED_REQUEST_OFF_HASH);
   });
 
+  it('the revision-4 switches are not inputs of the hash (07-45)', async () => {
+    const revision4 = requestInput({ RAG_ROLLOUTS: 'true', RAG_LANG_CONFIDENCE: 'calibrated' });
+    expect(revision4.config.rollouts.enabled).toBe(true);
+    expect(revision4.config.lang.confidence).toBe('calibrated');
+    expect(await requestRetrievalConfigHash(revision4)).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
   it('invalid combinations that resolve to off keep the pinned hash', async () => {
     const filterOnly = requestInput({ RAG_IDENTIFIER_FILTER: 'true' });
     const scopeWithoutLexical = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false', RAG_VERSION_SCOPE: 'true' }) };
