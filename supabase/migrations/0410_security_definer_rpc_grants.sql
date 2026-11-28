@@ -1155,6 +1155,11 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_review_items_fill_owner() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_review_items_fill_owner() TO service_role;
   END IF;
+  -- Migration 1011: the chunk attribute header stamp insert guard trigger function (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_chunk_attribute_header_stamp_insert_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_chunk_attribute_header_stamp_insert_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_chunk_attribute_header_stamp_insert_guard() TO service_role;
+  END IF;
 END
 $service_role_only$;
 

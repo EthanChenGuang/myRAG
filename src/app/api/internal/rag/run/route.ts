@@ -45,6 +45,8 @@ import {
   requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
+  AttributeFilterError,
+  checkExplicitAttributeFilter,
   readGenerationConfig,
   injectionTraceVersions,
   RERANK_TEXT_VERSION,
@@ -758,6 +760,14 @@ export async function POST(req: NextRequest) {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
       } catch (error) {
         if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
+    if (retrievalFilters?.attributes) {
+      try {
+        await checkExplicitAttributeFilter(scope, retrievalFilters.attributes, { signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof AttributeFilterError)) throw error;
         return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
       }
     }
