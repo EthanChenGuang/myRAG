@@ -1096,3 +1096,7 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - D-20 relax?
   - 6.1 operator: apply 0992 after 0651-0654, schedule prune, rebuild old probe.json files.
 - 02:13Z 06.2-38 DONE (exec/06.2-38 dcd818e4: scope-gate admin routes) and archived; queued for train 42. Dispatched 06.2-28 (scope-gate UI panel) session_01X342skGTM6Nw2PwQWjUJVa.
+- 02:17Z 06.3-29 DONE (exec/06.3-29 ce33d743, migration 0729, RAG_SOURCE_PURGE_DAILY_CAP=0) and archived; queued for train 42. OPERATOR: apply 0729 after 0721-0728, then re-run 0410.
+  - It found 11 failures already on t40: purge-store-coverage x6 (8 tables missing from the inventory), eval-gate-mode-default x2, rag-settings-hash x1, decomposed-answer-key x2.
+  - Told the t40 builder to fix them before opening its PR, and t41 to coordinate so only one fix is written.
+  - Told 06.3-23 to merge the newer 06.3-29 head.
