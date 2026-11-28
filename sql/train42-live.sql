@@ -1,4 +1,4 @@
--- Train 42 live SQL (ci/merge-train-42 @ 228737718). Apply after train 41 is live (sql/train41-live.sql, which runs after train 40's SQL,
+-- Train 42 live SQL (ci/merge-train-42 @ 12824e308). Apply after train 41 is live (sql/train41-live.sql, which runs after train 40's SQL,
 -- 0989 and 0991 from main) and after 0991 (UF-1, PR #137). One file for both deployment modes: every train-42 migration is common.
 -- Order: 0728 (re-run: six inventory rows), 0729, 0905, 0935 (empty placeholder), 0932 (re-run, see below), 0936, 0938, 0992, 0746,
 -- then the 0410 r24 delta (grants only).
