@@ -1,3 +1,5 @@
+import { z } from 'zod/v3';
+import { isGraphId, type SharePointProvider } from './config';
 import type { GraphSourceChange } from './delta';
 
 /**
@@ -9,9 +11,36 @@ import type { GraphSourceChange } from './delta';
  * (fail closed) and never reported as a removal; the next full enumeration settles it.
  */
 export interface DriveSelection {
-    sites: Array<{ id: string; name: string }>;
-    drives: Array<{ id: string; name: string }>;
-    folders: Array<{ id: string; name: string; driveId: string }>;
+    sites: Array<{ id: string; name: string; parentId?: string }>;
+    drives: Array<{ id: string; name: string; parentId?: string }>;
+    folders: Array<{ id: string; name: string; driveId: string; parentId?: string }>;
+}
+
+/** Most entries one saved selection may hold, across sites, drives and folders (T-06.3-34). */
+export const MAX_SELECTION_ENTRIES = 200;
+
+const graphId = z.string().refine(isGraphId);
+const entryName = z.string().min(1).max(512);
+const entry = z.object({ id: graphId, name: entryName, parentId: graphId.optional() }).strict();
+
+const selectionSchema = z
+    .object({
+        sites: z.array(entry).max(MAX_SELECTION_ENTRIES),
+        drives: z.array(entry).max(MAX_SELECTION_ENTRIES),
+        folders: z.array(entry.extend({ driveId: graphId }).strict()).max(MAX_SELECTION_ENTRIES),
+    })
+    .strict()
+    .refine((value) => value.sites.length + value.drives.length + value.folders.length <= MAX_SELECTION_ENTRIES);
+
+/**
+ * The picker's selection as stored in `nango_connections.metadata.source_scope` (D-22), or null when it is malformed,
+ * over the cap, or names sites on a OneDrive connection.
+ */
+export function parseSourceScope(value: unknown, provider: SharePointProvider): DriveSelection | null {
+    const parsed = selectionSchema.safeParse(value);
+    if (!parsed.success) return null;
+    if (provider === 'one-drive' && parsed.data.sites.length > 0) return null;
+    return parsed.data;
 }
 
 /** Item id → parent item id; null for a drive root. */
