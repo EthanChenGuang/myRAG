@@ -4,7 +4,7 @@
  */
 
 export type Row = Record<string, unknown>;
-type Filter = { kind: 'eq' | 'in'; column: string; value: unknown };
+type Filter = { kind: 'eq' | 'in' | 'neq'; column: string; value: unknown };
 
 export interface RecordedOp {
   table: string;
@@ -40,7 +40,13 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
     let conflict: string[] = [];
     const filters: Filter[] = [];
     const match = (row: Row) =>
-      filters.every((entry) => (entry.kind === 'eq' ? row[entry.column] === entry.value : (entry.value as unknown[]).includes(row[entry.column])));
+      filters.every((entry) =>
+        entry.kind === 'eq'
+          ? row[entry.column] === entry.value
+          : entry.kind === 'neq'
+            ? row[entry.column] !== entry.value
+            : (entry.value as unknown[]).includes(row[entry.column]),
+      );
     const run = () => {
       ops.push({ table, operation, filters: filters.map((entry) => ({ ...entry })), ...(values ? { values } : {}) });
       const rows = tables[table] ?? [];
@@ -80,6 +86,10 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
         operation = 'upsert';
         values = next;
         conflict = (upsertOptions?.onConflict ?? '').split(',').map((column) => column.trim()).filter(Boolean);
+        return builder;
+      },
+      neq(column: string, value: unknown) {
+        filters.push({ kind: 'neq', column, value });
         return builder;
       },
       eq(column: string, value: unknown) {

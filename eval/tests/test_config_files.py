@@ -197,7 +197,7 @@ def test_committed_monitor_alerts_hold_the_d24_and_d44_numbers():
         (REPO_ROOT / "eval/config/monitor-alerts.json").read_text(encoding="utf-8")
     )
     rules = {rule.id: rule for rule in committed.rules}
-    assert len(rules) == 13
+    assert len(rules) == 14
     assert "language_drop" not in rules
     rate = [rule for rule in committed.rules if rule.kind == "rate"]
     assert len(rate) == 8
@@ -209,6 +209,8 @@ def test_committed_monitor_alerts_hold_the_d24_and_d44_numbers():
     assert rules["latency_p95"].ratio == 1.5
     assert rules["online_judge_mean"].drop == 0.10
     assert (committed.drift.jsd_warn, committed.drift.jsd_alert, committed.drift.gap_alert) == (0.10, 0.20, 0.15)
+    stale = rules["stale_index_drop_rate"]
+    assert (stale.kind, stale.warn, stale.alert, stale.min_sample) == ("stale_index_drop", 0.0, 0.05, 1)
 
 
 def test_committed_release_gate_and_empty_judge_calibration():

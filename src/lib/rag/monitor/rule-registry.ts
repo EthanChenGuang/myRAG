@@ -7,6 +7,7 @@ import type {
   MonitorDailyCell,
 } from '@/lib/rag-eval/contracts.generated';
 import { evaluateDistribution, evaluateJudgeMean, evaluateLatency, evaluateRate } from './rule-kinds';
+import { evaluateStaleIndexDrop } from './stale-index-drop';
 
 export type MonitorRule = MonitorAlertsConfig['rules'][number];
 export type MonitorRuleKind = MonitorRule['kind'];
@@ -89,8 +90,9 @@ export type RuleKindEntry =
 export type RuleKindRegistry = Partial<Record<MonitorRuleKind, RuleKindEntry>>;
 
 /**
- * One entry per rule kind. Phase 7 plan 07-46 adds `language_drop` (a context entry, evaluateLanguageDrop);
- * a configured kind without an entry is skipped and counted as rules_unregistered.
+ * One entry per rule kind. Phase 7 plan 07-46 adds `language_drop` (a context entry, evaluateLanguageDrop); Phase 6.3 adds
+ * `stale_index_drop` (RET-14). `source_sync` has no entry: those alerts are raised by raiseSourceAlert, not by a daily rule.
+ * A configured kind without an entry is skipped and counted as rules_unregistered.
  */
 export const RULE_KIND_REGISTRY: RuleKindRegistry = {
   rate: { input: 'daily_cells', evaluate: evaluateRate },
@@ -99,6 +101,7 @@ export const RULE_KIND_REGISTRY: RuleKindRegistry = {
   judge_mean: { input: 'daily_cells', evaluate: evaluateJudgeMean },
   drift: { input: 'report' },
   offline_online_gap: { input: 'report' },
+  stale_index_drop: { input: 'context', evaluate: evaluateStaleIndexDrop },
 };
 
 export function registryEntryFor(

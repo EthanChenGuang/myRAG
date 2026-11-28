@@ -215,6 +215,7 @@ def test_default_config_carries_the_d24_and_d44_numbers():
         "top_score_psi",
         "latency_p95",
         "online_judge_mean",
+        "stale_index_drop_rate",
         "test_set_not_representative",
         "offline_online_gap",
     ]

@@ -294,7 +294,7 @@ describe('rule-kind registry (LANG-10 hook point)', () => {
     const evaluate = vi.fn(async () => []);
     const context: RuleKindRegistry = { ...RULE_KIND_REGISTRY, language_drop: { input: 'context', evaluate } };
     const deferred = evaluateRules({ cells, day: dayOf(FIRST, 5), config: withLanguageDrop, budgets, registry: context });
-    expect(deferred.contextRules.map((entry) => entry.rule.id)).toEqual(['language_drop']);
+    expect(deferred.contextRules.map((entry) => entry.rule.id)).toEqual(['stale_index_drop_rate', 'language_drop']);
     expect(evaluate).not.toHaveBeenCalled();
   });
 });

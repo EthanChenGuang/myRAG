@@ -370,6 +370,11 @@
       "title": "Source Opened Count",
       "type": "integer"
     },
+    "source_rechecked": {
+      "minimum": 0,
+      "title": "Source Rechecked",
+      "type": "integer"
+    },
     "stage_latency": {
       "additionalProperties": {
         "minimum": 0,
@@ -377,6 +382,11 @@
       },
       "title": "Stage Latency",
       "type": "object"
+    },
+    "stale_index_drop": {
+      "minimum": 0,
+      "title": "Stale Index Drop",
+      "type": "integer"
     },
     "status": {
       "enum": [

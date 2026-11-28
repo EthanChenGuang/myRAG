@@ -34,6 +34,7 @@ function ruleFieldsValid(rule: MonitorRule): boolean {
       return has('baseline_min_sample', 'ratio', 'min_abs_delta', 'min_z');
     case 'distribution':
     case 'drift':
+    case 'stale_index_drop':
       return has('warn', 'alert') && (rule.alert as number) > (rule.warn as number);
     case 'latency':
       return has('baseline_min_sample', 'ratio');

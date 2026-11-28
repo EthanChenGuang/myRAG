@@ -1,6 +1,6 @@
 {
   "baseline_days": 30,
-  "config_hash": "abcc4b0c72b28ca28912d24a0f312b3c1e12ed93ce64a8220c41da8b247cfa74",
+  "config_hash": "920a5165a7d1e516a4fd197639452a5d919e6acbfcf1cda28ab715179dcd22f7",
   "drift": {
     "gap_alert": 0.15,
     "jsd_alert": 0.2,
@@ -129,6 +129,15 @@
       "kind": "judge_mean",
       "metric": "online_judge_mean",
       "min_sample": 50
+    },
+    {
+      "alert": 0.05,
+      "enabled": true,
+      "id": "stale_index_drop_rate",
+      "kind": "stale_index_drop",
+      "metric": "stale_index_drop",
+      "min_sample": 1,
+      "warn": 0.0
     },
     {
       "alert": 0.2,
