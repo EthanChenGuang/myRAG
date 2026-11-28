@@ -1055,3 +1055,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     (a) golden/fixture change: plan-12 context_overflow items or the fake window, which needs a golden version bump and a rebaseline;
     (b) packing truncates the last kept block.
   - Calc gates PASS.
+- 01:16Z 06.3-18 DONE (exec/06.3-18 3b578d16: source-sync Config UI panel plus connector reconcile pill; design gate PASS) and archived; queued for train 42.
+  - Dispatched 06.3-22: session_01X342shU9UPiKZRUv7airoP, base 06.3-18 + 06.3-21.
+  - 05.2.1-24 is READY but HELD: its phase comparison needs the 7 gated runs to pass, and the budget-overflow runs wait on the owner's must_keep decision.
