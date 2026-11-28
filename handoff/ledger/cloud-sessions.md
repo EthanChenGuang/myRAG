@@ -973,3 +973,17 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:36Z 07-53 DONE exec/07-53 b9972b5e -> t41 (LEX-05 adapters). Weaviate is index-bound (rebuild-lexical); Qdrant is query-bound. Real-store order matches the reference. The parity margin is 7% (10% is mathematically unreachable). Archived.
 - skill updated: §12 first start plus a bootstrap prompt (33da072b).
 - 00:38Z CLEANUP: no new finished sessions (all finished ones are archived). Nudged UF-1 (SUMMARY and prod-apply pushed; was waiting on the full rag-db), 07-37 (idle 25 min) and verify 6 to apply the new speed rule and report. Verify 6.1 is running its last checks.
+- 00:40Z plan-42-docid-filter DONE (9973ace3).
+  - 04.2-40: D-59, four functions share one predicate, wave 12.
+  - It wanted 0935, but 04.4-16 has already claimed 0935, so 04.2-40 takes the next free number (about 0936).
+  - Plan-check and execution dispatched. Archived.
+- 00:40Z VERIFY 3.2: human_needed (verify/03.2 eccfcb32).
+  - UF-1 is the blocker; fix/uf1-direct-insert is in progress.
+  - Live items 0/8; 0821/0822 have no live record.
+  - XLG-06, UF-2, UF-3 (security), UF-4/5 and the warnings -> quick-32-batch.
+  - Archived.
+- MIGRATION MAP:
+  - 0905 and 0935: 04.4-16
+  - about 0936: 04.2-40
+  - quick-32-batch: claims after 0936
+  - 0986-0991 as before
