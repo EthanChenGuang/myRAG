@@ -133,6 +133,7 @@ export type {
   SharingRuleRow,
 } from './access/connector';
 export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
+export { cachedSourceDocumentIds } from './cache/sources';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,

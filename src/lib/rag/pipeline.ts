@@ -85,6 +85,7 @@ import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from '
 import { finishTrace, type FinishTraceOptions } from './trace/finish';
 import { resolveEffectivePipeline, V2_UNAVAILABLE, type PipelineFallback } from './v2/readiness';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
+import { cachedSourceDocumentIds } from './cache/sources';
 import type {
   BackendDegradedReason,
   Candidate,
@@ -917,7 +918,8 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
 const ACCESS_LABEL_BATCH = 100;
 
 /** Every document id the result carries: used documents, candidates, kept and relevant chunks, voice results. */
-function resultDocumentIds(result: RetrievalResult): string[] {
+/** @internal exported for tests. */
+export function resultDocumentIds(result: RetrievalResult): string[] {
   const ids = new Set<string>();
   const add = (value: unknown) => {
     if (typeof value === 'string' && value.length > 0) ids.add(value);
@@ -927,6 +929,7 @@ function resultDocumentIds(result: RetrievalResult): string[] {
   for (const row of result.relevantChunks) add(row.document_id);
   for (const row of result.kept) add(row.document_id);
   for (const row of result.voice?.results ?? []) add((row as { document_id?: unknown }).document_id);
+  for (const id of cachedSourceDocumentIds(result.cacheHit)) add(id);
   return [...ids].sort();
 }
 

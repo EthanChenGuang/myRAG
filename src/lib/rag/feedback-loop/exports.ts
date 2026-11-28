@@ -370,6 +370,7 @@ export async function exportGolden(admin: Client, tenantKey: string): Promise<Go
       admin,
       tenantKey,
       page.flatMap((item) => (item.label.evidence ?? []).map((span) => span.chunk_id)),
+      { viewer: { kind: 'tenant_admin' } },
     );
     const sources = await readItemSources(admin, tenantKey, page.map((item) => item.id));
     for (const item of page) {

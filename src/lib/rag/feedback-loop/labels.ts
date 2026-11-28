@@ -93,12 +93,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * chunk's document, and its quote must be a substring of the chunk text after normalizeQuoteText. Document name and section are
  * taken from the database. Failures name the span index and a reason, never chunk text.
  */
-async function checkEvidence(admin: Client, tenantKey: string, label: ExpertLabel): Promise<EvidenceCheck> {
+async function checkEvidence(admin: Client, tenantKey: string, label: ExpertLabel, expertId: string): Promise<EvidenceCheck> {
   const spans = label.evidence ?? [];
   const servable = await fetchServableChunks(
     admin,
     tenantKey,
     spans.map((span) => span.chunk_id),
+    { viewer: { kind: 'expert', userId: expertId } },
   );
   const missing = [
     ...new Set(spans.map((span) => span.chunk_id.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId) && !servable.has(chunkId))),
@@ -150,7 +151,7 @@ export async function validateAndSaveLabel(ssr: Client, admin: Client, id: strin
     const outside = notRelevant.findIndex((chunkId) => !snapshot.has(chunkId.toLowerCase()));
     if (outside >= 0) return { ok: false, reason: 'invalid_not_relevant', index: outside };
 
-    const checked = await checkEvidence(admin, tenantKey, request.label);
+    const checked = await checkEvidence(admin, tenantKey, request.label, expertId);
     if (!checked.ok) return { ok: false, reason: 'invalid_evidence', span: checked.span, detail: checked.detail };
     label = { ...request.label, evidence: checked.evidence };
     triage = [...request.label.triage];

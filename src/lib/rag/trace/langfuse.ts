@@ -30,7 +30,7 @@ export interface CollectedTrace {
   startedAt: number;
   endedAt: number;
   stages: TraceStage[];
-  review?: { query?: string; answer?: string; context?: string; model?: string };
+  review?: { query?: string; answer?: string; context?: string; model?: string; citedCount?: number };
   /** D-25: numbers and one fixed word, read from the collector when the export is built. */
   timing?: TraceTiming;
   /** LANG-10: language codes only, read from the collector when the export is built. */
@@ -140,6 +140,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
       reason: trace.reason,
       ...(review?.context !== undefined ? { context: maskPII(review.context).slice(0, MAX_REVIEW_CONTEXT_CHARS) } : {}),
       ...(review?.model !== undefined ? { model: review.model } : {}),
+      ...(review?.citedCount !== undefined ? { cited_count: review.citedCount } : {}),
       ...(timing?.ttft_ms !== undefined ? { ttft_ms: timing.ttft_ms } : {}),
       ...(timing?.pre_generation_ms !== undefined ? { pre_generation_ms: timing.pre_generation_ms } : {}),
       ...(timing !== undefined ? { cache: timing.cache } : {}),
