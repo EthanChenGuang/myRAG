@@ -922,3 +922,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Archived.
 - 00:02Z quick-43-apply-test DONE exec/quick-43-apply-test d3bfbb3c6 -> train 41. The access-migrations apply test passes 8/8 in both modes, and still passes with 0986-0990 copied in. The 53 plan list is corrected. Archived.
 - 00:04Z OWNER chose (B) for the 4.4 BM25 question: keep not_flipped and plan cluster-aware DF. plan-44-cluster-df (Fable) dispatched.
+- 00:05Z quick-rbm DONE exec/quick-rbm-rebuild-mechanisms a5b0a3a6 -> train 41 (after quick-42-fixes). Adds new mechanisms reindex_tables, reindex_identifiers and recluster (command plans, no SQL). Follow-up: the AGENTS.md rag:rebuild list needs the 3 names, a docs task. Archived.
