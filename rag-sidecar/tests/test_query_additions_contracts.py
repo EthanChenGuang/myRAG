@@ -455,7 +455,12 @@ def test_every_golden_line_validates_unchanged():
             continue
         raw = json.loads(line)
         assert GoldenItem.model_validate(raw).model_dump(mode="json", exclude_none=False) is not None
-        assert "sub_questions" not in GoldenItem.model_validate(raw).model_dump(mode="json")
+        dumped = GoldenItem.model_validate(raw).model_dump(mode="json")
+        if "sub_questions" in raw:
+            # 06.2-22 items carry their gold sub-questions; they round-trip as written.
+            assert len(dumped["sub_questions"]) == len(raw["sub_questions"])
+        else:
+            assert "sub_questions" not in dumped
 
 
 # --- report.py ----------------------------------------------------------------------------------------------------
