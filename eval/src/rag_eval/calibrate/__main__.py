@@ -21,6 +21,7 @@ def _refusal(args: argparse.Namespace) -> int:
             resolve_cli_path(args.out),
             base_url=args.base_url,
             write=args.write_thresholds,
+            write_floor=args.write_floor,
             golden=resolve_cli_path(args.golden),
             fixture_mode=args.fixture_mode,
         )
@@ -38,6 +39,12 @@ def _refusal(args: argparse.Namespace) -> int:
     print(f"wrote {resolve_cli_path(args.out) / refusal.RESULT_NAME} and {resolve_cli_path(args.out) / refusal.REPORT_NAME}")
     if result.thresholds_written:
         print(f"wrote thresholds to {result.thresholds_path}")
+    if result.floor_written:
+        floor = result.similarity_floor
+        status = floor.status if floor is not None else "uncalibrated"
+        print(f"wrote the {result.floor_mode} fixture floor (status {status}) to {result.floor_path}")
+        if status != "calibrated":
+            print(f"the {result.floor_mode} fixture floor is {status}: no threshold was written, the harness keeps the 0.65 floor for that mode")
     return EXIT_OK
 
 
@@ -204,6 +211,11 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--base-url", default=None, help="live app base URL; cells are labelled live (default: fake edge, fixture)")
     cmd.add_argument("--fixture-mode", choices=("prechunked", "ingest"), default=None)
     cmd.add_argument("--write-thresholds", action="store_true", help="merge the cells into eval/config/refusal-thresholds.json")
+    cmd.add_argument(
+        "--write-floor",
+        action="store_true",
+        help="write only the fixture similarity floor of --fixture-mode into eval/config/fixture-score-calibration.json (fixture runs only)",
+    )
     cmd.set_defaults(handler=_refusal)
     cmd = commands.add_parser("dup-clusters", help="fit the duplicate-cluster threshold precision first from labelled candidate pairs")
     cmd.add_argument("--out", type=Path, default=dup_clusters.DEFAULT_OUT)
