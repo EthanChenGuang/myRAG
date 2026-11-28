@@ -33,6 +33,73 @@ export interface RetrievalPortContext {
   lexicalOptions?: LexicalOptions;
   /** D-05: the request's access filter, computed once by runRetrieval; absent reads it from the scope. */
   access?: ScopeAccessFilter;
+  /** Phase 6.2 D-08: retries of empty filtered sub-question searches left within max_searches; absent allows none. */
+  filterRetryBudget?: number;
+}
+
+/** Phase 6.2 D-08: how one filtered sub-question's search ended. */
+export interface VariantFilterRetry {
+  subQuestionIndex: number;
+  retried: boolean;
+  retrySkippedCap: boolean;
+}
+
+function intersectList(base: readonly string[] | undefined, narrowed: readonly string[] | undefined): string[] | undefined | null {
+  if (!narrowed) return base ? [...base] : undefined;
+  const kept = base ? narrowed.filter((value) => base.includes(value)) : [...narrowed];
+  return kept.length > 0 ? kept : null;
+}
+
+function tagDimension(tag: string): string {
+  const colon = tag.indexOf(':');
+  return colon < 0 ? tag : tag.slice(0, colon);
+}
+
+/** Scope tags: OR within a dimension, AND across them (3.2 D-39); a dimension both filter keeps the common tags only. */
+function intersectScopes(base: readonly string[] | undefined, narrowed: readonly string[] | undefined): string[] | undefined | null {
+  if (!narrowed) return base ? [...base] : undefined;
+  const baseTags = base ?? [];
+  const baseDimensions = new Set(baseTags.map(tagDimension));
+  const narrowedDimensions = new Set(narrowed.map(tagDimension));
+  const kept = narrowed.filter((tag) => !baseDimensions.has(tagDimension(tag)) || baseTags.includes(tag));
+  for (const dimension of narrowedDimensions) if (!kept.some((tag) => tagDimension(tag) === dimension)) return null;
+  const untouched = baseTags.filter((tag) => !narrowedDimensions.has(tagDimension(tag)));
+  return [...new Set([...untouched, ...kept])].sort();
+}
+
+/**
+ * Phase 6.2 D-08: the filters a variant is searched with. The shared filters are the base; a filtered sub-question's date range,
+ * doc types, languages and scope tags are intersected with them and every other field (current-only, documents, sources,
+ * effective date, include flags) comes from the base, so the result never widens it. An empty intersection searches the base.
+ */
+export function applyVariantFilters(base: RetrievalFilters, variant: QueryVariant): RetrievalFilters {
+  const narrowed = variant.filters;
+  if (!narrowed || variant.filterApplied !== true) return base;
+  let dateRange = base.dateRange;
+  if (narrowed.dateRange) {
+    const fromCandidates = [base.dateRange?.from, narrowed.dateRange.from].filter((value): value is string => value !== undefined);
+    const toCandidates = [base.dateRange?.to, narrowed.dateRange.to].filter((value): value is string => value !== undefined);
+    const from = fromCandidates.length > 0 ? fromCandidates.reduce((a, b) => (a > b ? a : b)) : undefined;
+    const to = toCandidates.length > 0 ? toCandidates.reduce((a, b) => (a < b ? a : b)) : undefined;
+    if (from !== undefined && to !== undefined && from > to) return base;
+    dateRange = {
+      ...(from !== undefined ? { from } : {}),
+      ...(to !== undefined ? { to } : {}),
+      ...(base.dateRange?.includeUndated === true ? { includeUndated: true } : {}),
+    };
+  }
+  const docTypes = intersectList(base.docTypes, narrowed.docTypes);
+  const languages = intersectList(base.languages, narrowed.languages);
+  const scopes = intersectScopes(base.scopes, narrowed.scopes);
+  if (docTypes === null || languages === null || scopes === null) return base;
+  const out: RetrievalFilters = {
+    ...base,
+    ...(dateRange ? { dateRange } : {}),
+    ...(docTypes ? { docTypes } : {}),
+    ...(languages ? { languages } : {}),
+    ...(scopes ? { scopes } : {}),
+  };
+  return out;
 }
 
 /** Server-side view of a port: the search stage reads the collected legs; the framework only ever sees `port`. */
@@ -42,6 +109,8 @@ export interface RetrievalPortHandle {
   collectedLegs(): BackendLegs[];
   /** The fused hits for an order, scored by native RRF over the collected lists; unknown and repeated ids are dropped. */
   fusedHits(fusedChunkIds: readonly string[]): FusedHit[];
+  /** Phase 6.2 D-08: one entry per filtered variant the framework searched, in variant order. */
+  filterRetries(): VariantFilterRetry[];
 }
 
 function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
@@ -139,6 +208,8 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
   const variants = [...ctx.variants];
   const searches = new Map<number, Promise<BackendLegs>>();
   const collected = new Map<number, BackendLegs>();
+  const retryEntries = new Map<number, VariantFilterRetry>();
+  let retryBudget = Math.max(0, ctx.filterRetryBudget ?? 0);
   let embeddings: Promise<QueryEmbedding[]> | null = null;
 
   const embedAll = (): Promise<QueryEmbedding[]> => {
@@ -154,12 +225,13 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
     if (memo) return memo;
     const pending = embedAll().then(async (vectors) => {
       signal.throwIfAborted();
-      const legs = await backend.search(
+      const variant = variants[index]!;
+      const request = (variantFilters: RetrievalFilters) =>
         variantSearchRequest({
           scope,
-          variant: variants[index]!,
+          variant,
           embedding: vectors[index]!,
-          filters,
+          filters: variantFilters,
           pool: params.candidate_pool_size,
           lexicalEnabled,
           signal,
@@ -168,8 +240,24 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           ...(ctx.identifiersNorm !== undefined ? { identifiersNorm: ctx.identifiersNorm } : {}),
           ...(ctx.lexicalOptions ? { lexicalOptions: ctx.lexicalOptions } : {}),
           ...(ctx.access ? { access: ctx.access } : {}),
-        }),
-      );
+        });
+      // D-08: a filtered sub-question searches its narrowed filter and, when that finds nothing, once more with the shared filters.
+      const variantFilters = applyVariantFilters(filters, variant);
+      let legs = await backend.search(request(variantFilters));
+      if (variantFilters !== filters) {
+        const entry: VariantFilterRetry = { subQuestionIndex: variant.subQuestionIndex ?? index, retried: false, retrySkippedCap: false };
+        retryEntries.set(index, entry);
+        if (legs.dense.length + legs.lexical.length === 0) {
+          if (retryBudget > 0) {
+            retryBudget -= 1;
+            entry.retried = true;
+            signal.throwIfAborted();
+            legs = await backend.search(request(filters));
+          } else {
+            entry.retrySkippedCap = true;
+          }
+        }
+      }
       collected.set(index, legs);
       return legs;
     });
@@ -210,5 +298,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
   );
 
   const port: RetrievalPort = Object.freeze({ variants: portVariants, searchVariant, finishRetrieval });
-  return Object.freeze({ port, collectedLegs, fusedHits });
+  const filterRetries = (): VariantFilterRetry[] =>
+    [...retryEntries.entries()].sort(([a], [b]) => a - b).map(([, entry]) => ({ ...entry }));
+  return Object.freeze({ port, collectedLegs, fusedHits, filterRetries });
 }

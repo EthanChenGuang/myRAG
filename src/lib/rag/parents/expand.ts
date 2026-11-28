@@ -1,5 +1,6 @@
 import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { selectWithinBudget, type BudgetCandidate, type BudgetOptions, type RenderEstimate } from '../context/budget';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
 const FETCH_PARENTS_RPC = 'rag_fetch_parents';
@@ -28,6 +29,8 @@ export interface ExpandParentsInput<C extends ExpandableChild> {
   scope: TenantScope;
   admin: RpcClient | null;
   signal: AbortSignal;
+  /** D-11: the request's access filter; a restricted parent is never fetched for a caller without its group. */
+  access: ScopeAccessFilter;
   eligible?: (_child: C) => boolean;
 }
 
@@ -101,7 +104,9 @@ export async function expandParents<C extends ExpandableChild>(input: ExpandPare
   }
 
   if (!admin) throw new RetrievalBackendError(FETCH_PARENTS_RPC, 'admin_unavailable');
-  const response = await admin.rpc(FETCH_PARENTS_RPC, { p_tenant_key: tenantKey, p_parent_ids: requested }).abortSignal(signal);
+  const response = await admin
+    .rpc(FETCH_PARENTS_RPC, { p_tenant_key: tenantKey, p_parent_ids: requested, ...accessRpcArgs(input.access) })
+    .abortSignal(signal);
   signal.throwIfAborted();
   if (response.error) throw new RetrievalBackendError(FETCH_PARENTS_RPC, response.error.code ?? null);
 

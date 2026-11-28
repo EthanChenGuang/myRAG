@@ -54,12 +54,20 @@ function docTypeLabelForLocale(id, locale) {
   return table[id] || CONFIG_UI_DOC_TYPE_LABELS.en[id] || id;
 }
 
-function buildUploadForm(file, docType, pickerEnabled) {
+function docTypesAccessControls() {
+  if (typeof AccessGroupsQueueControls !== 'undefined') return AccessGroupsQueueControls;
+  return typeof globalThis !== 'undefined' && globalThis.AccessGroupsQueueControls ? globalThis.AccessGroupsQueueControls : null;
+}
+
+function buildUploadForm(file, docType, pickerEnabled, item, picker) {
   const form = new FormData();
   form.append('file', file);
   if (pickerEnabled && docType) {
     form.append('doc_type', docType);
   }
+  const access = docTypesAccessControls();
+  const field = access && item ? access.uploadField(item, picker) : null;
+  if (field) form.append('access', field);
   return form;
 }
 

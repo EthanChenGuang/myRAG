@@ -264,7 +264,7 @@ function reasonOf(error: unknown): string {
 
 /** Writes the pending candidates and the review item now; recordAnswerConflict schedules it after the response. Never throws. */
 export async function writeAnswerConflict(
-  input: { tenantKey: string; conflict: VersionConflict; traceId?: string | null },
+  input: { tenantKey: string; conflict: VersionConflict; traceId?: string | null; accessSets?: readonly (readonly string[])[] | null },
   deps: RecordAnswerConflictDeps = {},
 ): Promise<{ raised: number; failed: number; reviewItem: string | null }> {
   const log = deps.log ?? ((line, detail) => console.warn(line, detail));
@@ -309,6 +309,7 @@ export async function writeAnswerConflict(
       documentIds: input.conflict.document_ids,
       detector: 'version_conflict',
       traceId: input.traceId ?? null,
+      ...(input.accessSets ? { accessSets: input.accessSets } : {}),
     },
     deps.enqueueDeps,
   );
@@ -317,14 +318,14 @@ export async function writeAnswerConflict(
 
 /** D-52, D-55: schedules the hand-off after the response; the request never waits and never sees a failure. */
 export function recordAnswerConflict(
-  input: { tenantKey: string; conflict: VersionConflict | null | undefined; traceId?: string | null },
+  input: { tenantKey: string; conflict: VersionConflict | null | undefined; traceId?: string | null; accessSets?: readonly (readonly string[])[] | null },
   deps: RecordAnswerConflictDeps = {},
 ): void {
   const { conflict } = input;
   if (!conflict || conflict.pairs.length === 0) return;
   const schedule = deps.schedule ?? scheduleAfterResponse;
   schedule(async () => {
-    await writeAnswerConflict({ tenantKey: input.tenantKey, conflict, traceId: input.traceId }, deps);
+    await writeAnswerConflict({ tenantKey: input.tenantKey, conflict, traceId: input.traceId, accessSets: input.accessSets }, deps);
   });
 }
 

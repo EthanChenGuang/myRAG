@@ -29,6 +29,7 @@ export type ParsedEmbeddingArgs =
   | { ok: true; command: 'ft-clear'; slot: FinetuneSlotId; batch: number }
   | { ok: true; command: 'ft-release-rollback' }
   | { ok: true; command: 'ft-check'; slot: FinetuneSlotId }
+  | { ok: true; command: 'verify-route'; reference: string | null; writeReference: string | null; out: string | null }
   | { ok: false; error: string };
 
 export type FinetuneConsentScope = 'private' | 'deployment';
@@ -71,6 +72,7 @@ export const USAGE = [
   '       npm run rag:embedding -- ft-clear ft-a-1024|ft-b-1024 [--batch <1..10000>]',
   '       npm run rag:embedding -- ft-release-rollback --ack drop-rollback',
   '       npm run rag:embedding -- ft-check ft-a-1024|ft-b-1024',
+  '       npm run rag:embedding -- verify-route bge-m3 [--reference <vectors.json>] [--write-reference <vectors.json>] [--out <report.json>]',
 ].join('\n');
 
 type DocTypeAndTenant = { ok: true; docType: string; tenantKey: string | null } | { ok: false; error: string };
@@ -260,6 +262,18 @@ export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
       if (rest.length !== 1 || slot === null) return { ok: false, error: 'ft-check needs one slot: ft-a-1024 or ft-b-1024' };
       return { ok: true, command: 'ft-check', slot };
     }
+    case 'verify-route': {
+      if (rest[0] !== 'bge-m3') return { ok: false, error: 'verify-route needs the provider: bge-m3' };
+      const flags = parseFlags(command, rest.slice(1), ['--reference', '--write-reference', '--out']);
+      if (!flags.ok) return flags;
+      return {
+        ok: true,
+        command: 'verify-route',
+        reference: flags.values.get('--reference') ?? null,
+        writeReference: flags.values.get('--write-reference') ?? null,
+        out: flags.values.get('--out') ?? null,
+      };
+    }
     default:
       return { ok: false, error: command === undefined ? 'a command is required' : `unknown command: ${command}` };
   }
@@ -290,6 +304,8 @@ export interface EmbeddingCliDeps {
   finetuneEnabled?: () => boolean;
   /** Runs an external command (the retention prune) and resolves its exit code. */
   runCommand?: (argv: string[]) => Promise<number>;
+  /** verify-route: providers per route instead of the hosted BGE-M3 provider. */
+  routeProviders?: Partial<Record<import('../config').BgeM3Via, import('./types').EmbeddingProvider>>;
 }
 
 async function spawnCommand(argv: string[]): Promise<number> {
@@ -455,6 +471,57 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
   }
 }
 
+/**
+ * verify-route bge-m3: embeds the fixed probe texts through RAG_BGE_M3_VIA=openrouter and compares them with DeepInfra's vectors. Prints
+ * routes, hosts, cosines and the verdict only: never a key or a vector. Exit 0 on a match, 1 on a mismatch or when nothing could be compared.
+ */
+async function runVerifyRoute(
+  parsed: Extract<ParsedEmbeddingArgs, { command: 'verify-route' }>,
+  io: CliIo,
+  signal: AbortSignal,
+  deps: EmbeddingCliDeps,
+): Promise<number> {
+  const fs = await import('node:fs');
+  const route = await import('./verify-route');
+  let reference: import('./verify-route').RouteReference | undefined;
+  if (parsed.reference) {
+    try {
+      reference = JSON.parse(fs.readFileSync(parsed.reference, 'utf8')) as import('./verify-route').RouteReference;
+      route.referenceVectors(reference, route.ROUTE_PROBE_TEXTS);
+    } catch (error) {
+      io.err(`[Embedding] verify-route: cannot use the reference file: ${error instanceof Error ? error.message.slice(0, 160) : 'unreadable'}`);
+      return 2;
+    }
+  }
+  const report = await route.verifyBgeM3Route({ signal, reference, providers: deps.routeProviders });
+  for (const side of report.sides) {
+    if (side.status === 'ok') io.out(`[Embedding] verify-route ${side.route}: ok host=${side.host} dims=${side.dims} probes=${report.probes}`);
+    else io.out(`[Embedding] verify-route ${side.route}: unavailable (${side.reason})`);
+  }
+  if (report.comparison) {
+    const values = report.comparison.cosines.map((value) => value.toFixed(6)).join(', ');
+    io.out(`[Embedding] verify-route openrouter vs ${report.comparison.against}: cosines ${values}; min ${report.comparison.minCosine.toFixed(6)} (required ${report.minCosineRequired})`);
+  }
+  const verdictLine: Record<typeof report.verdict, string> = {
+    match: 'match: OpenRouter serves the same BGE-M3 vectors; bge-m3-1024 may be served with RAG_BGE_M3_VIA=openrouter',
+    mismatch: 'mismatch: do not serve bge-m3-1024 through OpenRouter; its vectors would differ from the stored ones',
+    not_compared: 'not compared: no DeepInfra vectors to compare with (pass --reference <vectors.json>); bge-m3-1024 through OpenRouter stays unverified',
+  };
+  io.out(`[Embedding] verify-route verdict: ${verdictLine[report.verdict]}`);
+  if (parsed.writeReference) {
+    const source = report.sides.find((side) => side.status === 'ok' && side.route === 'deepinfra') ?? report.sides.find((side) => side.status === 'ok');
+    if (source && source.status === 'ok') {
+      fs.writeFileSync(parsed.writeReference, `${JSON.stringify(route.referenceFrom(source), null, 2)}\n`);
+      io.out(`[Embedding] verify-route wrote the ${source.route} vectors to ${parsed.writeReference}`);
+    }
+  }
+  if (parsed.out) {
+    const summary = { ...report, sides: report.sides.map((side) => (side.status === 'ok' ? { route: side.route, status: side.status, host: side.host, dims: side.dims } : side)) };
+    fs.writeFileSync(parsed.out, `${JSON.stringify(summary, null, 2)}\n`);
+  }
+  return report.verdict === 'match' ? 0 : 1;
+}
+
 function describeCompleteness(entry: import('./profile-ops').ProfileCompleteness | undefined): string {
   if (!entry || entry.state === 'unavailable') return 'unavailable';
   if (entry.state === 'legacy_column') return 'legacy column, counted by the gate at activation';
@@ -478,6 +545,7 @@ export async function main(
     return 2;
   }
   if (isFinetuneCommand(parsed)) return runFinetuneCommand(parsed, io, deps);
+  if (parsed.command === 'verify-route') return runVerifyRoute(parsed, io, signal ?? new AbortController().signal, deps);
   const ops = await import('./profile-ops');
   const bindingOps = await import('./binding-ops');
   const { ProfileUnavailableError, isEmbeddingProfilesEnabled } = await import('./active-profile');

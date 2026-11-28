@@ -175,7 +175,7 @@ describe('ingest versioning: atomic swap, current-only retrieval, old citations 
 
     const assembled = await fetchRows.fetchAssemblyRows(
       [{ chunk_id: v1ChunkIds[0] as string, document_id: v1.documentId as string }] as unknown as Parameters<typeof fetchRows.fetchAssemblyRows>[0],
-      { adminClient: admin, signal: new AbortController().signal },
+      { access: { mode: 'off' }, adminClient: admin, signal: new AbortController().signal },
     );
     assert.equal(assembled.documents.get(v1.documentId as string)?.filename, FILENAME);
     assert.ok(assembled.chunkMetadata.has(v1ChunkIds[0] as string), 'the chunk metadata used for citations loads');

@@ -10,6 +10,7 @@ import { buildQueryVariantSet, PHASE4_VARIANT_LIMITS, queryLayerVariantLimits, t
 import { timeframeToDateRange } from '../../query/timeframe';
 import { defaultQueryContext, type TemporalQueryContext } from '../../query/temporal-query-detector';
 import { runRefsStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, QueryVariantKind, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
@@ -22,7 +23,7 @@ import { terminologyMatcherFor } from '../../terminology/load';
 import { normalizeLexical } from '../../lexical/tokenize';
 import { getV2StartupVerdict } from '../startup';
 import type { TraceCollector as Collector } from '../../trace/collector';
-import { ATTRIBUTE_STATE_NONE, ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type TerminologyHashStage } from '../config-hash';
+import { ATTRIBUTE_STATE_NONE, ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type GlossaryHashStage, type TerminologyHashStage } from '../config-hash';
 import { effectiveQueryParams } from '../../query/query-params';
 import { AttributeFilterError, resolveAttributeFilter, type AttributeResolution } from '../../retrieval/attributes';
 import { attributeFilterConfig } from '../../retrieval/attribute-filter-config';
@@ -30,6 +31,8 @@ import { attributeFilterConfig } from '../../retrieval/attribute-filter-config';
 export interface QueryStagesInput {
   input: RunRetrievalInput;
   scope: TenantScope;
+  /** D-05: the access filter runRetrieval computed once; absent reads it from the scope (an unresolved scope throws while the switch is on). */
+  access?: ScopeAccessFilter;
   config: RagConfig;
   profile: Profile;
   signal: AbortSignal;
@@ -41,6 +44,8 @@ export interface QueryStagesInput {
   onTerminology?: (stage: TerminologyHashStage) => void;
   /** D-30: told how the attribute_resolve stage ended, before semantic_cache builds its key. */
   onAttributeFilter?: (stage: AttributeFilterHashStage) => void;
+  /** D-14: told the glossary state while RAG_TRANSLATION_GLOSSARY is effective, before semantic_cache builds its key. */
+  onGlossary?: (stage: GlossaryHashStage) => void;
 }
 
 export interface QueryStagesOutput {
@@ -292,7 +297,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const { input, scope, config, profile, signal, collector, stageOverrides } = ctx;
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
 
-  const referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
+  const referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector, ctx.access ?? scopeAccessFilter(scope));
 
   const analysis = await runStage(
     spec('analyze', 'skip'),
@@ -356,6 +361,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
       scope,
       ...(ctx.cache ? { cache: ctx.cache } : {}),
       afterTransforms: terminologyStage,
+      ...(ctx.onGlossary ? { onGlossary: ctx.onGlossary } : {}),
     });
   }
 

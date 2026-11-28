@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import {
+  checkUploadAccess,
   embedText,
   ingest,
   legacyApprovalRefusal,
@@ -140,7 +141,8 @@ async function storeAIResponseAsDocument(
     chatId?: string;
     generatedAt: string;
   },
-  owner: { userId: string; organizationId?: string | null }
+  owner: { userId: string; organizationId?: string | null },
+  accessGroups?: string[]
 ) {
   const documentId = uuidv4();
   const filename = `${title} - ${new Date().toISOString().split('T')[0]}.md`;
@@ -155,7 +157,9 @@ async function storeAIResponseAsDocument(
         content: content,
         metadata: metadata,
         user_id: owner.userId,
-        ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {})
+        ...(owner.organizationId !== undefined ? { organization_id: owner.organizationId } : {}),
+        // D-16, RESEARCH Pitfall 7: the checked access label is part of the inserting statement.
+        ...(accessGroups ? { access_groups: accessGroups } : {})
       }])
       .select()
       .single();
@@ -248,6 +252,7 @@ async function saveThroughIngest(input: {
   body: Record<string, unknown>;
   scope: TenantScope;
   uploaderId: string;
+  accessKeys?: string[];
   signal: AbortSignal;
 }): Promise<NextResponse> {
   const parsed = unifiedSaveSchema.safeParse({
@@ -279,6 +284,7 @@ async function saveThroughIngest(input: {
     text: input.content,
     filename,
     mimeType: 'text/markdown',
+    ...(input.accessKeys ? { accessKeys: input.accessKeys } : {}),
     options: {
       documentMetadata: {
         source: 'ai_response',
@@ -421,10 +427,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // D-16: an optional access label ({ everyone: true } or { groupIds }), limited to the caller's own groups (an admin: any group).
+    const accessCheck = await checkUploadAccess({ scope: tenant.scope, raw: body.access, uploaderId: sessionUser.id, signal: req.signal });
+    if (!accessCheck.ok) return NextResponse.json({ error: accessCheck.error }, { status: accessCheck.status });
+    const accessKeys = accessCheck.keys ?? undefined;
+
     const ingestConfig = loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE });
     if (ingestConfig.pipeline === 'unified') {
       if (ingestConfig.pipelineBlocked) return NextResponse.json({ error: ingestConfig.pipelineBlocked }, { status: 503 });
-      return await saveThroughIngest({ content, body, scope: tenant.scope, uploaderId: sessionUser.id, signal: req.signal });
+      return await saveThroughIngest({ content, body, scope: tenant.scope, uploaderId: sessionUser.id, ...(accessKeys ? { accessKeys } : {}), signal: req.signal });
     }
     // D-56: the legacy writer below cannot hold a document.
     if (legacyWriteRefused()) return legacyApprovalRefusal();
@@ -447,7 +458,7 @@ export async function POST(req: Request) {
       generatedAt: new Date().toISOString(),
     };
 
-    const result = await storeAIResponseAsDocument(title, content, chunks, metadata, owner);
+    const result = await storeAIResponseAsDocument(title, content, chunks, metadata, owner, accessKeys);
     console.log('[AI to RAG] Stored AI response as document', {
       documentId: result.documentId,
       chunksStored: result.successfulChunks,

@@ -16,7 +16,7 @@ type Row = Record<string, unknown>;
 const USER_B = '00000000-0000-4000-8000-0000000024b1';
 const MODES: DeploymentMode[] = ['multi-tenant', 'single-tenant'];
 const FN = 'rag_table_lookup';
-const SIGNATURE = 'public.rag_table_lookup(text,text[],integer,integer,jsonb,text[])';
+const SIGNATURE = 'public.rag_table_lookup(text,text[],integer,integer,jsonb,text[],text[],boolean)';
 const LOOKUP = `SELECT row_id::text, document_id::text, table_key, row_index, header, cells, matched_cells, chunk_ids::text[] AS chunk_ids, chunk_id::text, content
   FROM public.${FN}($1, $2::text[], $3, $4, $5::jsonb, $6::text[])`;
 
@@ -292,13 +292,13 @@ for (const mode of MODES) {
       }
     });
 
-    test('re-applying 0861 keeps one function with the same definition and grants', async () => {
+    test('re-applying 0861, then 0933 (its operator rule, Phase 4.3), keeps one function with the same definition and grants', async () => {
       await assertLookupFunction(db);
       const definition = async () =>
         (await db.query<{ def: string; acl: string }>(`SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p WHERE p.proname = '${FN}'`)).rows;
       const before = await definition();
-      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0861_'));
-      assert.equal(files.length, 1);
+      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0861_') || path.basename(file).startsWith('0933_'));
+      assert.equal(files.length, 2);
       await applyMigrationFiles(db, files);
       assert.deepEqual(await definition(), before);
     });
@@ -313,17 +313,17 @@ for (const mode of MODES) {
       test('looks up the scope tenant rows through the RPC', async () => {
         await assertLookupFunction(db);
         const { tableLookup } = await import('../../src/lib/rag/retrieval/table-lookup.ts');
-        const rows = await tableLookup(await scopeA(), ['plin', 'mepra'], params, { client: serviceRpc(db), signal: new AbortController().signal });
+        const rows = await tableLookup(await scopeA(), ['plin', 'mepra'], params, { client: serviceRpc(db), signal: new AbortController().signal, access: { mode: 'off' } });
         assert.deepEqual(rows.map((row) => [row.row_index, row.matched_cells, row.chunk_ids]), [[2, 2, [chunks.main]]]);
         assert.deepEqual(rows[0]!.header, HEADER);
         assert.deepEqual(rows[0]!.cells, { Kelmo: 'plin', Darvi: 'mepra', Quenta: 'sefa', Zemo: 'brel' });
-        const all = await tableLookup(await scopeA(), ['sorna', 'kibe'], params, { client: serviceRpc(db), signal: new AbortController().signal, versionScope: 'all' });
+        const all = await tableLookup(await scopeA(), ['sorna', 'kibe'], params, { client: serviceRpc(db), signal: new AbortController().signal, access: { mode: 'off' }, versionScope: 'all' });
         assert.deepEqual(all.map((row) => row.document_id), [docs.older]);
       });
 
       test('the stage tokenizes the question and reports the token count', async () => {
         const { tableLookupStage } = await import('../../src/lib/rag/retrieval/table-lookup.ts');
-        const result = await tableLookupStage('Plin mepra?', await scopeA(), params, { client: serviceRpc(db), signal: new AbortController().signal });
+        const result = await tableLookupStage('Plin mepra?', await scopeA(), params, { client: serviceRpc(db), signal: new AbortController().signal, access: { mode: 'off' } });
         assert.equal(result.tokenCount, 2);
         assert.deepEqual(result.rows.map((row) => row.row_index), [2]);
       });
@@ -333,20 +333,20 @@ for (const mode of MODES) {
         const { RetrievalBackendError } = await import('../../src/lib/rag/backend/supabase-rpc.ts');
         const calls: string[] = [];
         const none = cannedRpc({ data: [], error: null }, calls);
-        assert.deepEqual(await tableLookup(await scopeA(), [], params, { client: none, signal: new AbortController().signal }), []);
-        assert.deepEqual(await tableLookupStage('   ', await scopeA(), params, { client: none, signal: new AbortController().signal }), { rows: [], tokenCount: 0 });
+        assert.deepEqual(await tableLookup(await scopeA(), [], params, { client: none, signal: new AbortController().signal, access: { mode: 'off' } }), []);
+        assert.deepEqual(await tableLookupStage('   ', await scopeA(), params, { client: none, signal: new AbortController().signal, access: { mode: 'off' } }), { rows: [], tokenCount: 0 });
         assert.deepEqual(calls, []);
 
         const failing = cannedRpc({ data: null, error: { code: '22023', message: 'detail that must not travel' } }, calls);
         const scope = await scopeA();
         await assert.rejects(
-          () => tableLookup(scope, ['plin'], params, { client: failing, signal: new AbortController().signal }),
+          () => tableLookup(scope, ['plin'], params, { client: failing, signal: new AbortController().signal, access: { mode: 'off' } }),
           (error: unknown) => error instanceof RetrievalBackendError && error.rpc === FN && error.code === '22023' && !error.message.includes('detail'),
         );
 
         const good = { row_id: crypto.randomUUID(), document_id: crypto.randomUUID(), table_key: 'k:t0', row_index: 0, header: ['A'], cells: { A: 'x' }, matched_cells: 2, chunk_ids: [crypto.randomUUID()], chunk_id: crypto.randomUUID(), content: 'c', metadata: {} };
         const junk = cannedRpc({ data: [good, null, { ...good, chunk_ids: [] }, { ...good, row_index: 'x' }, { ...good, document_id: 5 }, { ...good, chunk_id: null }, 'text'], error: null }, calls);
-        const rows = await tableLookup(await scopeA(), ['plin'], params, { client: junk, signal: new AbortController().signal });
+        const rows = await tableLookup(await scopeA(), ['plin'], params, { client: junk, signal: new AbortController().signal, access: { mode: 'off' } });
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.row_id, good.row_id);
       });
@@ -357,7 +357,7 @@ for (const mode of MODES) {
         const controller = new AbortController();
         controller.abort();
         const scope = await scopeA();
-        await assert.rejects(() => tableLookup(scope, ['plin'], params, { client: cannedRpc({ data: [], error: null }, calls), signal: controller.signal }));
+        await assert.rejects(() => tableLookup(scope, ['plin'], params, { client: cannedRpc({ data: [], error: null }, calls), signal: controller.signal, access: { mode: 'off' } }));
         assert.deepEqual(calls, []);
       });
     });
@@ -513,7 +513,7 @@ describe('the table_lookup stage and the table:0 list through runRetrieval (sing
   });
 
   test('an RPC failure skips the stage and the other lists fuse as without it', async () => {
-    await db.exec('ALTER FUNCTION public.rag_table_lookup(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup_hidden');
+    await db.exec('ALTER FUNCTION public.rag_table_lookup(text, text[], integer, integer, jsonb, text[], text[], boolean) RENAME TO rag_table_lookup_hidden');
     try {
       const failed = await run({ RAG_TABLE_LOOKUP: 'true' });
       const off = await run({ RAG_TABLE_LOOKUP: 'false' });
@@ -523,7 +523,7 @@ describe('the table_lookup stage and the table:0 list through runRetrieval (sing
         off.candidates.map((candidate) => [candidate.chunk_id, candidate.fused_score]),
       );
     } finally {
-      await db.exec('ALTER FUNCTION public.rag_table_lookup_hidden(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup');
+      await db.exec('ALTER FUNCTION public.rag_table_lookup_hidden(text, text[], integer, integer, jsonb, text[], text[], boolean) RENAME TO rag_table_lookup');
     }
   });
 });

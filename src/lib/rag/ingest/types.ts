@@ -88,6 +88,12 @@ interface IngestInputBase {
    * candidate (confirmed at once for an admin of the tenant). Absent, or with RAG_SUPERSESSION_DETECT=off: nothing is recorded.
    */
   replacesDocumentId?: string;
+  /**
+   * The access label the uploader chose (D-16), already checked by uploadAccessKeys in the route: ['all'] or sorted g:<group> keys (a
+   * connector may pass u:<owner>). Written on the version right after it begins and before any chunk or publish, for the whole lineage.
+   * Absent means untouched: the default, or the label a new version inherits from its lineage (D-19).
+   */
+  accessKeys?: readonly string[];
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;

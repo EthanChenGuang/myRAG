@@ -16,8 +16,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const MIGRATION = 'supabase/migrations/0944_rag_review_reasons_phase52.sql';
 const LATER_REASONS_MIGRATION = 'supabase/migrations/0950_calc_review_reasons.sql';
+// 0984 drops the four-argument signature and rebuilds both functions with access sets; it is re-run after 0944 and 0950.
+const ACCESS_SETS_MIGRATION = 'supabase/migrations/0984_review_items_access_sets.sql';
 const GRANTS_MIGRATION = 'supabase/migrations/0410_security_definer_rpc_grants.sql';
-const SIGNATURE = 'rag_enqueue_review_item(text, text, jsonb, jsonb)';
+const SIGNATURE = 'rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb)';
 const CONFIG = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config/rag/feedback-mining.json'), 'utf8')) as Row;
 const SINCE = '2026-11-16T00:00:00Z';
 const UNTIL = '2026-11-23T00:00:00Z';
@@ -142,10 +144,11 @@ for (const mode of MODES) {
       await rejectsWith(() => insertItem(db, ['calc_other']), '23514');
     });
 
-    test('applying 0944 and the later 0950 a second time succeeds and leaves the catalog unchanged', async () => {
+    test('applying 0944, the later 0950 and 0984 a second time succeeds and leaves the catalog unchanged', async () => {
       const once = await catalog(db);
       await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
       await db.exec(fs.readFileSync(path.join(REPO_ROOT, LATER_REASONS_MIGRATION), 'utf8'));
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, ACCESS_SETS_MIGRATION), 'utf8'));
       assert.deepEqual(await catalog(db), once);
     });
 

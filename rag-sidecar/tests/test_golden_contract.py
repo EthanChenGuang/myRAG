@@ -450,8 +450,15 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
             item = GoldenItem.model_validate(dumped)
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"
-        # 05.2-29 answer-rule items carry exactly their category's structure on top of the pre-Phase-3.2 keys.
-        extra = {"partial_answer": {"partial"}, "stale_version": {"versions"}, "off_topic_context": {"off_topic"}}
+        # 05.2-29 answer-rule items and 05.2.1-12 calculation and overflow items carry exactly their category's structure
+        # on top of the pre-Phase-3.2 keys.
+        extra = {
+            "partial_answer": {"partial"},
+            "stale_version": {"versions"},
+            "off_topic_context": {"off_topic"},
+            "multi_step_calc": {"calc"},
+            "context_overflow": {"overflow"},
+        }
         assert set(dumped) == _PRE_PHASE32_ITEM_KEYS | extra.get(item.category, set()), f"{name}:{number}"
         if dumped["retrieval_filters"] is not None:
             filter_keys = set(dumped["retrieval_filters"])

@@ -227,11 +227,12 @@ def test_http_failure_message_carries_no_key_or_content():
     assert "secret customer text" not in str(excinfo.value)
 
 
-# Plan 04.2-37: 36 Phase 4.2 documents in en and zh, 37 in it (30 generated copies of a template each).
+# Plan 04.2-37: 36 Phase 4.2 documents in en and zh, 37 in it (30 generated copies of a template each); plan 05.2.1-12
+# adds calc-rules and long-reference per language.
 def test_directory_source_matches_corpus_output_for_one_language():
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus" / "en").documents()
     expected = [d for d in load_corpus(REPO_ROOT / "eval" / "fixtures" / "corpus") if d.language == "en"]
-    assert len(docs) == 13 + 36 + 2
+    assert len(docs) == 13 + 36 + 2 + 2
     assert sorted(d.id for d in docs) == sorted(d.relpath for d in expected)
     by_relpath = {d.relpath: d for d in expected}
     for doc in docs:
@@ -240,7 +241,7 @@ def test_directory_source_matches_corpus_output_for_one_language():
 
 def test_directory_source_reads_every_language_and_plain_files(tmp_path):
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus").documents()
-    assert len(docs) == 37 + 36 + 36 + 37 + 6
+    assert len(docs) == 37 + 36 + 36 + 37 + 6 + 6
     (tmp_path / "notes.txt").write_text("A plain note about widgets.", encoding="utf-8")
     (tmp_path / "empty.md").write_text("  \n", encoding="utf-8")
     plain = DirectoryWorkspaceSource(tmp_path).documents()

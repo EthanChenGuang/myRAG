@@ -42,6 +42,7 @@ const STRUCTURED_TRANSFORM: Readonly<Record<string, LangChainTransform>> = {
   QueryVariants: 'expand',
   HypotheticalDocument: 'hyde',
   SubQuestions: 'decompose',
+  SubQuestionsWithFilters: 'decompose',
   QueryTranslation: 'translate',
 };
 const INVALID_OUTPUT = Object.freeze({ unexpected_field: true });

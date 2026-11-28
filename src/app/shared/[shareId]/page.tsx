@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { accessGroupsEnabled } from '@/lib/rag';
+import { canViewShared, sharedViewerId } from '@/lib/chat-share-access';
 import { SharedChatContent } from './shared-chat-content';
 
 // Metadata generation using the documented pattern
@@ -23,13 +25,21 @@ export async function generateMetadata({
     
     const { data: chat, error } = await supabase
       .from('chats')
-      .select('title')
+      .select(accessGroupsEnabled() ? 'id, title, messages' : 'title')
       .eq('share_id', shareId)
       .eq('shared', true)
       .maybeSingle();
 
     if (error) {
       console.error('Error fetching shared chat metadata:', error);
+      return {
+        title: 'Shared Chat',
+        description: 'View a shared chat conversation',
+      };
+    }
+
+    // D-27: the same live check as the page, so a refused chat never shows its title in the tab or a link preview.
+    if (chat && !(await canViewShared(chat, () => sharedViewerId()))) {
       return {
         title: 'Shared Chat',
         description: 'View a shared chat conversation',
@@ -75,7 +85,7 @@ export default async function Page({
     
     const { data: chat, error } = await supabase
       .from('chats')
-      .select('title, messages, created_at, updated_at')
+      .select(accessGroupsEnabled() ? 'id, title, messages, created_at, updated_at' : 'title, messages, created_at, updated_at')
       .eq('share_id', shareId)
       .eq('shared', true)
       .maybeSingle();
@@ -90,9 +100,15 @@ export default async function Page({
       notFound();
     }
 
+    // D-27: a viewer who may not see every cited document gets the page of an unknown link.
+    if (!(await canViewShared(chat, () => sharedViewerId()))) {
+      notFound();
+    }
+
     // Ensure messages is always an array
     safeChat = {
-      ...chat,
+      created_at: chat.created_at,
+      updated_at: chat.updated_at,
       title: chat.title ?? 'Shared Chat',
       messages: Array.isArray(chat.messages) ? chat.messages : []
     };

@@ -168,10 +168,10 @@ describe('exactIdLookup pass-through', () => {
     const { client, calls } = recordingClient();
     const scope = mintScope('personal', USER_A, null);
     const signal = new AbortController().signal;
-    await exactIdLookup(scope, tokens as never, { client, signal });
-    await exactIdLookup(scope, tokens as never, { client, signal, versionScope: 'current' });
-    await exactIdLookup(scope, tokens as never, { client, signal, versionScope: 'all', identifiersNorm: ['ab1234'] });
-    await exactIdLookup(scope, tokens as never, { client, signal, versionScope: { to: '2024-12-31' } });
+    await exactIdLookup(scope, tokens as never, { client, signal, access: { mode: 'off' } });
+    await exactIdLookup(scope, tokens as never, { client, signal, access: { mode: 'off' }, versionScope: 'current' });
+    await exactIdLookup(scope, tokens as never, { client, signal, access: { mode: 'off' }, versionScope: 'all', identifiersNorm: ['ab1234'] });
+    await exactIdLookup(scope, tokens as never, { client, signal, access: { mode: 'off' }, versionScope: { to: '2024-12-31' } });
     expect(Object.keys(calls[0]?.args ?? {}).sort()).toEqual(['p_limit', 'p_tenant_key', 'p_tokens']);
     expect(Object.keys(calls[1]?.args ?? {}).sort()).toEqual(['p_limit', 'p_tenant_key', 'p_tokens']);
     expect(calls[2]?.args.p_version_scope).toEqual({ mode: 'all' });

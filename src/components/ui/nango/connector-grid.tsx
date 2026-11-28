@@ -10,6 +10,7 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   CloudOff,
   Folder,
   FolderOpen,
@@ -24,11 +25,30 @@ import { FilePicker } from './file-picker';
 import { NotionPagePicker } from './notion-page-picker';
 import { useLanguage } from '@/components/providers/language-provider';
 import type { TranslationKeys } from '@/translations';
+import { accessGroupText } from '@/components/ui/access-group-labels';
+import { isMultiTenant } from '@/lib/deployment-mode';
 
 interface SyncResult {
   provider: SupportedProvider;
   stats: SyncStats | null;
   timestamp: Date;
+}
+
+/** D-20, UI-SPEC 6.14: documents the sync left with the fallback audience, for the person who ran it; never in multi-tenant mode. */
+export function syncResultLines(stats: Pick<SyncStats, 'failClosed'> | null, mode: 'single' | 'multi', language: string): string[] {
+  if (mode !== 'single' || !stats) return [];
+  const count = stats.failClosed;
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return [];
+  return [accessGroupText('sync.failClosed', language, { count })];
+}
+
+export function SyncFailClosedLine({ text }: { text: string }) {
+  return (
+    <p className="basis-full flex items-start gap-2 text-amber-700 dark:text-amber-300">
+      <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+      <span>{text}</span>
+    </p>
+  );
 }
 
 const ALL_PROVIDERS: SupportedProvider[] = [
@@ -61,7 +81,7 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
   const { connect, isConnecting, error, clearError } = useNango();
   const { config: connectorConfig, loading: configLoading } = useConnectorConfig();
 
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
   const formatTemplate = useCallback((template: string, values: Record<string, string | number>) => {
@@ -331,8 +351,10 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
         )}
 
         {/* Sync Results Banner */}
-        {lastSyncResult && lastSyncResult.stats && (
-          <div className="mb-4 p-3 rounded-lg bg-green-500/10 text-green-700 dark:text-green-400 text-sm flex items-center gap-2">
+        {lastSyncResult && lastSyncResult.stats && (() => {
+          const accessLines = syncResultLines(lastSyncResult.stats, isMultiTenant() ? 'multi' : 'single', language);
+          return (
+          <div className={cn('mb-4 p-3 rounded-lg bg-green-500/10 text-green-700 dark:text-green-400 text-sm flex items-center gap-2', accessLines.length > 0 && 'flex-wrap')}>
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <span className="flex flex-wrap gap-1">
               <strong>{PROVIDER_CONFIG[lastSyncResult.provider].displayName}</strong>
@@ -375,8 +397,12 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
             >
               {t('dismiss')}
             </button>
+            {accessLines.map((line) => (
+              <SyncFailClosedLine key={line} text={line} />
+            ))}
           </div>
-        )}
+          );
+        })()}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {ALL_PROVIDERS.map((provider) => {

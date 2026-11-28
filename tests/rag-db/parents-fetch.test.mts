@@ -94,6 +94,7 @@ describe('expand_parents on the two-tenant fixture', () => {
     const collector = collectorModule.createTraceCollector({ profile: 'chat', tenantKey: `u:${scope.userId}` });
     const params = { ...paramsModule.effectiveRetrievalParams('chat', config, null), final_top_k: 20 };
     const out = await contextModule.runContextStages({
+      access: { mode: 'off' },
       input: { scope, query: 'canary phrase', profile: 'chat', signal: new AbortController().signal },
       config,
       profile: 'chat',
@@ -146,6 +147,15 @@ describe('expand_parents on the two-tenant fixture', () => {
     const rows = (rpc.data ?? []) as Array<{ id: string; tenant_key: string }>;
     assert.deepEqual(rows.map((row) => row.id), [PARENT_A]);
     assert.ok(rows.every((row) => row.tenant_key === KEY_A));
+  });
+
+  test('the 0930 signature takes p_access_keys and p_access_all through the service client', async () => {
+    const open = await client.rpc('rag_fetch_parents', { p_tenant_key: KEY_A, p_parent_ids: [PARENT_A], p_access_keys: ['all'], p_access_all: false });
+    assert.equal(open.error, null);
+    assert.deepEqual(((open.data ?? []) as Array<{ id: string }>).map((row) => row.id), [PARENT_A], 'an {all} parent reaches a caller holding all');
+    const other = await client.rpc('rag_fetch_parents', { p_tenant_key: KEY_A, p_parent_ids: [PARENT_A], p_access_keys: ['g:00000000-0000-4000-8000-0000000000ff'], p_access_all: false });
+    assert.equal(other.error, null);
+    assert.deepEqual(other.data, [], 'a caller without the parent label gets nothing');
   });
 
   test('an anon client cannot call rag_fetch_parents', async () => {

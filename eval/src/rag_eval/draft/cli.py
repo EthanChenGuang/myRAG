@@ -209,7 +209,14 @@ def main(
         print("ANTHROPIC_API_KEY is not set (use --no-claude to skip Claude drafting)", file=sys.stderr)
         return EXIT_KEYS
     if use_ragas and ragas_generate is None:
-        missing = [name for name in ("OPENROUTER_API_KEY", "OPENAI_API_KEY") if not os.environ.get(name)]
+        from rag_eval.judge.openai_route import OpenAiRouteError, judge_key_names
+
+        try:
+            key_names = judge_key_names()
+        except OpenAiRouteError as exc:
+            print(str(exc), file=sys.stderr)
+            return EXIT_INPUT
+        missing = [name for name in key_names if not os.environ.get(name)]
         if missing:
             print(f"{' and '.join(missing)} not set (use --no-ragas to skip Ragas generation)", file=sys.stderr)
             return EXIT_KEYS

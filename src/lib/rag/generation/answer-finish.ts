@@ -68,6 +68,8 @@ export interface AnswerFinishInput {
   accessSets?: string[][] | null;
   /** Phase 5.2.1 D-75: the calculation check of the answer; stored as checks.calc and checks.calc_items, reasons appended. */
   calc?: AnswerCalcInput;
+  /** Phase 5.2.1 D-86: the prompt-budget summary of the turn; stored as checks.prompt_budget. */
+  promptBudget?: AnswerChecks['prompt_budget'];
 }
 
 export interface AnswerCalcInput {
@@ -422,10 +424,11 @@ async function ownedChatId(admin: SupabaseClient, input: AnswerFinishInput): Pro
 
 /** D-23, D-89: the stream-end checks with the language detected from the answer text; null when they fail the contract (not written). */
 function recordChecks(input: AnswerFinishInput, textLanguage: string | null): AnswerChecks | null {
-  if (!input.checks && !input.calc) return null;
+  if (!input.checks && !input.calc && !input.promptBudget) return null;
   const base = input.checks ?? { truncated: false, finish_reason: null };
   const calc = input.calc ? { ...(input.calc.primary ? { calc: input.calc.primary } : {}), calc_items: input.calc.items } : {};
-  const parsed = AnswerChecksSchema.safeParse({ ...base, ...calc, text_language: textLanguage });
+  const promptBudget = input.promptBudget ? { prompt_budget: input.promptBudget } : {};
+  const parsed = AnswerChecksSchema.safeParse({ ...base, ...calc, ...promptBudget, text_language: textLanguage });
   if (parsed.success) return parsed.data;
   console.warn('[Answer Record] Checks failed the contract; not written:', { answerId: input.answerId, issues: parsed.error.issues.length });
   return null;
@@ -453,6 +456,8 @@ export interface CalcReviewEnqueueInput {
   traceId?: string | null;
   /** Ghost chats store and enqueue nothing (D-23). */
   ghost: boolean;
+  /** Phase 4.3 (D-25, A-06): the source documents' access-key arrays while access groups are on; passed to the enqueue as given. */
+  accessSets?: readonly (readonly string[])[] | null;
 }
 
 export interface CalcReviewEnqueueDeps {
@@ -478,6 +483,7 @@ export function scheduleCalcReviewEnqueue(input: CalcReviewEnqueueInput, deps: P
           documentIds: input.documentIds,
           detector: 'calc_check',
           traceId: input.traceId ?? null,
+          ...(input.accessSets ? { accessSets: input.accessSets } : {}),
         });
       }
     });

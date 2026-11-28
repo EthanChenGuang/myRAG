@@ -67,6 +67,8 @@ TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PHASE53_TAG = "phase53_fixture"
 # And plan 05.2-29 the answer-rule and link-injection items.
 PHASE52_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
+# And plan 05.2.1-12 the calculation and context-overflow items.
+PHASE521_CATEGORIES = frozenset({"multi_step_calc", "context_overflow"})
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -77,6 +79,7 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or bool(TERM_ITEM_ID.match(item.id))
         or PHASE53_TAG in item.tags
         or item.category in PHASE52_CATEGORIES
+        or item.category in PHASE521_CATEGORIES
         or "link_injection" in item.tags
     )
 

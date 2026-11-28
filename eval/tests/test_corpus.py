@@ -8,8 +8,8 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
-# Re-recorded on train 33 (train 32 plus the 05.2-29 sec-link-topics split).
-COMMITTED_CORPUS_SHA256 = "f95a702dff4d0d85af333bca1ecbb4508bf14c93e1bdd75a8f948c1e02bfabb2"
+# Re-recorded by plan 05.2.1-12 (calc-rules and long-reference documents) on train 33 plus 05.2.1-01 and -06.
+COMMITTED_CORPUS_SHA256 = "16f10857169c282a15df7f9434a43e0452111ae83c9c5b77a330f12eb4709160"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 

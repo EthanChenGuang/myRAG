@@ -30,9 +30,11 @@ import {
   answerRulesHashComponent,
   calcBudgetHashComponent,
   terminologyHashBlock,
+  glossaryHashBlock,
   type AnswerRulesHashConfig,
   type CalcBudgetHashConfig,
   type AttributeFilterHashStage,
+  type GlossaryHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
 } from './config-hash';
@@ -80,6 +82,8 @@ export interface BuildV2ResultInput {
   translationHash?: TranslationHashField;
   /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
   queryPlan?: QueryPlan | null;
+  /** Phase 6.2 P-10: searches counted against max_searches; set only while the layer ran the search stage. */
+  searchesCounted?: number;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
   layerTranslate?: boolean;
   /** D-44: the effective date the search used; absent while RAG_EFFECTIVE_DATES is off. */
@@ -98,6 +102,8 @@ export interface BuildV2ResultInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off. */
+  glossary?: GlossaryHashStage;
 }
 
 export interface RequestConfigHashInput {
@@ -120,6 +126,8 @@ export interface RequestConfigHashInput {
   lexicalStamp?: LexicalStamp;
   /** D-30: how the attribute_resolve stage ended; absent reads as disabled, so the hash is the value before the filter. */
   attributeFilter?: AttributeFilterHashStage;
+  /** D-14: the glossary state; absent reads as switch off, so the hash keeps its value. */
+  glossary?: GlossaryHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -176,6 +184,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(terminology ? { terminology } : {}),
     ...(attributeFilter ? { attributeFilter } : {}),
     lexicalScoring: lexicalScoringHashBlock(config),
+    glossary: glossaryHashBlock(ctx.glossary ?? { enabled: false }),
   });
 }
 
@@ -345,6 +354,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
     ...(ctx.lexicalStamp ? { lexicalStamp: ctx.lexicalStamp } : {}),
     ...(ctx.attributeFilter ? { attributeFilter: ctx.attributeFilter } : {}),
+    ...(ctx.glossary ? { glossary: ctx.glossary } : {}),
   });
 
   const base = {
@@ -362,6 +372,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(identifiers?.notFound ? { identifierSuggestions: [...identifiers.suggestions] } : {}),
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
+    ...(ctx.searchesCounted !== undefined ? { searchesCounted: ctx.searchesCounted } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
     ...(ctx.packing ? { packing: ctx.packing } : {}),
   };

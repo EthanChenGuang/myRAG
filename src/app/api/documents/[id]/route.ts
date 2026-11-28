@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { recomputeDirtyDupClusters, removeDocumentObjects, repairOwnerMembership, resolveTenantScope, scopeKey, type DocumentObjectRow, type RagAdminDb, type TenantScope } from '@/lib/rag';
+import {
+  accessGroupsEnabled,
+  accessTableFilter,
+  recomputeDirtyDupClusters,
+  removeDocumentObjects,
+  repairOwnerMembership,
+  resolveAccessScope,
+  resolveTenantScope,
+  scopeAccessFilter,
+  scopeKey,
+  type DocumentObjectRow,
+  type RagAdminDb,
+  type TenantScope,
+} from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
@@ -19,11 +32,17 @@ interface Scopable<Q> {
   is(column: string, value: null): Q;
 }
 
+interface Overlappable<Q> {
+  overlaps(column: string, value: readonly string[]): Q;
+}
+
 interface Authorized {
   admin: ReturnType<typeof getSupabaseAdmin>;
   predicate: Predicate;
   tenantKey: string;
   scope: TenantScope;
+  /** D-15: the caller's access keys for the lookup by id; null while the switch is off or for an access admin. */
+  accessKeys: readonly string[] | null;
 }
 
 type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
@@ -37,6 +56,11 @@ function applyPredicate<Q extends Scopable<Q>>(query: Q, predicate: Predicate): 
   if (predicate.kind === 'personal') return query.is('organization_id', null).eq('user_id', predicate.userId);
   if (predicate.kind === 'owner') return query.eq('user_id', predicate.userId);
   return query;
+}
+
+/** D-15: a document the caller may not see is looked up like an unknown id. */
+function applyAccess<Q extends Overlappable<Q>>(query: Q, keys: readonly string[] | null): Q {
+  return keys === null ? query : query.overlaps('access_groups', keys);
 }
 
 async function authorize(
@@ -98,7 +122,13 @@ async function authorize(
   } else if (scope.kind === 'personal' && scope.userId) {
     predicate = { kind: 'personal', userId: scope.userId };
   }
-  return { ok: true, value: { admin, predicate, tenantKey: scopeKey(scope), scope } };
+  let accessKeys: readonly string[] | null = null;
+  if (accessGroupsEnabled()) {
+    const resolved = await resolveAccessScope({ scope, identity: { kind: 'user', userId: sessionUser.id }, signal: request.signal });
+    if (!resolved.ok) return { ok: false, response: fail(503, 'access_groups_unavailable') };
+    accessKeys = accessTableFilter(scopeAccessFilter(resolved.scope));
+  }
+  return { ok: true, value: { admin, predicate, tenantKey: scopeKey(scope), scope, accessKeys } };
 }
 
 export async function DELETE(
@@ -111,12 +141,12 @@ export async function DELETE(
 
     const auth = await authorize(request, new URL(request.url).searchParams.get('organizationId'), true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate, tenantKey, scope } = auth.value;
+    const { admin, predicate, tenantKey, scope, accessKeys } = auth.value;
 
     // The row must be in the caller's tenant; another tenant's id reads exactly like an unknown id.
-    const { data: owned, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id, lineage_id').eq('id', id).eq('tenant_key', tenantKey),
-      predicate
+    const { data: owned, error: lookupError } = await applyAccess(
+      applyPredicate(admin.from('documents').select('id, lineage_id').eq('id', id).eq('tenant_key', tenantKey), predicate),
+      accessKeys
     ).maybeSingle();
     if (lookupError) {
       console.error('[Documents] Ownership lookup failed', { code: lookupError.code });
@@ -188,7 +218,7 @@ export async function PATCH(
     const queryOrganizationId = new URL(request.url).searchParams.get('organizationId');
     const auth = await authorize(request, queryOrganizationId ?? body.organizationId, true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate, tenantKey } = auth.value;
+    const { admin, predicate, tenantKey, accessKeys } = auth.value;
 
     const externalUrl = body.external_url;
     if (typeof externalUrl !== 'string' || externalUrl.length > MAX_URL_LENGTH) {
@@ -203,9 +233,9 @@ export async function PATCH(
       }
     }
 
-    const { data: named, error: lookupError } = await applyPredicate(
-      admin.from('documents').select('id, lineage_id, is_current, metadata').eq('id', id).eq('tenant_key', tenantKey),
-      predicate
+    const { data: named, error: lookupError } = await applyAccess(
+      applyPredicate(admin.from('documents').select('id, lineage_id, is_current, metadata').eq('id', id).eq('tenant_key', tenantKey), predicate),
+      accessKeys
     ).maybeSingle();
     if (lookupError) {
       console.error('[Documents] Ownership lookup failed', { code: lookupError.code });

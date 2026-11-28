@@ -103,7 +103,7 @@ describe('assembleContext is byte-identical to the frozen chat assembly oracle',
     { isGPTModel, model }: { isGPTModel: boolean; model: string },
   ) {
     const admin = adminClient();
-    const rows = await fetchRows.fetchAssemblyRows(candidates, { adminClient: admin, signal: new AbortController().signal });
+    const rows = await fetchRows.fetchAssemblyRows(candidates, { access: { mode: 'off' }, adminClient: admin, signal: new AbortController().signal });
 
     const realLog = console.log;
     console.log = () => undefined;

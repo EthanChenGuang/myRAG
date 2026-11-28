@@ -11,6 +11,7 @@
   "RAG_ATTRIBUTE_HEADER": "false",
   "RAG_BEHAVIOR_MODE": "strict",
   "RAG_BGE_M3_SERVING": "hosted",
+  "RAG_BGE_M3_VIA": "deepinfra",
   "RAG_CACHE_ENABLED": "true",
   "RAG_CALC_CHECK": "false",
   "RAG_CALC_TOOL": "false",

@@ -2,48 +2,48 @@
   "bins": [
     {
       "confident": true,
-      "correct": 85,
+      "correct": 92,
       "length_bucket": "short",
-      "n": 85,
+      "n": 92,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9885
+      "value": 0.9894
     },
     {
       "confident": true,
-      "correct": 18,
+      "correct": 22,
       "length_bucket": "short",
-      "n": 18,
+      "n": 23,
       "script_class": "mixed",
       "source": "calibrated",
-      "value": 0.95
+      "value": 0.92
     },
     {
       "confident": true,
-      "correct": 196,
+      "correct": 219,
       "length_bucket": "medium",
-      "n": 198,
+      "n": 221,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.985
+      "value": 0.9865
     },
     {
       "confident": true,
-      "correct": 35,
+      "correct": 37,
       "length_bucket": "medium",
-      "n": 35,
+      "n": 37,
       "script_class": "mixed",
       "source": "calibrated",
-      "value": 0.973
+      "value": 0.9744
     },
     {
       "confident": true,
-      "correct": 171,
+      "correct": 212,
       "length_bucket": "long",
-      "n": 171,
+      "n": 212,
       "script_class": "single",
       "source": "calibrated",
-      "value": 0.9942
+      "value": 0.9953
     },
     {
       "confident": true,
@@ -110,11 +110,11 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-27T13:53:43Z",
+  "generated_at": "2026-11-27T15:50:14Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
-      "sha256": "e57df6d12d834e95d1c2614840a93efabf308145542b030677aed0eb854a5647"
+      "sha256": "dc812d5fa8c6a64cfc604e4e6211baa0adf1edab73d1df5c4aaecffd7c7d8eb6"
     },
     {
       "path": "eval/fixtures/domain/golden.jsonl",
@@ -122,7 +122,11 @@
     },
     {
       "path": "eval/fixtures/ingest/golden-ingest.jsonl",
-      "sha256": "edaa818df2ae3250d7c7252abcd21bbf7876eb8879f3f14a1e38ffc643decc6e"
+      "sha256": "c3669dd5e0f994ed1b03d4b8d35d4495d302958e94c4b43822fea9fd4caa0995"
+    },
+    {
+      "path": "eval/fixtures/lang-detect/cases.jsonl",
+      "sha256": "46a98551c0cf9598b63921062e2427a93040ed888d4d41516bcc239414d29cca"
     },
     {
       "path": "src/lib/rag/lang/detect.ts",

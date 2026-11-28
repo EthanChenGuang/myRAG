@@ -4,6 +4,7 @@ import type { VersionScope } from '../backend/types';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
 import { queryLexicalTokens } from '../lexical/tokenize';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
+import { accessRpcArgs, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import type { Candidate } from '../types';
 
@@ -105,6 +106,8 @@ export interface ExactIdRow {
 export interface ExactIdLookupOptions {
   client: RpcClient;
   signal: AbortSignal;
+  /** D-11, D-12: the request's access filter; sent with the lookup so a restricted identifier never resolves for an outsider. */
+  access: ScopeAccessFilter;
   limit?: number;
   /** Passed through to the SQL function only when set; 'current' sends nothing. */
   versionScope?: VersionScope;
@@ -172,6 +175,7 @@ export async function exactIdLookup(scope: TenantScope, tokens: ExactIdToken[], 
       p_tokens: values,
       p_limit: options.limit ?? EXACT_ID_LIMIT,
       ...versionAndIdentifierArgs(options.versionScope, options.identifiersNorm),
+      ...accessRpcArgs(options.access),
     })
     .abortSignal(signal);
   signal.throwIfAborted();

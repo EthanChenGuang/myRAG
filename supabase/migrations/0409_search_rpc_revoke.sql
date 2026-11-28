@@ -11,6 +11,10 @@ BEGIN
     REVOKE EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean)') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.match_documents_by_workspace(vector, integer, double precision, uuid, uuid, text[], boolean) TO service_role;
+  END IF;
   IF to_regprocedure('public.match_document_chunks_by_org(uuid, vector, integer, double precision)') IS NOT NULL THEN
     REVOKE EXECUTE ON FUNCTION public.match_document_chunks_by_org(uuid, vector, integer, double precision) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.match_document_chunks_by_org(uuid, vector, integer, double precision) TO service_role;

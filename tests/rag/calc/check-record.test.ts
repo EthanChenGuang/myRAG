@@ -131,6 +131,15 @@ describe('answer record: calculation checks and reasons (D-23, D-55, D-75)', () 
 describe('scheduleCalcReviewEnqueue (D-55 direct route)', () => {
   const base = { tenantKey: 's:default', sourceChunkIds: ['c1'], documentIds: ['d1'], traceId: 'trace-calc-1' };
 
+  it('passes the access sets through to the enqueue when given, and leaves them out otherwise', async () => {
+    const enqueue = vi.fn(async () => null);
+    const tasks: Array<() => Promise<void>> = [];
+    const accessSets = [['g:00000000-0000-4000-8000-0000000000a1']];
+    scheduleCalcReviewEnqueue({ ...base, reasons: ['calc_mismatch'], ghost: false, accessSets }, { enqueue, schedule: (task) => tasks.push(task) });
+    for (const task of tasks) await task();
+    expect((enqueue.mock.calls[0] as unknown[])[0]).toMatchObject({ reason: 'calc_mismatch', accessSets });
+  });
+
   it('enqueues each reason with ids only after the response', async () => {
     const enqueue = vi.fn(async () => null);
     const tasks: Array<() => Promise<void>> = [];
