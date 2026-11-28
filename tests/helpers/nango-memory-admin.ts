@@ -35,6 +35,7 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
     let operation: RecordedOp['operation'] = 'select';
     let values: Row | undefined;
     let limit: number | null = null;
+    let conflict: string[] = [];
     const filters: Filter[] = [];
     const match = (row: Row) =>
       filters.every((entry) => (entry.kind === 'eq' ? row[entry.column] === entry.value : (entry.value as unknown[]).includes(row[entry.column])));
@@ -47,6 +48,11 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
         tables[table] = rows.filter((row) => !matched.includes(row));
       } else if (operation === 'update' && values) {
         for (const row of matched) Object.assign(row, values);
+      } else if (operation === 'upsert' && values) {
+        const next = values;
+        const existing = conflict.length > 0 ? rows.find((row) => conflict.every((column) => row[column] === next[column])) : undefined;
+        if (existing) Object.assign(existing, next);
+        else tables[table] = [...rows, { ...next }];
       }
       return { data: limit === null ? matched : matched.slice(0, limit), error: null };
     };
@@ -66,9 +72,10 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
         values = next;
         return builder;
       },
-      upsert(next: Row) {
+      upsert(next: Row, upsertOptions?: { onConflict?: string }) {
         operation = 'upsert';
         values = next;
+        conflict = (upsertOptions?.onConflict ?? '').split(',').map((column) => column.trim()).filter(Boolean);
         return builder;
       },
       eq(column: string, value: unknown) {
