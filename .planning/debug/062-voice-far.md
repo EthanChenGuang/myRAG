@@ -4,7 +4,7 @@ trigger: "both q62 voice eval arms exit 11: absolute gate false_answer_rate 0.84
 found_by: 06.2-30 executor
 root_cause_commit: c0ff2374 (quick-53 gap 3), reached the trains through 4f6d19c7
 classification: gate config mismatch (not a voice regression, not fixture or baseline drift)
-fix_applied: false (the fix is a gate-mode decision; D-37)
+fix_applied: true (option 1, owner approved in person 2026-11-28 08:57Z, relayed by the orchestrator)
 ---
 
 # Debug: q62 voice arms fail the absolute gate (exit 11)
@@ -52,3 +52,20 @@ Any fix changes which gate mode applies to the voice entry, so it is a gate defi
 3. Keep enforce and treat 0.84 as a real voice finding for 06.2-30 (the voice similarity floor), to be fixed in retrieval, not in the gate.
 
 Meanwhile 06.2-30 can run both voice arms with `--gates-mode report` explicitly, which is what 06.2-41 effectively ran.
+
+## Resolution (2026-11-28)
+The owner chose option 1 (recorded in `06.2-CONTEXT.md`, "Owner decision (2026-11-28, 08:57Z): voice entry absolute gate mode").
+- `resolveGatesMode` takes the run's `entryProfile`. A voice entry run without an explicit flag resolves to `report` (source
+  `voice_entry`, no tier). `run-smoke.mts` passes `runConfig.entryProfile` and logs the voice mode line. Explicit flags still win.
+- RED first: `tests/eval-gate-mode-default.test.ts`, describe "a voice entry run does not take a text tier mode". It checks that a
+  voice run resolves to report, that the text `smoke` tier still resolves to enforce with `false_refusal_rate` report-only, and
+  that explicit flags win.
+- Both q62 voice arms now exit 0: the absolute gate is FAIL in report mode, and the relative gate passes.
+- No threshold, metric definition or text-tier mode changed. The measurement record is untouched.
+
+## Deferred finding: voice correct refusal 0.157
+Separate from the gate mode. The voice entry refuses only 8 of 51 no-answer items (correct_refusal 0.157, so the derived
+false_answer_rate is 0.84 in en/it/zh). Possible cause: the voice path does not
+apply the embedding profile's similarity floor or the strict refusal stage. That would match the similarity-floor finding 06.2-41
+handed to 06.2-30. This is not investigated here. Owner: 06.2-30, or a follow-up plan. Any change must go through the voice
+baseline and the relative gate, not through the absolute gate mode.

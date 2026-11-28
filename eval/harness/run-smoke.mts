@@ -355,10 +355,14 @@ async function main(): Promise<number> {
       fixtureMode,
       live: Boolean(baseUrl),
       customInputs: gatesFlag !== undefined || values.golden !== undefined,
+      entryProfile: runConfig?.entryProfile,
     },
     MEASUREMENT_PATH,
     gatesReportOnly,
   );
+  if (gatesResolution.source === 'voice_entry') {
+    console.log('[Eval Harness] absolute gate mode report: a voice entry run measures retrieval only and no voice tier is measured; --gates-mode enforce|report overrides');
+  }
   if (gatesResolution.source === 'measured_tier') {
     const reportOnly = gatesResolution.reportOnly.length > 0 ? ` with report-only ${gatesResolution.reportOnly.join(',')}` : '';
     console.log(
