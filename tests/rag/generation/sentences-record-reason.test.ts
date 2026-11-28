@@ -57,3 +57,13 @@ describe('not_checked sentences carry a reason on the chat path (GEN-09, GEN-10)
     expect(AnswerSentenceSchema.safeParse(sentence({ support: 'supported', scorer: 'hhem_2_1_open', reason: null })).success).toBe(true);
   });
 });
+
+describe('records stored before the reason rule keep loading', () => {
+  it('message metadata and stored checks with reason null read back as claim_check_off', async () => {
+    const { pickAnswerMetadata } = await import('@/lib/chat/answer-metadata');
+    const legacy = sentence({ support: 'not_checked', reason: null });
+    const picked = pickAnswerMetadata({ sentences: [legacy], checks: { truncated: false, finish_reason: 'stop', sentences: [legacy] } });
+    expect(picked.sentences?.map((record) => record.reason)).toEqual(['claim_check_off']);
+    expect(picked.checks?.sentences?.map((record) => record.reason)).toEqual(['claim_check_off']);
+  });
+});

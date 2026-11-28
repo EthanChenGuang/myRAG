@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from rag_sidecar.contracts.calc import CalcCheck
 from rag_sidecar.contracts.groundedness import GroundednessScorer, ReasonCode, _Contract
@@ -46,7 +46,16 @@ class BlockedRange(_Contract):
         return self
 
 
+# The not_checked -> reason rule of AnswerSentence._rules as JSON Schema if/then; scripts/gen-zod.mjs turns it into a Zod refinement.
+_NOT_CHECKED_NEEDS_REASON = {
+    "if": {"type": "object", "properties": {"support": {"const": "not_checked"}}},
+    "then": {"type": "object", "properties": {"reason": {"type": "string"}}, "required": ["reason"]},
+}
+
+
 class AnswerSentence(_Contract):
+    model_config = ConfigDict(json_schema_extra=_NOT_CHECKED_NEEDS_REASON)
+
     index: int = Field(ge=0)
     part: int = Field(ge=0)
     start: int = Field(ge=0)
