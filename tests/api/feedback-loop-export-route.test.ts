@@ -205,6 +205,34 @@ describe('GET /api/rag/admin/feedback-loop/export (D-17, D-20)', () => {
     const trainingLines = lines(await (await exportRoute.GET(get(`?kind=training&tenant=${TENANT_A}`))).text()) as Array<{ review_item_id: string }>;
     expect(trainingLines.map((line) => line.review_item_id).sort()).toEqual([golden, training].sort());
   });
+  it('T-07-77: names the verified admin id in the [Feedback Loop] export and [Review] chunks lines, ids only', async () => {
+    enable();
+    guard.session = { id: ADMIN_ID };
+    const { exportRoute } = await load();
+    const log = vi.mocked(console.log);
+    for (const kind of ['dictionary', 'training', 'golden'] as const) {
+      log.mockClear();
+      const response = await exportRoute.GET(get(`?kind=${kind}&tenant=${TENANT_A}`));
+      expect(response.status).toBe(200);
+      await response.text();
+      const exportLines = log.mock.calls.filter((call) => call[0] === '[Feedback Loop] export');
+      expect(exportLines, kind).toHaveLength(1);
+      expect(exportLines[0][1], kind).toMatchObject({ kind, admin: ADMIN_ID });
+      const chunkLines = log.mock.calls.filter((call) => call[0] === '[Review] chunks');
+      if (kind === 'golden') {
+        expect(chunkLines).toHaveLength(1);
+        expect(chunkLines[0][1]).toMatchObject({ export: 'golden', admin: ADMIN_ID });
+        expect(Object.keys(chunkLines[0][1] as object).sort()).toEqual(['admin', 'count', 'export', 'tenant']);
+      } else {
+        expect(chunkLines, kind).toHaveLength(0);
+      }
+      for (const call of [...exportLines, ...chunkLines]) {
+        const text = JSON.stringify(call);
+        expect(text).not.toContain(TENANT_A);
+        expect(text).not.toContain('restarts every night');
+      }
+    }
+  });
 });
 
 describe('POST /api/rag/admin/feedback-loop/export/mark (D-20, D-21)', () => {
