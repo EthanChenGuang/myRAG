@@ -220,7 +220,7 @@ for (const mode of MODES) {
       await recordEvidence(second);
       await activateSlot();
       const tainted = await harness.embedding('ft-consent', 'revoke', tenant);
-      assert.equal(tainted.code, 0, tainted.text);
+      assert.equal(tainted.code, 1, `a tainted ACTIVE slot fails the revoke (IW-3): ${tainted.text}`);
       assert.match(tainted.text, /active_tainted|ACTIVE/);
       const rollbackLine = tainted.text.split('\n').find((line) => line.includes('npm run rag:embedding -- rollback'));
       assert.ok(rollbackLine, tainted.text);
