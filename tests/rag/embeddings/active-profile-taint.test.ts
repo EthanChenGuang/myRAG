@@ -68,8 +68,8 @@ function slotProvider(): EmbeddingProvider {
   };
 }
 
-function taintWarnings(warn: ReturnType<typeof vi.spyOn>): string[] {
-  return warn.mock.calls.map((args) => String(args[0])).filter((line) => line.includes('TAINTED'));
+function taintWarnings(warn: { mock: { calls: unknown[][] } }): string[] {
+  return warn.mock.calls.map((args: unknown[]) => String(args[0])).filter((line: string) => line.includes('TAINTED'));
 }
 
 beforeEach(() => {

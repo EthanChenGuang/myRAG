@@ -318,17 +318,19 @@ async function spawnCommand(argv: string[]): Promise<number> {
   });
 }
 
-const FT_LISTS: readonly string[] = ['ft-consent-list', 'ft-models-list'];
+/** Run while RAG_FINETUNE is off: the two lists, and revoke, so a tenant's revocation (and the taint it causes) is never blocked. */
+const FT_ALLOWED_WHEN_OFF: readonly string[] = ['ft-consent-list', 'ft-models-list', 'ft-consent-revoke'];
 
 /**
- * The ft-* commands (06.1-15). Every command except the two lists refuses while RAG_FINETUNE is off, before any request. Prints ids,
- * statuses, counts, refusal reasons and the commands to run next: never a key, a probe vector or stored text.
+ * The ft-* commands (06.1-15). Every command except the two lists and revoke refuses while RAG_FINETUNE is off, before any request.
+ * Prints ids, statuses, counts, refusal reasons and the commands to run next: never a key, a probe vector or stored text. A revoke
+ * that leaves a tainted version on the ACTIVE slot exits 1 after recording everything, since that model keeps serving until rollback.
  */
 async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: EmbeddingCliDeps): Promise<number> {
   const ops = await import('./finetune-ops');
   const { ProfileUnavailableError } = await import('./active-profile');
   const enabled = deps.finetuneEnabled ?? ops.isFinetuneEnabled;
-  if (!FT_LISTS.includes(parsed.command) && !enabled()) {
+  if (!FT_ALLOWED_WHEN_OFF.includes(parsed.command) && !enabled()) {
     io.err(`[Embedding] refused: ${ops.FINETUNE_OFF_MESSAGE}`);
     return 1;
   }
@@ -379,9 +381,16 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
         for (const uri of result.artifactUris) io.out(`[Embedding] next: delete the weights at ${uri} (an operator step outside this command)`);
         const prune = ops.pruneCommand(parsed.tenantKey, parsed.pruneRoot);
         io.out(`[Embedding] retention: ${parsed.pruneRoot ? prune.join(' ') : `${prune.join(' ')} [--root <bundles dir>]`}`);
-        if (!parsed.pruneRoot) return 0;
-        const code = await (deps.runCommand ?? spawnCommand)(prune);
-        io.out(`[Embedding] prune exited with ${code}`);
+        const activeTainted = result.slots.filter((slot) => slot.active);
+        let code = 0;
+        if (parsed.pruneRoot) {
+          code = await (deps.runCommand ?? spawnCommand)(prune);
+          io.out(`[Embedding] prune exited with ${code}`);
+        }
+        if (activeTainted.length > 0) {
+          io.err(`[Embedding] revoked, but the ACTIVE profile serves a tainted version (${activeTainted.map((slot) => slot.versionId).join(', ')}): roll back now`);
+          return 1;
+        }
         return code === 0 ? 0 : 1;
       }
       case 'ft-models-list': {

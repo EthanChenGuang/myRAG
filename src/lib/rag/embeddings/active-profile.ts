@@ -304,13 +304,33 @@ function mismatchReason(profile: EmbeddingProfile): StartupMismatchReason | null
 }
 
 type CheckOutcome =
-  | { kind: 'done'; profile: EmbeddingProfile; reason: StartupMismatchReason | null }
+  | { kind: 'done'; profile: EmbeddingProfile; reason: StartupMismatchReason | null; tainted: boolean }
   | { kind: 'failed'; error: unknown };
+
+const FINETUNE_SLOT_PROVIDERS: readonly string[] = ['ft_slot_a', 'ft_slot_b'];
+
+/**
+ * Whether the active slot's model version is tainted (a tenant revoked consent, 06.1 D-29). It keeps serving until rollback by
+ * design, so the startup check only warns. Best effort: a failed read is not a verdict and is ignored.
+ */
+async function activeSlotTainted(profile: EmbeddingProfile): Promise<boolean> {
+  if (!FINETUNE_SLOT_PROVIDERS.includes(profile.provider)) return false;
+  try {
+    const response = await requireRegistryClient().rpc('rag_finetune_list_models', { p_include_probe: false });
+    if (response.error) return false;
+    return rpcRows(response.data).some((row) => {
+      const record = row as Record<string, unknown> | null;
+      return record?.id === profile.model && record?.status === 'tainted';
+    });
+  } catch {
+    return false;
+  }
+}
 
 async function evaluateActiveProfile(): Promise<CheckOutcome> {
   try {
     const profile = await getActiveProfile();
-    return { kind: 'done', profile, reason: mismatchReason(profile) };
+    return { kind: 'done', profile, reason: mismatchReason(profile), tainted: await activeSlotTainted(profile) };
   } catch (error) {
     return { kind: 'failed', error };
   }
@@ -342,7 +362,12 @@ async function runStartupCheck(timeoutMs: number): Promise<StartupVerdict> {
     return verdict;
   }
 
-  const { profile, reason } = outcome;
+  const { profile, reason, tainted } = outcome;
+  if (tainted) {
+    console.warn(
+      `[Embedding Profile] ACTIVE PROFILE SERVES A TAINTED FINE-TUNED VERSION ${JSON.stringify({ profile: profile.id, model: profile.model })}: roll back with npm run rag:embedding -- rollback`,
+    );
+  }
   if (reason) {
     console.error(`[Embedding Profile] MISMATCH ${JSON.stringify({ profile: profile.id, model: profile.model, dims: profile.dims, reason })}`);
     verdict = { status: 'mismatch', reason, profile: profile.id, model: profile.model, dims: profile.dims, checkedAt: now() };
