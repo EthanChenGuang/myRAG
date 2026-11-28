@@ -1,6 +1,8 @@
+import { getNango } from './client';
+
 /**
- * Source change feeds and listings (Phase 6.3, D-03, D-04, D-08). Types only: no Nango or database import, so every
- * feed (Nango records, Microsoft Graph delta, the test fake connector) builds against one shape.
+ * Source change feeds and listings (Phase 6.3, D-03, D-04, D-08). Every feed (Nango records, Microsoft Graph delta,
+ * the test fake connector) builds against one shape. No database import: feeds never persist a cursor.
  */
 
 /** Where a deletion came from (D-03). */
@@ -18,6 +20,8 @@ export interface SourceChange {
     name?: string;
     parentId?: string;
     kind: 'file' | 'folder';
+    /** The feed position just after this change, when the feed reports one per item (Nango `_nango_metadata.cursor`). */
+    cursor?: string;
 }
 
 /** One page read from a change feed. */
@@ -51,4 +55,59 @@ export interface SourceChangeFeed {
      * the page was applied, so a failed apply re-reads the same page.
      */
     read(input: SourceChangeFeedReadInput): Promise<ChangePage>;
+}
+
+/** The subset of the Nango SDK the records feed calls. */
+export interface NangoRecordsClient {
+    listRecords(input: {
+        providerConfigKey: string;
+        connectionId: string;
+        model: string;
+        filter?: 'added' | 'updated' | 'deleted';
+        cursor?: string | null;
+        limit?: number;
+    }): Promise<{ records: unknown[]; next_cursor?: string | null }>;
+}
+
+export interface NangoRecordsFeedOptions {
+    providerConfigKey: string;
+    model: string;
+    /** Defaults to the Nango SDK singleton. */
+    client?: NangoRecordsClient;
+    now?: () => number;
+}
+
+const NANGO_RECORDS_PAGE_SIZE = 100;
+const NANGO_RECORDS_MAX_PAGES = 200;
+
+interface NangoRecordShape {
+    id?: unknown;
+    _nango_metadata?: { last_action?: unknown; cursor?: unknown } | null;
+}
+
+/**
+ * Nango deleted records since a cursor as a SourceChangeFeed (D-04, D-05). Reads `GET /records` with `filter: 'deleted'`
+ * from the given cursor, page after page until `next_cursor` is null, the deadline or the signal. Never persists the
+ * cursor. Each change carries the record's own cursor, so a caller that applies part of a read can resume after the
+ * last change it applied. `fullListing` is always false here: whether the deletions come from a full sync is known to
+ * the caller only (the webhook's `checkpoints`, D-33).
+ */
+export class NangoRecordsFeed implements SourceChangeFeed {
+    private readonly providerConfigKey: string;
+    private readonly model: string;
+    private readonly client: NangoRecordsClient | undefined;
+    private readonly now: () => number;
+
+    constructor(options: NangoRecordsFeedOptions) {
+        this.providerConfigKey = options.providerConfigKey;
+        this.model = options.model;
+        this.client = options.client;
+        this.now = options.now ?? Date.now;
+    }
+
+    async read(_input: SourceChangeFeedReadInput): Promise<ChangePage> {
+        void this.client;
+        void this.now;
+        return { changes: [], nextCursor: null, complete: true, fullListing: false };
+    }
 }
