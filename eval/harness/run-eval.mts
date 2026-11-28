@@ -39,6 +39,7 @@ import {
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
 import { installFakeModelWindows } from './fake-small-window.mts';
+import { withGeneratorDelays } from './generator-delays.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
@@ -69,6 +70,8 @@ export interface EvalRequestOptions {
   query_params?: NonNullable<RagRunRequest['options']>['query_params'];
   /** Phase 6.2 D-16: run each request through the voice entry point (retrieval only). */
   entry_profile?: 'voice';
+  /** Phase 6.2 D-19, D-20: the model selection (an id or auto) the eval route resolves and routes; absent keeps today's model. */
+  selected_model?: NonNullable<RagRunRequest['options']>['selected_model'];
 }
 
 /** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
@@ -985,23 +988,25 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       }
       if (stubInjectionAnswers) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
-        answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+        answerModule.setEvalLanguageModelFactory(withGeneratorDelays(() => createStubLanguageModel()));
       } else if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
-          answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+          answerModule.setEvalLanguageModelFactory(withGeneratorDelays(() => createStubLanguageModel()));
         } else if (generator === 'fake' && answers) {
           // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
           const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
           // A run config's Phase 5.2 fake still answers by its id; every other id gets the instruction-sensitive generator.
           answerModule.setEvalLanguageModelFactory(
-            evalFakeLanguageModelFactory(items, {
-              noAnswerQuestions,
-              promptTemplate: answerModule.resolveEvalPromptTemplate(),
-            }),
+            withGeneratorDelays(
+              evalFakeLanguageModelFactory(items, {
+                noAnswerQuestions,
+                promptTemplate: answerModule.resolveEvalPromptTemplate(),
+              }),
+            ),
           );
         } else if (generator === 'fake') {
-          answerModule.setEvalLanguageModelFactory(evalFakeLanguageModelFactory(items));
+          answerModule.setEvalLanguageModelFactory(withGeneratorDelays(evalFakeLanguageModelFactory(items)));
         } else {
           const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);

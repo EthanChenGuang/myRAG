@@ -17,7 +17,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting, currentModelRoutingConfig } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -326,6 +326,15 @@ export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export { answerStructureFor, answerStructureStage, decomposedAnswerFor } from './generation/decomposed-turn';
 export { isOutOfScopeResult, scopeGateNoticeFor, type ScopeNotice } from './generation/scope-notice';
+export {
+  initialModelRoute,
+  resolveRequestedModel,
+  routeModel,
+  type ModelRouteDecision,
+  type ModelRouteTrace,
+  type RequestedModelResolution,
+} from './generation/model-router';
+export { effectiveQueryParams } from './query/query-params';
 export type { DecomposedAnswerInput } from './generation/decomposed-answer';
 export type { AnswerStructure } from './generation/answer-structure';
 export {

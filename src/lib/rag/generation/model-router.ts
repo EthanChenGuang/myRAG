@@ -21,7 +21,10 @@ export type ModelRouteRule =
   | 'translated'
   | 'long_query'
   | 'large_context'
-  | 'invalid_routing_id';
+  | 'invalid_routing_id'
+  | 'explicit_choice'
+  | 'routing_off'
+  | 'not_generated';
 
 export interface RouteModelInput {
   /** The question as asked (the R11 length rule). */
@@ -113,4 +116,25 @@ export function routeModel(input: RouteModelInput): ModelRouteDecision {
   if (!(input.contextTokens < input.params.routing_fast_max_context_tokens)) return toQuality('large_context');
 
   return { tier: 'fast', rule: 'simple_lookup', modelId: fast };
+}
+
+/** D-20 trace shape (`model_route`): tier, rule id and how the model was selected; never a prompt or the query. */
+export interface ModelRouteTrace {
+  tier: ModelTier;
+  rule: ModelRouteRule;
+  selection: ModelSelection;
+}
+
+/**
+ * The trace before (or without) routing: an explicit choice keeps its model (fast only when it is the fast id), Auto with routing
+ * off is the quality model, and a routable Auto turn stays quality until routeModel decides on a generated turn.
+ */
+export function initialModelRoute(
+  resolution: RequestedModelResolution,
+  routing: Pick<ModelRoutingConfig, 'fastModel'>,
+): ModelRouteTrace {
+  if (resolution.selection === 'explicit') {
+    return { tier: resolution.modelId === routing.fastModel ? 'fast' : 'quality', rule: 'explicit_choice', selection: 'explicit' };
+  }
+  return { tier: 'quality', rule: resolution.routable ? 'not_generated' : 'routing_off', selection: 'auto' };
 }

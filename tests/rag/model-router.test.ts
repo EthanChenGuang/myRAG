@@ -258,7 +258,7 @@ describe('mock generator delay table (D-20, D-35)', () => {
     const { generateText } = await import('ai');
     const waits: number[] = [];
     const base = Object.assign(
-      () =>
+      (_modelId: string) =>
         new MockLanguageModelV3({
           doGenerate: async () => ({
             content: [{ type: 'text' as const, text: 'A neutral synthetic answer.' }],
@@ -267,7 +267,7 @@ describe('mock generator delay table (D-20, D-35)', () => {
             warnings: [],
           }),
         }),
-      { canUseTools: () => false },
+      { canUseTools: (_modelId: string): boolean | undefined => false },
     );
     const factory = withGeneratorDelays(base, { default_ms: 0, models: { [FAST]: 40, [QUALITY]: 160 } }, async (ms) => {
       waits.push(ms);

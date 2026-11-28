@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { effectiveLexicalVersion, loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
+import { effectiveLexicalVersion, loadRagConfig, pipelineSourceOf, type ModelRoutingConfig, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
 import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
@@ -268,6 +268,11 @@ export function currentModelRouting(): { mode: 'off' | 'auto'; fastModel: string
     RAG_ROUTING_QUALITY_MODEL: qualityModel,
   }).modelRouting;
   return { mode, fastModel, qualityModel };
+}
+
+/** 06.2-29: the effective routing block (RAG_MODEL_ROUTING with the D-35 default ids) as the routes resolve a selection with it. */
+export function currentModelRoutingConfig(): ModelRoutingConfig {
+  return loadRagConfig(getRagDeps().ragEnv()).modelRouting;
 }
 
 /** D-29: the effective attribute filter mode ('off' unless RAG_ATTRIBUTE_FILTER, RAG_DOC_ATTRIBUTES and the v2 pipeline allow it). */
