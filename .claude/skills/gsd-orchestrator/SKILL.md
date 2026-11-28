@@ -101,7 +101,7 @@ For every request:
 ## 4. Merge trains
 
 - A builder session per train (`ci/merge-train-N`) does the following:
-  1. merges done branches `--no-ff`, checking each one for its SUMMARY;
+  1. merges done branches `--no-ff`, checking each one for its completion artifact (SUMMARY; for `/gsd-debug` branches, `.planning/debug/<slug>.md` with `status: resolved`; tell the builder so up front);
   2. resolves conflicts by keeping both sides;
   3. re-records pinned baselines with their tools, never by hand;
   4. runs the full gates;
