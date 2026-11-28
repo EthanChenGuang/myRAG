@@ -972,3 +972,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:33Z skill updated: §11 handoff/takeover.
 - 00:36Z 07-53 DONE exec/07-53 b9972b5e -> t41 (LEX-05 adapters). Weaviate is index-bound (rebuild-lexical); Qdrant is query-bound. Real-store order matches the reference. The parity margin is 7% (10% is mathematically unreachable). Archived.
 - skill updated: §12 first start plus a bootstrap prompt (33da072b).
+- 00:38Z CLEANUP: no new finished sessions (all finished ones are archived). Nudged UF-1 (SUMMARY and prod-apply pushed; was waiting on the full rag-db), 07-37 (idle 25 min) and verify 6 to apply the new speed rule and report. Verify 6.1 is running its last checks.
