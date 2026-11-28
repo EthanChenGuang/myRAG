@@ -39,4 +39,5 @@ Decisions taken on owner's behalf: 05.2-15 WhatsApp parser fix approved; 07-01 v
 29. PROD trains 38-41 + 0989 + 0991 (orchestrator handoff, main e6afe8a2): EVAL rehearsal passed 2026-11-28. Before prod: owner takes a backup (Dashboard > Database > Backups / PITR) and switches the Supabase connector to the prod org; each prod step needs the owner's "跑". Deploy the train-41 app only after NANGO_WEBHOOK_SECRET is set.
 30. quick-63-hardening W5: delete orphan objects in storage bucket `chat-attachments` under `extracted-images/` only (owner approved in the orchestrator session 2026-11-28 08:57Z). Order: EVAL first, then PROD. List counts and sizes first (no file names); delete per project only after the owner says "跑". PROD deletes only after the train-44 app is deployed.
     - PROD list 2026-11-28: bucket `chat-attachments` does not exist on prod, so there are 0 objects and nothing to delete.
-    - EVAL list: pending until the connector is back on the eval org.
+    - EVAL list 2026-11-28: connector confirmed on eval (list_projects shows only fsgaeysipkukqoocgzbx). Bucket `chat-attachments` does not exist on eval: 0 objects, 0 bytes, nothing to delete.
+    - Status: DONE on both projects; no delete was needed or run.

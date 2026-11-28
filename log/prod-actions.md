@@ -223,3 +223,8 @@
 - Verify: 6 new columns nullable, no default; rag_source_reconcile_runs and rag_source_delta_tokens RLS on, 0 policies; 24 functions, none executable by anon/authenticated, all by service_role, search_path=""; rag_nango_owner_tenant_key -> u:<uuid>; inventory cascade=8 exempt=16 purge_step=20; 7 triggers enabled (O); rag_review_items_access_sets RESTRICTIVE and mentions rag_access_enforced; readiness ready=true; unowned_with_log=0.
 - DROPs: only those the file describes (DROP TRIGGER IF EXISTS before re-create in 0937/0987/0990/1011; DROP POLICY IF EXISTS before re-create in 0990). No data deleted.
 - PROD order from handoff e6afe8a2 is complete: train38, train39, 0989, 0991, train40, train41. Trains 42 and 43 not run.
+
+## 2026-11-28 EVAL queue item 30 listing (read-only)
+- Connector switched by the owner; list_projects showed only fsgaeysipkukqoocgzbx (myrag-medical) before the query.
+- storage.buckets has no `chat-attachments` on eval; storage.objects under chat-attachments/extracted-images/: 0 objects, 0 bytes.
+- Nothing to delete; no delete run. Item 30 closed on both projects (prod also had no bucket).
