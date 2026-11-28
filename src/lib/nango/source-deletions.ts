@@ -6,6 +6,7 @@ import { raiseSourceAlert } from './source-alerts';
 import { env } from '@/lib/env';
 import {
     nangoOwnerScope,
+    purgeLineage,
     queueConfigFromProcessEnv,
     recomputeDirtyDupClusters,
     removeDocumentObjects,
@@ -209,12 +210,16 @@ export async function applySourceDeletions(
             else result.failed++;
         }
     } else if (mode === 'purge') {
-        // The purge arm lands with plan 06.3-21; until then the batch fails whole and every sync record is kept.
-        logger.warn(SOURCE_RECONCILE, 'Purge mode is not available yet; the batch is kept for retry', {
-            connectionId: connection.id,
-            count: records.length,
-        });
-        result.failed = records.length;
+        // D-08, D-11: purge mode withdraws every store of the lineage; a sync record stays until its purge succeeded.
+        const tenantKey = connectionTenantKey(connection);
+        for (const record of records) {
+            const removed =
+                tenantKey !== null &&
+                (await purgeNangoLineages(admin, tenantKey, connection, record.file_id)) &&
+                (await deleteSyncRecord(admin, record, connection.user_id));
+            if (removed) result.removed++;
+            else result.failed++;
+        }
     } else {
         // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
         // deletes nothing.
@@ -303,6 +308,42 @@ export async function softDeleteNangoLineages(
         return true;
     } catch (error) {
         logger.error('Nango', `Failed to soft-delete the lineage of ${fileId}`, error);
+        return false;
+    }
+}
+
+/**
+ * Purge mode (D-08, D-11): every lineage of the file inside the owner's tenant is purged through purgeLineage with the
+ * source sync of this connection as the actor. Returns false on the first failure, so the sync record is kept and
+ * the next run retries. A source-sync purge leaves no tombstone (D-35).
+ */
+export async function purgeNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connection: Pick<SourceConnectionRow, 'id' | 'connection_id' | 'user_id'>,
+    fileId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connection.connection_id, fileId);
+        if (lineages.length === 0) return true;
+        const owner = nangoOwnerScope({ ownerUserId: connection.user_id });
+        if (!owner.ok || scopeKey(owner.scope) !== tenantKey) return false;
+        for (const lineageId of lineages) {
+            const result = await purgeLineage(
+                owner.scope,
+                lineageId,
+                { kind: 'source_sync', id: connection.id },
+                { code: 'source_deleted' },
+                { signal: AbortSignal.timeout(120_000) }
+            );
+            if (!result.ok) {
+                logger.error('Nango', 'Source purge failed', { connectionId: connection.id, lineageId, reason: result.reason });
+                return false;
+            }
+        }
+        return true;
+    } catch (error) {
+        logger.error('Nango', 'Source purge failed', { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
         return false;
     }
 }
