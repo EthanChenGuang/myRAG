@@ -1116,3 +1116,12 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - The ingest scanned slice (n=14) fails R@10 at 0.9286 under both raw and cluster.
   - Dispatched debug session_01X342sjiwmCBRUFnT5z3MdU (diagnosis only).
   - MORNING (owner): 4.4 has no passing default. Cluster DF clears the duplicate_flood R@10 drop but not the R@5 drop. 04.4-15 is the live checkpoint.
+- 03:30Z 07-25 DONE (exec/07-25 d9336956) and archived; added to t42.
+  - It closes W-5 (eval override hash) and adds the external-backends harness.
+  - Fixture regression: backend stays pgvector; release-defaults provisional.
+  - Dispatched:
+    - 07-27: session_01X342shrGFLigi1yite61st
+    - 07-43: session_01X342sjudTeBatSRFjwU1Sj
+    - 07-38: session_01X342sk..., base 07-25 + t41
+  - MORNING (owner): test-split used 26 times against a budget of 25. The extra use came from a resume after a tool timeout, and the ledger is append-only. The owner acknowledges this or adjusts the budget.
+  - 07-33 live regression needs QDRANT_URL/WEAVIATE_URL.
