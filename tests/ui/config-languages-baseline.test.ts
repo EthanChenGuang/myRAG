@@ -118,6 +118,19 @@ describe('Languages panel: adding a language (07-UI-SPEC 6.5)', () => {
     expect(useBox(page.content, 'it').checked).toBe(true);
   });
 
+  it('UI review 07 M-4: a 400 without details[] falls back to code.unknown, never a dangling colon', async () => {
+    const page = await mounted({
+      get: { status: 200, body: configuredAnswer() },
+      post: { status: 400, body: { errors: [{ field: 'languages' }] } },
+      globals: { ragIngestImpactGuard: async () => true },
+    });
+    toggle(useBox(page.content, 'it'), true);
+    buttonByText(page.content, 'Save languages').click();
+    await flush();
+    expect(page.status.textContent).toBe('The server reported 400.');
+    expect(page.status.textContent).not.toContain('not accepted:');
+  });
+
   it('a removal only opens no dialog, shows note.removed while unsaved and save.removed after the save', async () => {
     let asked = 0;
     const page = await mounted({

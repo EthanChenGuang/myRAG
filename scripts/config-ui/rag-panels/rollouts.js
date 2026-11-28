@@ -730,12 +730,24 @@ class RolloutsPanel {
     const errorId = id + '-error';
     const describedBy = [help ? helpId : null, error ? errorId : null].filter(Boolean).join(' ');
     if (describedBy) control.setAttribute('aria-describedby', describedBy);
-    if (error) control.setAttribute('aria-invalid', 'true');
+    if (error) {
+      control.setAttribute('aria-invalid', 'true');
+      const cls = String(control.className || '');
+      const tint = /\btextarea\b/.test(cls) ? 'textarea-error' : /\bselect\b/.test(cls) ? 'select-error' : /\binput\b/.test(cls) ? 'input-error' : '';
+      if (tint && !cls.includes(tint)) control.className = cls + ' ' + tint;
+    }
     return this.el('div', { className: 'grid gap-1 min-w-0' }, [
       this.el('label', { className: 'text-sm font-semibold', text: label, attrs: { for: id } }),
       control,
       help ? this.el('p', { className: 'text-xs text-base-content/70', id: helpId, text: help }) : null,
-      error ? this.el('p', { className: 'text-sm text-error', id: errorId, text: error }) : null,
+      error ? this.errorLine(errorId, error) : null,
+    ]);
+  }
+
+  errorLine(id, text) {
+    return this.el('p', { className: 'text-sm text-error font-semibold flex items-start gap-1', id }, [
+      ROLLOUTS_UI.ragUiIcon(this.doc, 'exclamation-circle', 'mt-0.5 shrink-0'),
+      this.el('span', { text }),
     ]);
   }
 
@@ -964,7 +976,7 @@ class RolloutsPanel {
     const head = this.el('thead', {}, [
       this.el('tr', {}, [
         th(this.t('col.language'), ''),
-        th(this.t('col.measure'), ''),
+        th(this.t('col.measure'), 'hidden md:table-cell'),
         th(this.t('col.candidate'), 'text-right'),
         th(this.t('col.before'), 'text-right hidden md:table-cell'),
         th(this.t('col.others'), 'text-right hidden lg:table-cell'),
@@ -977,16 +989,20 @@ class RolloutsPanel {
       for (const row of Array.isArray(language.measures) ? language.measures : []) {
         if (!row || typeof row.measure !== 'string') continue;
         const measureLabel = rolloutsMeasureLabel(row.measure, this.locale);
+        const measureNode = (className) =>
+          measureLabel
+            ? this.el('span', { className: 'break-words ' + className, text: measureLabel })
+            : this.el('span', { className: 'font-mono text-xs ' + className, text: row.measure, attrs: { translate: 'no' } });
         body.appendChild(
           this.el('tr', {}, [
-            this.el('th', { className: 'font-normal', attrs: { scope: 'row' } }, [
+            this.el('th', { className: 'font-normal min-w-0', attrs: { scope: 'row' } }, [
               this.el('span', { className: 'block', text: rolloutsLanguageName(language.language, this.locale) }),
               this.el('span', { className: 'block text-xs font-mono text-base-content/70', text: language.language, attrs: { translate: 'no' } }),
+              this.el('span', { className: 'block md:hidden mt-1 text-sm', attrs: { 'data-rollouts-measure-stacked': '' } }, [measureNode('')]),
+              this.el('span', { className: 'flex mt-1 md:hidden', attrs: { 'data-rollouts-verdict-stacked': '' } }, [this.verdictBadge(row.verdict, true)]),
             ]),
-            measureLabel
-              ? this.el('td', { className: 'break-words', text: measureLabel })
-              : this.el('td', {}, [this.el('span', { className: 'font-mono text-xs', text: row.measure, attrs: { translate: 'no' } })]),
-            this.valueCell(row.measure, row.candidate, '', this.el('span', { className: 'flex justify-end mt-1 md:hidden' }, [this.verdictBadge(row.verdict, true)])),
+            this.el('td', { className: 'hidden md:table-cell' }, [measureNode('')]),
+            this.valueCell(row.measure, row.candidate, 'align-top'),
             this.valueCell(row.measure, row.before, 'hidden md:table-cell'),
             this.valueCell(row.measure, row.others, 'hidden lg:table-cell'),
             this.el('td', { className: 'hidden md:table-cell' }, [this.verdictBadge(row.verdict)]),
@@ -994,7 +1010,7 @@ class RolloutsPanel {
         );
       }
     }
-    const table = this.el('table', { className: 'table table-sm' }, [this.el('caption', { className: 'sr-only', text: caption }), head, body]);
+    const table = this.el('table', { className: 'table table-sm max-md:[&_th]:px-1.5 max-md:[&_td]:px-1.5 max-md:[&_th]:whitespace-normal' }, [this.el('caption', { className: 'sr-only', text: caption }), head, body]);
     children.push(this.el('div', { className: 'overflow-x-auto', attrs: { tabindex: '0', role: 'region', 'aria-label': caption } }, [table]));
     children.push(this.el('p', { className: 'text-xs text-base-content/70 max-w-prose', text: this.t('table.help') }));
     return this.el('div', { className: 'grid gap-2 min-w-0' }, children);
@@ -1049,7 +1065,7 @@ class RolloutsPanel {
     const errorId = inputId + '-error';
     const error = this.keyErrors[entry.id];
     const input = this.el('input', {
-      className: 'input input-bordered w-full md:input-sm font-mono md:max-w-md',
+      className: 'input input-bordered w-full md:input-sm font-mono md:max-w-md' + (error ? ' input-error' : ''),
       id: inputId,
       attrs: {
         type: 'text',
@@ -1094,7 +1110,7 @@ class RolloutsPanel {
         this.el('label', { className: 'text-sm font-semibold', text: this.t('tenant.key'), attrs: { for: inputId } }),
         input,
         this.el('p', { className: 'text-xs text-base-content/70 max-w-prose', id: helpId, text: this.t('tenant.keyHelp') }),
-        error ? this.el('p', { className: 'text-sm text-error', id: errorId, text: error }) : null,
+        error ? this.errorLine(errorId, error) : null,
         this.el('div', { className: 'flex flex-wrap gap-2 mt-1' }, [byKey('include'), byKey('exclude')]),
       ]),
     ]);

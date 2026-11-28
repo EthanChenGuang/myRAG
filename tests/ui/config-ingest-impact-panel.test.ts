@@ -801,3 +801,45 @@ describe('Rebuilds view: polling while a rebuild runs (UI-SPEC 6.4.2 Refresh, de
     (page.context.ingestImpactPanel as { stopPolling: () => void }).stopPolling();
   });
 });
+
+describe('UI review 07 H-1: the add-language dialog uses the preview counts', () => {
+  const GROUP_OPTIONS: Json = {
+    title: 'Add Italian?',
+    columns: { group: 'Documents', count: 'Count' },
+    groups: [
+      { group: 'und', label: 'Language not detected', count: 1 },
+      { group: 'scanned', label: 'Scanned pages', count: 2 },
+      { group: 'stale', label: 'Processed before', count: 3 },
+    ],
+    totalLabel: 'Documents to reprocess',
+    total: 6,
+    note: 'Nothing is reprocessed until you start it.',
+  };
+  const LANG_SAVED: Json = { RAG_SUPPORTED_LANGUAGES: 'zh,en', RAG_PRIMARY_LANGUAGE: 'en' };
+  const LANG_NEXT: Json = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' };
+
+  it('renders the three groups, the total and the note without requesting the impact route, even when it would fail', async () => {
+    const page = loadImpactPage({ replies: { impact: { status: 500, body: {} } } });
+    const guard = guardOf(page);
+    const promise = guard(LANG_NEXT, LANG_SAVED, GROUP_OPTIONS);
+    await flush();
+    expect(page.calls('impact')).toHaveLength(0);
+    const dialog = page.dialog()!;
+    expect(dialog).not.toBeNull();
+    const text = dialog.textContent;
+    expect(text).toContain('Add Italian?');
+    expect(text).not.toContain('could not be counted');
+    const rows = dialog.querySelectorAll('tbody tr').map((tr) => tr.textContent);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toContain('Language not detected');
+    expect(rows[0]).toContain('1');
+    expect(rows[1]).toContain('Scanned pages');
+    expect(rows[2]).toContain('Processed before');
+    expect(rows[3]).toContain('Documents to reprocess');
+    expect(rows[3]).toContain('6');
+    expect(text).toContain('Nothing is reprocessed until you start it.');
+    expect(text.split('RAG_SUPPORTED_LANGUAGES').length - 1).toBe(1);
+    buttonByText(dialog, 'Save settings').click();
+    await expect(promise).resolves.toBe(true);
+  });
+});

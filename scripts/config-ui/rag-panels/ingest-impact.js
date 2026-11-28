@@ -643,13 +643,14 @@ function ingestImpactOpenDialog(doc, locale, options) {
     for (const change of changes || []) {
       const from = ingestImpactSettingText(doc, change.name, change.from, locale);
       const to = ingestImpactSettingText(doc, change.name, change.to, locale);
-      list.appendChild(ui.ragUiEl(doc, 'dt', { className: 'font-semibold break-words', text: from.label || change.name }));
-      list.appendChild(
-        ui.ragUiEl(doc, 'dd', { className: 'min-w-0' }, [
-          ui.ragUiEl(doc, 'span', { className: 'break-words', text: t('impact.change', { from: from.value, to: to.value }) }),
-          ui.ragUiEl(doc, 'code', { className: 'block font-mono text-xs break-all mt-1', text: change.name, attrs: { translate: 'no' } }),
-        ]),
-      );
+      const labelled = Boolean(from.label) && from.label !== change.name;
+      const term = labelled
+        ? ui.ragUiEl(doc, 'dt', { className: 'font-semibold break-words', text: from.label })
+        : ui.ragUiEl(doc, 'dt', { className: 'font-semibold font-mono text-xs break-all', text: change.name, attrs: { translate: 'no' } });
+      list.appendChild(term);
+      const detail = [ui.ragUiEl(doc, 'span', { className: 'break-words', text: t('impact.change', { from: from.value, to: to.value }) })];
+      if (labelled) detail.push(ui.ragUiEl(doc, 'code', { className: 'block font-mono text-xs break-all mt-1', text: change.name, attrs: { translate: 'no' } }));
+      list.appendChild(ui.ragUiEl(doc, 'dd', { className: 'min-w-0' }, detail));
     }
     changesHost.replaceChildren(ui.ragUiEl(doc, 'h4', { className: 'text-xs font-semibold text-base-content/70 mb-2', text: t('impact.changedHeading') }), list);
   };
@@ -717,6 +718,43 @@ function ingestImpactOpenDialog(doc, locale, options) {
       notes(view);
       setSaveEnabled(true);
     },
+    /** Counts the caller already has (the language preview): group rows plus the total, no impact request. */
+    setGroups(groupOptions) {
+      const g = groupOptions || {};
+      const num = 'text-right tabular-nums';
+      const columns = g.columns || {};
+      const head = ui.ragUiEl(doc, 'thead', {}, [
+        ui.ragUiEl(doc, 'tr', {}, [
+          ui.ragUiEl(doc, 'th', { className: 'font-semibold', text: columns.group || t('impact.col.rebuild'), attrs: { scope: 'col' } }),
+          ui.ragUiEl(doc, 'th', { className: 'font-semibold ' + num, text: columns.count || t('impact.col.documents'), attrs: { scope: 'col' } }),
+        ]),
+      ]);
+      const body = ui.ragUiEl(doc, 'tbody');
+      for (const row of Array.isArray(g.groups) ? g.groups : []) {
+        const tr = ui.ragUiEl(doc, 'tr', {}, [
+          ui.ragUiEl(doc, 'th', { className: 'font-normal break-words', text: row.label, attrs: { scope: 'row' } }),
+          ui.ragUiEl(doc, 'td', { className: num, text: ui.ragUiFormatNumber(Number(row.count) || 0, locale) }),
+        ]);
+        tr.setAttribute('data-impact-group', String(row.group || ''));
+        body.appendChild(tr);
+      }
+      const total = Number.isInteger(g.total) ? ui.ragUiFormatNumber(g.total, locale) : '—';
+      body.appendChild(
+        ui.ragUiEl(doc, 'tr', { className: 'font-semibold' }, [
+          ui.ragUiEl(doc, 'th', { className: 'font-semibold', text: g.totalLabel || t('impact.total'), attrs: { scope: 'row' } }),
+          ui.ragUiEl(doc, 'td', { className: num, text: total, attrs: { 'data-impact-total': '' } }),
+        ]),
+      );
+      const caption = ui.ragUiEl(doc, 'caption', { className: 'sr-only', text: t('impact.caption') });
+      countHost.removeAttribute('aria-busy');
+      countHost.replaceChildren(
+        ui.ragUiEl(doc, 'div', { className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': t('impact.caption') } }, [
+          ui.ragUiEl(doc, 'table', { className: 'table table-sm' }, [caption, head, body]),
+        ]),
+      );
+      notes(null);
+      setSaveEnabled(true);
+    },
     setUnknown() {
       countHost.removeAttribute('aria-busy');
       countHost.replaceChildren(ui.ragUiEl(doc, 'p', { className: 'text-sm max-w-prose', text: t('impact.unknown') }));
@@ -779,7 +817,15 @@ function ingestImpactCreateGuard(factoryOptions) {
     const keys = ingestImpactChangedKeys(next, saved).filter((name) => accepted.get(name) !== ingestImpactValue(next[name]));
     if (!keys.length || !doc) return true;
     const firstLanguage = ingestImpactIsFirstLanguage(keys, saved);
-    const changes = (names) => names.map((name) => ({ name, from: (saved || {})[name], to: next[name] }));
+    const changes = (names) => [...new Set(names)].map((name) => ({ name, from: (saved || {})[name], to: next[name] }));
+
+    if (options && Array.isArray(options.groups)) {
+      const preset = ingestImpactOpenDialog(doc, locale, options);
+      preset.setChanges(changes(keys));
+      preset.setGroups(options);
+      const picked = await preset.choice;
+      return finish(picked, next, saved, keys, locale);
+    }
 
     const counting = count(next, keys);
     let dialog = null;
