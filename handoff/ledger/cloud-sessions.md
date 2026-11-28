@@ -1007,3 +1007,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Archived.
 - 01:06Z 06.3-14 DONE d0d6a445 (tests only; 07-37 already wired it) -> t41. Archived.
 - 01:07Z PR #139 train 39 opened (2821bfc8; main merged in; train39-live.sql still current). Subscribed. Merge when green; t40 then merges main.
+- 01:08Z fix/empty-reply-dup-collapse DONE cd4bac08 -> t41.
+  - Root cause: the route never checked the finish reason, so a provider stream with 0 text deltas showed as a blank bubble. The prompt itself was valid.
+  - Now: an error part, a localized notice, the finishReason logged, the UI never blank.
+  - The provider-side cause (likely a content filter) needs the walkthrough re-run to read the finishReason.
+  - Q4: the doc-only 'Show sources' entry point is a GAP. Deferred to a batched UI task (needs a UI-SPEC addendum).
+  - Archived.
