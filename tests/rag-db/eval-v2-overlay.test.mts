@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the four Phase 5.2.1 switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist, the Phase 5 citations switch and the three Phase 4.4 lexical scoring variables', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches, the six Phase 3.3 switches, the fourteen Phase 5.2 answer-rule switches, the four Phase 5.2.1 switches, the twelve Phase 6.2 query-addition switches, the fixture link allowlist, the Phase 5 citations switch, the three Phase 4.4 lexical scoring variables and the Phase 4.3 access switch', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -130,6 +130,7 @@ describe('run-config validation', () => {
       'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
       'RAG_DECOMPOSED_ANSWER',
+      'RAG_DOC_ACCESS_GROUPS',
       'RAG_DOC_ATTRIBUTES',
       'RAG_DUP_CLUSTERS',
       'RAG_EXACT_SCAN_CUTOFF',
