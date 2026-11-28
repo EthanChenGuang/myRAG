@@ -149,6 +149,8 @@ export interface InProcessEval {
    * every fixture database `s:default`): today the KB language shares that XLG-01 reads.
    */
   resetTenantCaches?: () => void;
+  /** Plan 06.2-26: set when RAG_SCOPE_GATE is effective; loads the served tenant's centroid snapshot before a request. */
+  primeScopeGate?: (userId: string | null) => Promise<void>;
   /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
   ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
@@ -569,6 +571,31 @@ export async function prepareInProcessEval(options: {
     throw error;
   }
 
+  // Plan 06.2-26: the scope gate scores only against built centroids; nothing is built while RAG_SCOPE_GATE is off.
+  let scopeGateFixture: import('./scope-gate-fixture.mts').ScopeGateFixture | null = null;
+  try {
+    const { prepareScopeGateFixture } = await import('./scope-gate-fixture.mts');
+    scopeGateFixture = await prepareScopeGateFixture({
+      edge: startedEdge,
+      homeDb: fixture.db,
+      deploymentMode,
+      fixtureUserId: fixture.fixtureUserId,
+      isolated: [
+        ...(fixture.q62Tenant ? [{ name: 'q62', tenant: fixture.q62Tenant, userId: Q62_USER_ID }] : []),
+        ...(fixture.dominantLanguageTenant
+          ? [{ name: 'dominant_language', tenant: fixture.dominantLanguageTenant, userId: DOMINANT_LANGUAGE_USER_ID }]
+          : []),
+      ],
+    });
+    if (scopeGateFixture) console.log('[Eval Harness] scope gate centroids built', { tenants: scopeGateFixture.built });
+  } catch (error) {
+    if (ownsEdge) await startedEdge.close().catch(() => undefined);
+    await closeQ62Tenant(fixture.q62Tenant);
+    await closeIsolatedTenant(fixture.dominantLanguageTenant);
+    if (ownsDb) await fixture.db.close().catch(() => undefined);
+    throw error;
+  }
+
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
   const kbLanguages = fixture.q62Tenant || fixture.dominantLanguageTenant ? await import('../../src/lib/rag/query/kb-languages.ts') : null;
 
@@ -614,6 +641,7 @@ export async function prepareInProcessEval(options: {
     ...(fixture.q62Tenant ? { q62Tenant: fixture.q62Tenant } : {}),
     ...(fixture.dominantLanguageTenant ? { dominantLanguageTenant: fixture.dominantLanguageTenant } : {}),
     ...(kbLanguages ? { resetTenantCaches: () => kbLanguages.resetKbLanguageCacheForTests() } : {}),
+    ...(scopeGateFixture ? { primeScopeGate: scopeGateFixture.prime } : {}),
     ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
@@ -1117,14 +1145,21 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         ...(includeAnswer || stubAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
+      const primeScopeGate = inProcess?.primeScopeGate;
+      const sendItem = primeScopeGate
+        ? async () => {
+            await primeScopeGate(options.user_id ?? null);
+            return send(payload);
+          }
+        : () => send(payload);
       const { status, body } =
         tableTenants && inProcess && isTableSplitItem(item)
-          ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
+          ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, sendItem)
           : q62Tenant && inProcess && routedQ62
-            ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload), inProcess.resetTenantCaches)
+            ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, sendItem, inProcess.resetTenantCaches)
             : dominantTenant && inProcess && routedDominant
-              ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, dominantTenant, () => send(payload), inProcess.resetTenantCaches)
-              : await send(payload);
+              ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, dominantTenant, sendItem, inProcess.resetTenantCaches)
+              : await sendItem();
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);
