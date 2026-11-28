@@ -50,3 +50,11 @@ Source: `.planning/debug/phase42-scanned-slice-regression.md` (branch `exec/debu
 - **Migration number.** The redefinition must sort after 0930, 0932 and 0933, which hold the newest bodies. A free 08xx number (0866 and up) would be overwritten by them in file order. The plan claims the lowest free number above the newest definer at execution, expected **0935**, inside Phase 4.3's gap-closure range (0935 to 0939). The Phase 4.3 owner should be told when the number is claimed.
 - **Pending owner decisions, not applied by any plan:** (1) D-59 itself; (2) the gate rules of the debug report, section 4 item 3: a minimum slice size (`min_gate_n`) or paired item flips for small slices, a rule that plans adding shared fixture documents re-run the phase fixture gates, and whether `identifier_precise` accepts a cited chunk of a carrying document. Until (2) is decided the spec stays as it is; the diversity gate can stay FAIL on the 4-item slice after 04.2-40, and the plan records that as measured.
 - The committed `eval/reports/phase-04.2/` (PASS) belongs to the corpus before 05.2.1-12 until plan 04.2-40 Task 5 re-renders it.
+
+## Plan 04.2-40 migration claim (2026-11-28)
+
+| Number | Plan | Note |
+|---|---|---|
+| 0936 | 04.2-40 | `0936_identifier_document_filter.sql`. It sits in Phase 4.3's block (0935 to 0939) because it redefines `hybrid_search_chunks`, `rag_bm25_search_chunks`, `rag_exact_id_documents` and `rag_table_lookup`, whose newest bodies are in 0930, 0932 and 0933. 0935 is already held by exec/04.4-16 for plan 04.4-17. Tell the Phase 4.3 owner. |
+
+**Ordering requirement for 04.4-17 (required, not a suggestion).** 04.4-17 plans to redefine `rag_bm25_search_chunks` with `p_df_mode` in 0935. 0936 rebuilds that function from the 0932 body, and its precheck stops with 55000 when the function has an argument outside the 0932 signature. If 0935 ships with that body, a fresh apply in file order stops at 0936. 04.4-17 must give up 0935, take a number above 0936, rebuild from the 0936 body and keep the `identifier-document-filter` marker fragment. Details: `04.2-40-bm25-ordering.md`.
