@@ -14,7 +14,7 @@ audited_commit: c536c9e5
 
 > Per-phase security contract: threat register, accepted risks, and audit trail.
 > Audit: `/gsd-secure-phase 07` on branch `verify/07` (from `origin/exec/07-31`, HEAD c536c9e5). Verdict **SECURED**, `threats_open: 0`.
-> Status stays `draft`: the owner sign-offs listed below are not given here and must not be ticked by an agent.
+> Status stays `draft`. Owner sign-offs were given in person in the orchestrator session on 2026-11-28T07:14:00Z ("全部签"), confirmed again at 07:57Z, and are recorded below by a subagent on the owner's instruction.
 
 ---
 
@@ -41,7 +41,8 @@ Register built from the `<threat_model>` blocks of all 53 PLAN files: 177 number
 | transfer | 19 (T-07-57; 18 threats of retired plans 07-22, 07-23, 07-26, 07-29 → Phase 5.1.1) | closed (transferred) |
 | accept | T-07-147; T-07-SC in 52 plans | closed (accepted risks log) |
 | T-07-SC in 07-01 (mitigate) | 1 | closed (exact pins, lock integrity, no install scripts) |
-| owner / live (07-32, 07-33, 07-50) | 10 | **owner sign-off required** — not implementation gaps, not counted as open |
+| owner / live (07-32, 07-33, 07-50) | 10 | signed by the owner 2026-11-28 (T-07-103..110, 170, 171) — not implementation gaps, not counted as open |
+| N/A, surface absent | 2 | T-07-93, T-07-119 (re-marked by owner decision 2026-11-28: the surface does not exist) |
 
 SUMMARY threat flags: only 07-14-SUMMARY has a `## Threat Flags` section ("None"); no unregistered flag.
 
@@ -76,6 +77,7 @@ SUMMARY threat flags: only 07-14-SUMMARY has a `## Threat Flags` section ("None"
 | 121–134 | 0740 purge enqueue (assert, CHECKs, 1..200 stale ids, disabled targets that hold state), purge tenant mismatch refusal, all-collection sweep, `PurgeIncompleteError` + reopen, forced recheck, stale-repair rate limit, purge/recheck canaries in backend-canary job |
 | 135–146, 148–150 | language-monitor and rollout contracts, trace language sanitising, calibration hashes, red-team marker/tenant refusal, internal cases route `checkEvalAccess` + 404 when off, synthetic-only corpus, cost `not_provided`, `language_below_baseline`, 0742 compare columns, access filter on every query/prefetch, byte-identical pre-rev-4 Qdrant request |
 | 151–168, 169 | `RAG_LANG_CONFIDENCE` metadata, 0743 counts only + admin route, rollout canary foreign point, rollout arm from `scopeKey` only, 0744 RLS/assert/actor, Config UI red-team `execFile` shell:false + admin authorize + 409 run_active, rollouts route admin-first + 404 off, promote per-language windows, 0745 tenant-scoped selection, removal deletes nothing |
+| 93, 119 | N/A, surface absent (re-marked 2026-11-28 by owner decision) |
 | 173–177 | `LexicalParamsMismatchError`, only `bm25` k/b in text query, `rebuild-lexical` without `--confirm` reports and exits 2, params from config only, mismatch message ids only |
 
 Full per-ID evidence is in the auditor's return (orchestrator session, 2026-11-28).
@@ -89,25 +91,25 @@ Full per-ID evidence is in the auditor's return (orchestrator session, 2026-11-2
 | AR-07-01 | T-07-147 (low, 07-38) | Group identifiers reach the vendor as filter fields, like `tenant_key` and `document_id` (D-03); not a content kind | plan-time disposition (07-38) | 2026-11-25 |
 | AR-07-02 | T-07-SC (accept in 52 plans) | No package installed by those plans: Phase 7 commits change only npm script entries (`rag:languages`, `rag:rollout`, `rag:red-team`); no lockfile or uv lock change outside 07-01 | plan-time disposition | 2026-11-25 |
 
-Note: the 07-01 package-legitimacy checkpoint (`@weaviate/node`/`@weaviate/core` 3.15.5, `@qdrant/js-client-rest` 1.20.0) was approved by the orchestrator under owner delegation (07-01-SUMMARY), not by the owner. Owner confirmation is listed below.
+Note: the 07-01 package-legitimacy checkpoint (`@weaviate/node`/`@weaviate/core` 3.15.5, `@qdrant/js-client-rest` 1.20.0) was approved by the orchestrator under owner delegation (07-01-SUMMARY). The owner ratified that approval in person on 2026-11-28 (accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)", accepted_at: 2026-11-28T07:14:00Z).
 
 ---
 
-## Owner Sign-Off Required (not given here)
+## Owner Sign-Off (signed in person, 2026-11-28)
 
-| ID | Sev | Item | Plan | Evidence already in place |
-|----|-----|------|------|---------------------------|
-| T-07-110 | crit | Full canary suite against the hosted backends and the real project before any tenant data is synced | 07-33 | canary suite + backend-canary CI job |
-| T-07-103 | high | Hosting / region decision; vendor retention and training terms (`config/rag/vendor-data-flow.json` has 34 `to_verify` values) | 07-32 | targets seeded disabled; defer keeps data in Supabase |
-| T-07-105 | high | Make `backend-canary` a required check on main (confirm through the GitHub API) | 07-32 | job has no continue-on-error; aggregate job needs it (`pr-smoke.yml:599`) |
-| T-07-104 | med | Read-only key per backend available and recorded | 07-32 | warn-once fallback in `qdrant/client.ts`, `weaviate/client.ts` |
-| T-07-106 | high | Live canary on synthetic tenants only | 07-33 | — |
-| T-07-107 | high | No keys, golden items or tenant ids in the live SUMMARY or decision record | 07-33 | — |
-| T-07-108 | high | Database backup before live migrations | 07-33 | idempotency proven on PGlite, both modes |
-| T-07-109 | high | Human review of the live defaults record | 07-33 | `check-release-defaults` in CI |
-| T-07-170 | high | Revision-4 live checks on synthetic tenants only | 07-50 | — |
-| T-07-171 | high | Red-team run targets the synthetic workspace only | 07-50 | marker refusal in `run-red-team.mts` |
-| — | — | Confirm the delegated 07-01 package approval | 07-01 | exact pins + integrity hashes |
+| ID | Sev | Item | Plan | Evidence already in place | Sign-off |
+|----|-----|------|------|---------------------------|----------|
+| T-07-110 | crit | Full canary suite against the hosted backends and the real project before any tenant data is synced | 07-33 | canary suite + backend-canary CI job | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-103 | high | Hosting / region decision; vendor retention and training terms (`config/rag/vendor-data-flow.json` has 34 `to_verify` values) | 07-32 | targets seeded disabled; defer keeps data in Supabase | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-105 | high | Make `backend-canary` a required check on main (confirm through the GitHub API) | 07-32 | job has no continue-on-error; aggregate job needs it (`pr-smoke.yml:599`) | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-104 | med | Read-only key per backend available and recorded | 07-32 | warn-once fallback in `qdrant/client.ts`, `weaviate/client.ts` | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-106 | high | Live canary on synthetic tenants only | 07-33 | — | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-107 | high | No keys, golden items or tenant ids in the live SUMMARY or decision record | 07-33 | — | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-108 | high | Database backup before live migrations | 07-33 | idempotency proven on PGlite, both modes | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-109 | high | Human review of the live defaults record | 07-33 | `check-release-defaults` in CI | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-170 | high | Revision-4 live checks on synthetic tenants only | 07-50 | — | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| T-07-171 | high | Red-team run targets the synthetic workspace only | 07-50 | marker refusal in `run-red-team.mts` | accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
+| — | — | Confirm the delegated 07-01 package approval | 07-01 | exact pins + integrity hashes | ratified; accepted_by: "owner (signed in person in the orchestrator session, 2026-11-28)"; accepted_at: 2026-11-28T07:14:00Z |
 
 ---
 
@@ -128,7 +130,7 @@ Note: the 07-01 package-legitimacy checkpoint (`@weaviate/node`/`@weaviate/core`
 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
-| 2026-11-28 | 178 | 168 (+10 owner sign-off) | 0 | gsd-security-auditor (opus), `/gsd-secure-phase 07` |
+| 2026-11-28 | 178 | 168 (+10 owner sign-off, signed 2026-11-28; T-07-93 and T-07-119 N/A, surface absent) | 0 | gsd-security-auditor (opus), `/gsd-secure-phase 07` |
 
 ---
 
@@ -137,7 +139,7 @@ Note: the 07-01 package-legitimacy checkpoint (`@weaviate/node`/`@weaviate/core`
 - [x] All threats have a disposition (mitigate / accept / transfer)
 - [x] Accepted risks documented in Accepted Risks Log
 - [x] `threats_open: 0` confirmed
-- [ ] Owner sign-offs above (07-32, 07-33, 07-50, 07-01 delegation) — **owner only**
+- [x] Owner sign-offs above (07-32, 07-33, 07-50, 07-01 delegation) — signed by the owner 2026-11-28
 - [ ] `status: verified` set in frontmatter — after the owner sign-offs
 
 **Approval:** pending (owner)
