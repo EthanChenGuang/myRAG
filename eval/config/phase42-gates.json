@@ -39,12 +39,24 @@
     },
     "diversity": {
       "decision": "D-22",
-      "description": "duplicate_flood: intent coverage 1.0 on the slice, every item's topk_redundancy at most 1/k (k = the item's context_k), no other slice drops beyond the noise band against the Phase 4.1 default run",
+      "version": 2,
+      "registered": "2026-11-27, quick task 42 W-1, owner option (b): re-registered before the re-run; v1 (cluster id only) is superseded, see handoffs/04.2-32-gate-diversity.md",
+      "description": "duplicate_flood: intent coverage 1.0 on the slice, every item's topk_redundancy (measure v2) at most 1/k (k = the item's context_k), no other slice drops beyond the noise band against the Phase 4.1 default run",
+      "redundancy_measure": {
+        "version": 2,
+        "unit": "cluster_value_signature",
+        "definition": "topk_redundancy = the largest number of kept chunks that share one (dup cluster id, value signature) unit, divided by k; the value signature is the one the collapse rule uses (D-28 identifier normalization of the chunk body without the stored header); a kept chunk without a cluster id is its own unit. The value is the one the app writes on the trace (topkRedundancy in src/lib/rag/v2/diversify.ts, pinned by tests/rag/v2/diversify.test.ts 'counts top-k redundancy per cluster and value signature'); an item that keeps a clustered chunk while its trace carries no app value is an offender (the cluster-only fallback of the scorer is not accepted); with no clustered kept chunk every chunk is its own unit and the value is 1/k",
+        "supersedes": "v1: unit dup cluster id only, as first registered for D-22"
+      },
+      "noise_band": {
+        "source": "eval/config/noise.json",
+        "rule": "max(k x spread, floor) with k 3 and floor 0.02 from that file; the reference is a single fixture run (spread 0), so the band is the floor 0.02"
+      },
       "runs": ["v2-diversity-collapse", "v2-diversity-mmr"],
       "reference": "v2-default",
       "slice": "category:duplicate_flood",
       "intent_coverage_min": 1.0,
-      "max_chunks_per_cluster": 1,
+      "max_chunks_per_unit": 1,
       "no_slice_drop_exclude": ["category:duplicate_flood"]
     },
     "identifier": {
