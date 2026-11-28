@@ -15,6 +15,8 @@
 -- Live upgrade. The first block proves only that the functions exist: 0425 overwrites every live body with the repository's version. Run
 -- the read-only dry run in the header of 0425_search_path_empty.sql first; it covers this file's functions too. Re-running any migration
 -- below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (the common file, then this file) after it.
+-- Phase 3.1.1: re-running 0425 after 0440 and 0442 puts back the unscoped rag_chunk_embeddings_guard and rag_reembed_* bodies without
+-- notice, so re-run 0440 and then 0442 after it. (quick-311, I-3)
 
 BEGIN;
 

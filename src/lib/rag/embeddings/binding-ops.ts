@@ -112,32 +112,46 @@ export function deriveBindingEvidence(
 }
 
 /**
- * Stores evidence on a binding through rag_record_binding_evidence. `input` is a BindingComparison (derived for this binding) or a raw
- * BindingActivationEvidence that must name this binding. Invalid input throws BindingEvidenceInvalidError before any write.
+ * Stores evidence on a binding through rag_record_binding_evidence. `input` must be a BindingComparison whose population is `real`: a
+ * comparison run against a real deployment whose doc-type slice holds only production or human items. The activation evidence is always
+ * derived here, never taken as written (quick-311, I-2), so `real_n` comes from the comparison's provenance counts. Anything else throws
+ * BindingEvidenceInvalidError before any write.
  */
 export async function recordBindingEvidence(bindingId: string, input: unknown, actor: string): Promise<RecordBindingEvidenceResult> {
-  let evidence: BindingActivationEvidence;
   const comparison = BindingComparisonSchema.safeParse(input);
-  if (comparison.success) {
-    const rows = await listBindingRows();
-    const binding = rows.find((row) => row.id === bindingId);
-    if (!binding) return UNKNOWN_BINDING;
-    const key = bindingKey(binding);
-    const active = rows.find((row) => row.status === 'active' && row.id !== binding.id && bindingKey(row) === key);
-    evidence = deriveBindingEvidence(comparison.data, binding, active?.profileId ?? null, new Date().toISOString());
-  } else {
-    const raw = BindingActivationEvidenceSchema.safeParse(input);
-    if (!raw.success) {
-      throw new BindingEvidenceInvalidError(`comparison or evidence JSON is invalid: ${raw.error.issues.map((issue) => issue.message).join('; ')}`);
-    }
-    evidence = raw.data;
+  if (!comparison.success) {
+    const asEvidence = BindingActivationEvidenceSchema.safeParse(input).success;
+    throw new BindingEvidenceInvalidError(
+      asEvidence
+        ? 'a hand-written BindingActivationEvidence is not accepted: record the BindingComparison written by run-binding-compare --base-url'
+        : `the file is not a valid BindingComparison: ${comparison.error.issues.map((issue) => issue.message).join('; ')}`,
+    );
   }
+  const refusal = populationRefusal(comparison.data);
+  if (refusal) throw new BindingEvidenceInvalidError(refusal);
+  const rows = await listBindingRows();
+  const binding = rows.find((row) => row.id === bindingId);
+  if (!binding) return UNKNOWN_BINDING;
+  const key = bindingKey(binding);
+  const active = rows.find((row) => row.status === 'active' && row.id !== binding.id && bindingKey(row) === key);
+  const evidence = deriveBindingEvidence(comparison.data, binding, active?.profileId ?? null, new Date().toISOString());
   if (evidence.binding_id !== bindingId) throw new BindingEvidenceInvalidError('--binding must match evidence.binding_id');
 
   const outcome = await callGate('rag_record_binding_evidence', { p_binding_id: bindingId, p_evidence: evidence, p_actor: actor });
   if ('refusal' in outcome) return outcome.refusal;
   await refreshBindingsAfterOperation();
   return { ok: true, bindingId: text(outcome.row, 'binding_id') ?? bindingId, evidence };
+}
+
+/** Null when the comparison may be recorded; otherwise the reason. The derivation is re-checked here, not trusted from the file. */
+function populationRefusal(comparison: BindingComparison): string | null {
+  if (comparison.population !== 'real') return `population is ${comparison.population}; only a real-population comparison can be recorded`;
+  if (comparison.fixture_embedder) return 'population real does not hold: the comparison ran on the fixture embedder';
+  const counts = Object.entries(comparison.provenance_counts).filter(([, count]) => count > 0);
+  if (counts.length === 0) return 'population real does not hold: the doc-type slice has no items';
+  const other = counts.filter(([provenance]) => !REAL_PROVENANCE.includes(provenance)).map(([provenance]) => provenance);
+  if (other.length > 0) return `population real does not hold: the doc-type slice holds ${other.sort().join(', ')} items`;
+  return null;
 }
 
 /** Flips a binding to active through the gate (D-09); the previous active binding of the key becomes available. */

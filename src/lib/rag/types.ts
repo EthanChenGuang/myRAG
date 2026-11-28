@@ -242,7 +242,7 @@ export interface RetrievalOverrides {
   rerankInputCap?: number;
   finalTopK?: number;
   rrfK?: number;
-  legWeights?: { dense?: number; lexical?: number; exactId?: number };
+  legWeights?: { dense?: number; lexical?: number; exactId?: number; domain?: number };
   reranker?: RerankProviderId | 'none';
   rerankModel?: string;
   rerankTier?: 'fast' | 'quality';

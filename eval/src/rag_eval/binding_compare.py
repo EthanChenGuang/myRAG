@@ -192,6 +192,7 @@ def compare(
     hashes: BindingComparisonHashes,
     reembed_run_ids: Mapping[str, str],
     fixture_embedder: bool,
+    live_deployment: bool = False,
     golden_doc_types: Mapping[str, str] | None = None,
     report_paths: Mapping[str, str] | None = None,
     extra_notes: list[str] | None = None,
@@ -293,6 +294,8 @@ def compare(
     real_n = sum(count for provenance, count in provenance_counts.items() if provenance in REAL_PROVENANCES)
     if fixture_embedder or real_n == 0:
         notes.append(BINDING_FIXTURE_NOTE)
+    all_real = real_n > 0 and all(provenance in REAL_PROVENANCES for provenance, count in provenance_counts.items() if count > 0)
+    population = "real" if live_deployment and not fixture_embedder and all_real else "fixture"
     notes.extend(note for note in extra_notes or [] if note)
 
     return BindingComparison.model_validate(
@@ -305,6 +308,7 @@ def compare(
             "hashes": hashes,
             "reembed_run_ids": {profile_id: reembed_run_ids[profile_id] for profile_id in sorted(candidates)},
             "fixture_embedder": fixture_embedder,
+            "population": population,
             "gate_passed": recommended is not None,
             "recommended_profile": recommended,
             "notes": notes,
