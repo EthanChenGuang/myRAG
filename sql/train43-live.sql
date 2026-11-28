@@ -1,5 +1,6 @@
--- Train 43 live SQL (ci/merge-train-43 @ e3f5d1411). Apply after train 42 is live (sql/train42-live.sql). One file for both deployment
--- modes: every train-43 migration is common (no .single-tenant.sql / .multi-tenant.sql variant).
+-- Train 43 live SQL (ci/merge-train-43 @ 5d771c8d7, after main cbc51d53 = train 42 #142 and exec/quick-511-sec). Apply after
+-- train 42 is live (sql/train42-live.sql, which itself runs after train 41's SQL). One file for both deployment modes: every
+-- train-43 migration is common (no .single-tenant.sql / .multi-tenant.sql variant). quick-511-sec and the main merge add no migration.
 -- Order: 0742, 0743, 0744, 0745. No 0410 delta: train 43 adds no line to 0410 (0742 redefines the two 0702 trigger functions with
 -- CREATE OR REPLACE, which keeps their existing grants; every other new function grants itself to service_role only).
 -- Source: Phase 7 line merged from exec/07-31 (c536c9e5) and exec/07-49 (d4af52b6): 0742 = 07-39 (vector sync carries access groups),
