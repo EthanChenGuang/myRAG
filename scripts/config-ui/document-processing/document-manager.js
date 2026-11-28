@@ -451,6 +451,21 @@ class DocumentManager {
         row.querySelector('[data-doc-action="type"]').addEventListener('click', () => this.promptChangeDocType(doc.id, String(docType)));
         row.querySelector('[data-doc-action="url"]').addEventListener('click', () => this.addUrl(doc.id, doc.metadata?.external_url || ''));
         row.querySelector('[data-doc-action="delete"]').addEventListener('click', () => this.confirmDelete(doc.id, doc.filename));
+        if (typeof window !== 'undefined' && typeof window.openPurgeDialog === 'function' && doc.id) {
+            const deleteButton = row.querySelector('[data-doc-action="delete"]');
+            const purgeButton = document.createElement('button');
+            purgeButton.type = 'button';
+            purgeButton.className = 'btn btn-error btn-outline btn-sm ml-1';
+            purgeButton.setAttribute('data-doc-action', 'purge');
+            purgeButton.setAttribute('aria-label', `Purge ${String(doc.filename ?? '')}: remove it from every store and from past citations`);
+            const purgeIcon = document.createElement('i');
+            purgeIcon.className = 'bi bi-file-earmark-x';
+            purgeIcon.setAttribute('aria-hidden', 'true');
+            purgeButton.append(purgeIcon, document.createTextNode(' Purge'));
+            const purgeSource = doc.source_connection_id ? 'connector' : String(doc.source || '');
+            purgeButton.addEventListener('click', () => window.openPurgeDialog(doc.id, doc.filename, purgeSource));
+            deleteButton.parentNode.appendChild(purgeButton);
+        }
 
         return row;
     }

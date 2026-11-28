@@ -378,7 +378,7 @@ describe('purge result and receipt', () => {
     expect(chunks.cells[1]!.querySelector('.sr-only')!.textContent).toContain('rows still left in this store');
     const external = rows.find((r) => r.store === 'external:index-a')!;
     expect(external.cells.length).toBe(2);
-    expect(rows[rows.length - 1]!.store).toBe('external:index-a');
+    expect(rows.map((r) => r.store).slice(0, 3)).toEqual(['Document versions', 'Text chunks', 'external:index-a']);
     const th = dialog.querySelectorAll('th').find((t) => t.textContent === 'external:index-a')!;
     expect(th.querySelector('.font-mono')).toBeTruthy();
   });

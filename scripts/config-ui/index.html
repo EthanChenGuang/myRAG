@@ -95,6 +95,7 @@
     <script src="rag-panels/embedding-bindings.js"></script>
     <script src="rag-panels/ingestion.js"></script>
     <script src="rag-panels/source-sync.js"></script>
+    <script src="rag-panels/purge.js"></script>
     <script src="rag-panels/chunking-validate.js"></script>
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
@@ -9071,7 +9072,7 @@
                                 <div class="card bg-base-200 shadow-md mb-6">
                                     <div class="card-body">
                                         <div class="flex justify-between items-center mb-4">
-                                            <h3 class="text-lg font-semibold">📚 Document Management</h3>
+                                            <h3 id="documents-management-title" class="text-lg font-semibold rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1">📚 Document Management</h3>
                                             <div class="flex gap-2">
                                                 <input type="text" id="document-search"
                                                     placeholder="Search documents..."
@@ -9937,6 +9938,18 @@
                                         </div>
                                     </section>
                                     <!-- rag-source-sync:end -->
+
+                                    <!-- rag-purge:start -->
+                                    <section id="rag-administration-purge" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-purge-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-purge-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-purge-title>Purge records</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose mb-4" data-purge-description>Every purge, started by an admin or by a connection in Purge mode, with its reason and what the check found afterwards. Records hold ids only, never file names or text. To purge a document, use Purge in the Documents table under Document Processing.</p>
+                                            <div data-purge-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-purge-content></div>
+                                            <div data-purge-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-purge:end -->
 
                                     <!-- rag-terminology:start -->
                                     <section id="rag-administration-terminology" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-terminology-title">
