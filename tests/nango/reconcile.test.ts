@@ -17,6 +17,8 @@ vi.mock('@/lib/rag', async () => {
   const ingestScope = await vi.importActual<typeof import('@/lib/rag/tenant/ingest-scope')>('@/lib/rag/tenant/ingest-scope');
   const scopeModule = await vi.importActual<typeof import('@/lib/rag/tenant/scope')>('@/lib/rag/tenant/scope');
   return {
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: 'multi-tenant' }),
     scopeKey: scopeModule.scopeKey,
@@ -24,6 +26,8 @@ vi.mock('@/lib/rag', async () => {
     removeDocumentObjects: vi.fn(async () => undefined),
     recomputeDirtyDupClusters: vi.fn(async () => ({ ok: true, skipped: true })),
     queueConfigFromProcessEnv: () => ({ ingestAsync: false }),
+    retryPendingPurgeObjects: async () => ({ ok: true, records: 0, cleared: 0, stillPending: 0 }),
+    rescrubRecentPurges: async () => ({ ok: true, records: 0, scrubbed: 0 }),
   };
 });
 
@@ -276,7 +280,8 @@ describe('failures, the age alert and the first run (D-09, D-10, D-39)', () => {
   it('respects the deadline: no further connection is started once it has passed', async () => {
     const memory = createDb({ nango_connections: [connection(15), connection(16)] });
     const connectors = { 'conn-15': createFakeConnector({ files: [] }), 'conn-16': createFakeConnector({ files: [] }) };
-    const ticks = [now, now];
+    // Clock reads: the start, the two purge follow-ups (D-15, C-10), the first connection.
+    const ticks = [now, now, now, now];
     const clock = () => ticks.shift() ?? now + 1;
 
     const result = await run(memory, connectors, { deadlineMs: 1, now: clock });

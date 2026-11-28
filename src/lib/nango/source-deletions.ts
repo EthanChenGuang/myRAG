@@ -6,6 +6,7 @@ import { raiseSourceAlert } from './source-alerts';
 import { env } from '@/lib/env';
 import {
     nangoOwnerScope,
+    purgeLineage,
     queueConfigFromProcessEnv,
     recomputeDirtyDupClusters,
     removeDocumentObjects,
@@ -37,6 +38,11 @@ export interface SourceDeletionResult {
     failed: number;
     /** File ids beyond the batch size that this call did not look at (change-feed and admin calls only). */
     deferred: number;
+    /**
+     * Change-feed purges above RAG_SOURCE_PURGE_DAILY_CAP (D-49): kept with their sync records and held in a paused run
+     * for admin confirmation. Handled for the cursor. Present only when the cap held something back.
+     */
+    held?: number;
 }
 
 export interface SyncRecordRow {
@@ -209,12 +215,21 @@ export async function applySourceDeletions(
             else result.failed++;
         }
     } else if (mode === 'purge') {
-        // The purge arm lands with plan 06.3-21; until then the batch fails whole and every sync record is kept.
-        logger.warn(SOURCE_RECONCILE, 'Purge mode is not available yet; the batch is kept for retry', {
-            connectionId: connection.id,
-            count: records.length,
-        });
-        result.failed = records.length;
+        // D-08, D-11: purge mode withdraws every store of the lineage; a sync record stays until its purge succeeded.
+        const tenantKey = connectionTenantKey(connection);
+        const cap = origin === 'change_feed' ? sourcePurgeDailyCap() : 0;
+        if (cap > 0 && records.length > 0) {
+            await applyCappedPurge(admin, connection, tenantKey, records, cap, result);
+        } else {
+            for (const record of records) {
+                const removed =
+                    tenantKey !== null &&
+                    (await purgeNangoLineages(admin, tenantKey, connection, record.file_id)) &&
+                    (await deleteSyncRecord(admin, record, connection.user_id));
+                if (removed) result.removed++;
+                else result.failed++;
+            }
+        }
     } else {
         // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
         // deletes nothing.
@@ -249,6 +264,127 @@ export async function applySourceDeletions(
         }, records.map((record) => record.file_id));
     }
     return result;
+}
+
+const DEFAULT_PURGE_DAILY_CAP = 0;
+let warnedCap = false;
+
+/** RAG_SOURCE_PURGE_DAILY_CAP: 0 (off) or a positive integer; anything else is 0 (D-49). */
+export function parsePurgeDailyCap(raw: string | undefined): number {
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (!/^[0-9]{1,9}$/.test(trimmed)) return DEFAULT_PURGE_DAILY_CAP;
+    return Number(trimmed);
+}
+
+/** The configured daily cap on change-feed purges per connection; an invalid value warns once and is 0 (off). */
+export function sourcePurgeDailyCap(): number {
+    const raw = env.RAG_SOURCE_PURGE_DAILY_CAP as string | undefined;
+    const cap = parsePurgeDailyCap(raw);
+    if (!warnedCap && cap === DEFAULT_PURGE_DAILY_CAP && raw !== undefined && raw.trim() !== '' && !/^0+$/.test(raw.trim())) {
+        warnedCap = true;
+        logger.warn(SOURCE_RECONCILE, 'RAG_SOURCE_PURGE_DAILY_CAP is not a non-negative integer; using 0 (off)');
+    }
+    return cap;
+}
+
+function rpcCode(error: unknown): string | null {
+    return (error as { code?: string } | null)?.code ?? null;
+}
+
+/**
+ * The purge arm under the daily cap (D-49). The allowance is reserved in SQL before anything is purged; the records
+ * above it are held in the connection's paused run before the granted ones are purged, and failed purges give their
+ * reservation back. A failing reserve or hold call purges nothing and reports the batch failed, so the cursor stays.
+ */
+async function applyCappedPurge(
+    admin: SupabaseAdmin,
+    connection: SourceConnectionRow,
+    tenantKey: string | null,
+    records: readonly SyncRecordRow[],
+    cap: number,
+    result: SourceDeletionResult
+): Promise<void> {
+    if (tenantKey === null) {
+        result.failed += records.length;
+        return;
+    }
+    let granted: number;
+    try {
+        const { data, error } = await admin.rpc('rag_source_purge_reserve', {
+            p_tenant_key: tenantKey,
+            p_connection_id: connection.id,
+            p_requested: records.length,
+            p_cap: cap,
+        });
+        const value = Array.isArray(data) ? data[0] : data;
+        if (error || typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+            logger.error(SOURCE_RECONCILE, 'Purge allowance not reserved; nothing purged', { connectionId: connection.id, code: rpcCode(error) });
+            result.failed += records.length;
+            return;
+        }
+        granted = Math.min(value, records.length);
+    } catch (error) {
+        logger.error(SOURCE_RECONCILE, 'Purge allowance not reserved; nothing purged', { connectionId: connection.id, code: rpcCode(error) });
+        result.failed += records.length;
+        return;
+    }
+
+    const allowed = records.slice(0, granted);
+    const held = records.slice(granted);
+    if (held.length > 0) {
+        let holdOk = false;
+        try {
+            const { error } = await admin.rpc('rag_source_purge_hold', {
+                p_tenant_key: tenantKey,
+                p_connection_id: connection.id,
+                p_file_ids: held.map((record) => record.file_id),
+                p_cap: cap,
+            });
+            holdOk = !error;
+            if (error) logger.error(SOURCE_RECONCILE, 'Purges above the daily cap not held; nothing purged', { connectionId: connection.id, code: rpcCode(error) });
+        } catch (error) {
+            logger.error(SOURCE_RECONCILE, 'Purges above the daily cap not held; nothing purged', { connectionId: connection.id, code: rpcCode(error) });
+        }
+        if (!holdOk) {
+            await releasePurgeAllowance(admin, connection, tenantKey, granted);
+            result.failed += records.length;
+            return;
+        }
+    }
+
+    let failed = 0;
+    for (const record of allowed) {
+        const removed =
+            (await purgeNangoLineages(admin, tenantKey, connection, record.file_id)) &&
+            (await deleteSyncRecord(admin, record, connection.user_id));
+        if (removed) result.removed++;
+        else failed++;
+    }
+    result.failed += failed;
+    if (failed > 0) await releasePurgeAllowance(admin, connection, tenantKey, failed);
+    if (held.length > 0) {
+        result.held = held.length;
+        logger.warn(SOURCE_RECONCILE, 'Change-feed purges above the daily cap held for confirmation', {
+            connectionId: connection.id,
+            held: held.length,
+            cap,
+        });
+        await raiseSourceAlert(connection, 'paused', { held: held.length, cap }, { admin });
+    }
+}
+
+async function releasePurgeAllowance(admin: SupabaseAdmin, connection: SourceConnectionRow, tenantKey: string, count: number): Promise<void> {
+    if (count <= 0) return;
+    try {
+        const { error } = await admin.rpc('rag_source_purge_release', {
+            p_tenant_key: tenantKey,
+            p_connection_id: connection.id,
+            p_count: count,
+        });
+        if (error) logger.warn(SOURCE_RECONCILE, 'Purge allowance not released', { connectionId: connection.id, count, code: rpcCode(error) });
+    } catch (error) {
+        logger.warn(SOURCE_RECONCILE, 'Purge allowance not released', { connectionId: connection.id, count, code: rpcCode(error) });
+    }
 }
 
 export function orphanUsesSoftDelete(): boolean {
@@ -303,6 +439,42 @@ export async function softDeleteNangoLineages(
         return true;
     } catch (error) {
         logger.error('Nango', `Failed to soft-delete the lineage of ${fileId}`, error);
+        return false;
+    }
+}
+
+/**
+ * Purge mode (D-08, D-11): every lineage of the file inside the owner's tenant is purged through purgeLineage with the
+ * source sync of this connection as the actor. Returns false on the first failure, so the sync record is kept and
+ * the next run retries. A source-sync purge leaves no tombstone (D-35).
+ */
+export async function purgeNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connection: Pick<SourceConnectionRow, 'id' | 'connection_id' | 'user_id'>,
+    fileId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connection.connection_id, fileId);
+        if (lineages.length === 0) return true;
+        const owner = nangoOwnerScope({ ownerUserId: connection.user_id });
+        if (!owner.ok || scopeKey(owner.scope) !== tenantKey) return false;
+        for (const lineageId of lineages) {
+            const result = await purgeLineage(
+                owner.scope,
+                lineageId,
+                { kind: 'source_sync', id: connection.id },
+                { code: 'source_deleted' },
+                { signal: AbortSignal.timeout(120_000) }
+            );
+            if (!result.ok) {
+                logger.error('Nango', 'Source purge failed', { connectionId: connection.id, lineageId, reason: result.reason });
+                return false;
+            }
+        }
+        return true;
+    } catch (error) {
+        logger.error('Nango', 'Source purge failed', { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
         return false;
     }
 }

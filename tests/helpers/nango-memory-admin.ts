@@ -23,7 +23,7 @@ export interface MemoryAdminOptions {
   rpc?: (name: string, args: Row) => { data: unknown; error: { code: string; message: string } | null };
   /** A delete on this table returns this error. */
   failDelete?: { table: string; error: { code: string; message: string } };
-  /** Inserts and upserts store rows (upserts merge on their onConflict columns); off by default, as before. */
+  /** Inserts store rows too (upserts always store and merge on their onConflict columns); off by default. */
   storeWrites?: boolean;
 }
 

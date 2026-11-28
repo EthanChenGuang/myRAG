@@ -649,6 +649,8 @@ RAG_SOURCE_RECHECK=false
 RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
+# Source sync: files one Purge-mode connection may purge per UTC day from its change feed; the rest wait for confirmation (0 = off)
+RAG_SOURCE_PURGE_DAILY_CAP=0
 # Create image chunks from PDF pages: true | false
 RAG_PDF_IMAGE_CHUNKS=false
 # Prompt injection scan on ingested text: off | quarantine

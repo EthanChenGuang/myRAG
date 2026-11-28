@@ -138,6 +138,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
   vi.doMock('@/lib/rag', () => ({
     ingest: vi.fn(),
     buildSourceKey: identity.buildSourceKey,
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: state.mode }),
     currentIngestConfig: () => ({ pipeline: state.pipeline }),

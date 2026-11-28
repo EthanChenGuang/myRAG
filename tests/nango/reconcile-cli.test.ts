@@ -17,7 +17,20 @@ import { USAGE, main, parseReconcileArgs } from '@/lib/nango/reconcile-cli';
 import { SourceReconcileDatabaseError } from '@/lib/nango/reconcile';
 
 const CONNECTION = '00000000-0000-4000-8000-00000000c001';
-const COUNTS = { processed: 2, removed: 1, paused: 0, incomplete: 1, failed: 0, skipped: 0, overdue: 0 };
+const COUNTS = {
+  processed: 2,
+  removed: 1,
+  paused: 0,
+  incomplete: 1,
+  failed: 0,
+  skipped: 0,
+  overdue: 0,
+  purgeRetried: 2,
+  purgeStillPending: 1,
+  purgeRescrubbed: 3,
+  purgeSkipped: 0,
+  purgeFailed: 0,
+};
 
 function io() {
   const out: string[] = [];
@@ -85,7 +98,10 @@ describe('rag:source-reconcile main', () => {
     const captured = io();
     expect(await main(['--connection', CONNECTION, '--max-seconds', '30'], captured.io)).toBe(0);
     expect(runSourceReconcile).toHaveBeenCalledWith(expect.objectContaining({ deadlineMs: 30_000, connectionId: CONNECTION }));
-    expect(captured.out).toEqual(['[Source Reconcile] processed=2 removed=1 paused=0 incomplete=1 failed=0 skipped=0 overdue=0']);
+    expect(captured.out).toEqual([
+      '[Source Reconcile] processed=2 removed=1 paused=0 incomplete=1 failed=0 skipped=0 overdue=0 ' +
+        'purge_retried=2 purge_still_pending=1 purge_rescrubbed=3 purge_skipped=0 purge_failed=0',
+    ]);
     expect(captured.out.join('\n')).not.toMatch(/\.(txt|pdf|docx)/);
   });
 });

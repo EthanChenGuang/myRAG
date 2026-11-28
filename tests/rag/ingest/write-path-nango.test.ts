@@ -39,6 +39,8 @@ async function loadAdapter() {
     UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     ingest,
     buildSourceKey: identity.buildSourceKey,
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: state.mode }),
     currentIngestConfig: () => {
@@ -422,6 +424,8 @@ async function mockSyncDependencies(memory: { admin: unknown }) {
     ingest,
     buildSourceKey: identity.buildSourceKey,
     scopeKey: scope.scopeKey,
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: state.mode }),
     currentIngestConfig: () => ({ pipeline: state.pipeline }),
