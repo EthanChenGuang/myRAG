@@ -293,12 +293,14 @@ for (const mode of MODES) {
     });
 
     test('re-applying 0861, then 0933 and 0936 (their operator rules, Phase 4.3 and 04.2-40), keeps one function with the same definition and grants', async () => {
+      // 0936 also rebuilds rag_bm25_search_chunks and stops with 55000 while 0938's p_df_mode is in place, so the 04.4-17 order applies:
+      // 0932 before 0936, 0938 after it.
       await assertLookupFunction(db);
       const definition = async () =>
         (await db.query<{ def: string; acl: string }>(`SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p WHERE p.proname = '${FN}'`)).rows;
       const before = await definition();
-      const files = migrationFiles(mode).filter((file) => ['0861_', '0933_', '0936_'].some((prefix) => path.basename(file).startsWith(prefix)));
-      assert.equal(files.length, 3);
+      const files = migrationFiles(mode).filter((file) => ['0861_', '0932_', '0933_', '0936_', '0938_'].some((prefix) => path.basename(file).startsWith(prefix)));
+      assert.equal(files.length, 5);
       await applyMigrationFiles(db, files);
       assert.deepEqual(await definition(), before);
     });
