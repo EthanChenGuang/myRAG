@@ -1,11 +1,11 @@
 -- Phase 4.4 plan 04.4-21 (D-55, D-56): rag_lexical_rerank_stats, the tenant statistics read of the local_bm25 reranker under
--- RAG_RERANK_LOCAL_STATS=tenant. For each asked (doc type, language) pair it returns the effective chunking profile of the doc type (the
--- rule of rag_bm25_search_chunks: the override, else the active profile, else legacy), the chunk count and total length of the tenant's
--- compacted statistics for that profile and language, and the df of each asked term (0 without a counter; the caller clamps). It reads
--- the compacted counters only, as rag_bm25_search_chunks does; staged deltas are not folded in. Counts for the asked terms only, never a
--- lexeme list. Raises lexical_stats_not_ready (55000) for a tenant without ready statistics; the caller falls back to pool statistics.
--- Both deployment modes, not folded, idempotent; no table, trigger or existing function changes. SECURITY INVOKER, empty search_path,
--- service_role only; the tenant key is checked by rag_assert_tenant_key.
+-- RAG_RERANK_LOCAL_STATS=tenant. For each asked rerank candidate (a chunk id of the caller's tenant) it returns that chunk's own chunking
+-- profile and language ('und' when none), the chunk count and total length of the tenant's compacted statistics for that profile and
+-- language, and the df of each asked term (0 without a counter; the caller clamps). A chunk id of another tenant, or an unknown one, gives
+-- no row. It reads the compacted counters only, as rag_bm25_search_chunks does; staged deltas are not folded in. Counts for the asked
+-- terms only, never a lexeme list. Raises lexical_stats_not_ready (55000) for a tenant without ready statistics; the caller then uses pool
+-- statistics. Both deployment modes, not folded, idempotent; no table, trigger or existing function changes. SECURITY INVOKER, empty
+-- search_path, service_role only; the tenant key is checked by rag_assert_tenant_key.
 BEGIN;
 
 DO $guard$
@@ -19,17 +19,31 @@ BEGIN
 END
 $guard$;
 
+-- An earlier body of this file took (doc type, language) pairs; drop every overload so exactly one signature remains.
+DO $drop_overloads$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT p.oid::pg_catalog.regprocedure AS signature
+    FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'rag_lexical_rerank_stats'
+  LOOP
+    EXECUTE 'DROP FUNCTION ' || r.signature::text;
+  END LOOP;
+END
+$drop_overloads$;
+
 CREATE OR REPLACE FUNCTION public.rag_lexical_rerank_stats(
   p_tenant_key text,
   p_terms text[],
-  p_doc_types text[],
-  p_languages text[],
-  p_chunking_override jsonb DEFAULT NULL
+  p_chunk_ids uuid[]
 )
 RETURNS TABLE (
-  doc_type text,
-  language text,
+  chunk_id uuid,
   chunking_profile_id text,
+  language text,
   chunk_count bigint,
   total_len bigint,
   terms text[],
@@ -46,17 +60,11 @@ DECLARE
 BEGIN
   PERFORM public.rag_assert_tenant_key(p_tenant_key);
 
-  IF pg_catalog.cardinality(COALESCE(p_doc_types, '{}'::text[])) <> pg_catalog.cardinality(COALESCE(p_languages, '{}'::text[])) THEN
-    RAISE EXCEPTION 'rag_lexical_rerank_stats: doc types and languages are pairs' USING ERRCODE = '22023';
-  END IF;
   IF pg_catalog.cardinality(COALESCE(p_terms, '{}'::text[])) > 64 THEN
     RAISE EXCEPTION 'rag_lexical_rerank_stats: at most 64 terms' USING ERRCODE = '22023';
   END IF;
-  IF pg_catalog.cardinality(COALESCE(p_doc_types, '{}'::text[])) > 64 THEN
-    RAISE EXCEPTION 'rag_lexical_rerank_stats: at most 64 pairs' USING ERRCODE = '22023';
-  END IF;
-  IF p_chunking_override IS NOT NULL AND pg_catalog.jsonb_typeof(p_chunking_override) <> 'object' THEN
-    RAISE EXCEPTION 'rag_lexical_rerank_stats: invalid chunking override' USING ERRCODE = '22023';
+  IF pg_catalog.cardinality(COALESCE(p_chunk_ids, '{}'::uuid[])) > 500 THEN
+    RAISE EXCEPTION 'rag_lexical_rerank_stats: at most 500 chunks' USING ERRCODE = '22023';
   END IF;
 
   -- The term forms rag_bm25_search_chunks accepts, distinct, in the asked order.
@@ -67,7 +75,7 @@ BEGIN
     WHERE u.tok <> '' AND pg_catalog.octet_length(u.tok) <= 255 AND u.tok !~ '[''\\[:space:]]'
     GROUP BY u.tok
   ) AS t;
-  IF v_terms IS NULL OR pg_catalog.cardinality(COALESCE(p_doc_types, '{}'::text[])) = 0 THEN
+  IF v_terms IS NULL OR pg_catalog.cardinality(COALESCE(p_chunk_ids, '{}'::uuid[])) = 0 THEN
     RETURN;
   END IF;
 
@@ -77,40 +85,34 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  WITH pairs AS (
-    SELECT DISTINCT pr.doc_type, pr.language
-    FROM ROWS FROM (pg_catalog.unnest(p_doc_types), pg_catalog.unnest(p_languages)) AS pr(doc_type, language)
-    WHERE pr.doc_type IS NOT NULL AND pr.language IS NOT NULL
-  ), eff AS (
-    SELECT p.doc_type, p.language,
-           COALESCE(
-             NULLIF(pg_catalog.btrim(p_chunking_override ->> p.doc_type), ''),
-             (SELECT cp.id FROM public.chunking_profiles cp WHERE cp.doc_type = p.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
-             'legacy'
-           ) AS profile_id
-    FROM pairs p
+  WITH cand AS MATERIALIZED (
+    SELECT c.id, c.chunking_profile_id AS profile_id, COALESCE(c.language, 'und') AS lang
+    FROM public.document_chunks c
+    WHERE c.tenant_key = p_tenant_key AND c.id = ANY (p_chunk_ids)
+  ), grp AS MATERIALIZED (
+    SELECT g.profile_id, g.lang,
+           COALESCE(lc.chunk_count, 0)::bigint AS n,
+           COALESCE(lc.total_len, 0)::bigint AS len,
+           (SELECT pg_catalog.array_agg(COALESCE(d.df, 0)::bigint ORDER BY t.ord)
+              FROM pg_catalog.unnest(v_terms) WITH ORDINALITY AS t(tok, ord)
+              LEFT JOIN public.rag_lexical_df d
+                ON d.tenant_key = p_tenant_key AND d.corpus = 'chunks' AND d.lexeme = t.tok
+               AND d.chunking_profile_id = g.profile_id AND d.language = g.lang) AS df
+    FROM (SELECT DISTINCT cand.profile_id, cand.lang FROM cand) AS g
+    LEFT JOIN public.rag_lexical_corpus lc
+      ON lc.tenant_key = p_tenant_key AND lc.corpus = 'chunks' AND lc.chunking_profile_id = g.profile_id AND lc.language = g.lang
   )
-  SELECT e.doc_type, e.language, e.profile_id,
-         COALESCE(lc.chunk_count, 0)::bigint,
-         COALESCE(lc.total_len, 0)::bigint,
-         v_terms,
-         (SELECT pg_catalog.array_agg(COALESCE(d.df, 0)::bigint ORDER BY t.ord)
-            FROM pg_catalog.unnest(v_terms) WITH ORDINALITY AS t(tok, ord)
-            LEFT JOIN public.rag_lexical_df d
-              ON d.tenant_key = p_tenant_key AND d.corpus = 'chunks' AND d.lexeme = t.tok
-             AND d.chunking_profile_id = e.profile_id AND d.language = e.language)
-  FROM eff e
-  LEFT JOIN public.rag_lexical_corpus lc
-    ON lc.tenant_key = p_tenant_key AND lc.corpus = 'chunks' AND lc.chunking_profile_id = e.profile_id AND lc.language = e.language
-  ORDER BY e.doc_type, e.language;
+  SELECT cand.id, cand.profile_id, cand.lang, grp.n, grp.len, v_terms, grp.df
+  FROM cand JOIN grp ON grp.profile_id = cand.profile_id AND grp.lang = cand.lang
+  ORDER BY cand.id;
 END
 $fn$;
 
-COMMENT ON FUNCTION public.rag_lexical_rerank_stats(text, text[], text[], text[], jsonb) IS
-  '04.4-21 D-55: compacted chunk count, total length and per-term df of one tenant for the local reranker, per (doc type, language); service_role only.';
+COMMENT ON FUNCTION public.rag_lexical_rerank_stats(text, text[], uuid[]) IS
+  '04.4-21 D-55: per rerank candidate of the caller tenant, its profile and language bucket: compacted chunk count, total length and df of the asked terms; service_role only.';
 
-REVOKE ALL ON FUNCTION public.rag_lexical_rerank_stats(text, text[], text[], text[], jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_lexical_rerank_stats(text, text[], text[], text[], jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_lexical_rerank_stats(text, text[], uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_lexical_rerank_stats(text, text[], uuid[]) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 

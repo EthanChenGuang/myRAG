@@ -68,8 +68,6 @@ export interface RankStagesInput {
    * D-31, D-51: the question's normalized identifiers (with the stored forms they resolved to) and the tenant's patterns; present only
    * while the identifier filter is on. filteredBy is set when every search leg was filtered to chunks carrying one of norms.
    */
-  /** 04.4-21: the request's chunking override, passed only under RAG_RERANK_LOCAL_STATS=tenant (the statistics read resolves profiles). */
-  chunkingOverride?: Record<string, string>;
   identifiers?: {
     askedNorms: readonly string[];
     patterns: readonly RegExp[];
@@ -319,12 +317,7 @@ export const RERANK_STATS_UNAVAILABLE = 'rerank_stats_unavailable';
 function localStatsFor(ctx: RankStagesInput, hits: FusedHit[]): LocalStatsProvider | null {
   const client = getRagDeps().adminClient() as RpcClient | null;
   if (!client || !ctx.input.scope) return null;
-  return createTenantLocalStatsProvider({
-    client,
-    tenantKey: scopeKey(ctx.input.scope),
-    candidates: hits.map((row) => ({ docType: row.hit.docType, language: row.hit.language })),
-    ...(ctx.chunkingOverride ? { chunkingOverride: ctx.chunkingOverride } : {}),
-  });
+  return createTenantLocalStatsProvider({ client, tenantKey: scopeKey(ctx.input.scope), chunkIds: hits.map((row) => row.hit.chunkId) });
 }
 
 function recordSkipped(collector: TraceCollector, hits: FusedHit[], reason: 'failed' | 'timeout', detail: string): void {

@@ -55,14 +55,13 @@ function routingClient(answers: Record<string, () => RpcResponse | Promise<RpcRe
 
 const READY: RpcResponse = { data: { state: 'ready', chunk_count: 500 }, error: null };
 
-function statsRows(args: Record<string, unknown>): RpcResponse {
-  const terms = args.p_terms as string[];
-  const types = args.p_doc_types as string[];
-  const langs = args.p_languages as string[];
+function statsRows(args: Record<string, unknown>, skip: readonly string[] = []): RpcResponse {
+  const terms = (args.p_terms as string[] | undefined) ?? [];
+  const ids = ((args.p_chunk_ids as string[] | undefined) ?? []).filter((id) => !skip.includes(id));
   return {
-    data: types.map((docType, i) => ({
-      doc_type: docType,
-      language: langs[i],
+    data: ids.map((chunkId) => ({
+      chunk_id: chunkId,
+      language: 'en',
       chunking_profile_id: 'legacy',
       chunk_count: 500,
       total_len: 5000,
@@ -156,22 +155,19 @@ describe('rank stage with RAG_RERANK_LOCAL_STATS (04.4-21)', () => {
     const { out, record } = await run({ RAG_RERANK_LOCAL_STATS: 'tenant' }, client);
     const reads = calls.filter((c) => c.fn === 'rag_lexical_rerank_stats');
     expect(reads).toHaveLength(1);
-    expect(reads[0]?.args).toMatchObject({ p_tenant_key: TENANT, p_doc_types: ['general'], p_languages: ['en'], p_chunking_override: null });
+    expect(reads[0]?.args).toEqual({ p_tenant_key: TENANT, p_terms: expect.any(Array), p_chunk_ids: ['c0', 'c1', 'c2', 'c3', 'c4'] });
     expect(out.rerank.model).toBe('bm25-v3-tenant');
     expect(record?.detail).toBe(`local_bm25:bm25-v3-tenant;${RERANK_STATS_TENANT}`);
     expect(record?.status).toBe('ok');
   });
 
-  it('tenant: a chunk without language reads the und bucket; a chunk without doc type makes the pool serve', async () => {
-    const { client, calls } = routingClient({ rag_lexstats_status: () => READY, rag_lexical_rerank_stats: () => statsRows(calls.at(-1)!.args) });
-    await run({ RAG_RERANK_LOCAL_STATS: 'tenant' }, client, fused((i) => (i === 2 ? { language: null } : {})));
-    expect(calls.find((c) => c.fn === 'rag_lexical_rerank_stats')?.args.p_languages).toEqual(expect.arrayContaining(['en', 'und']));
-    resetLexstatsCacheForTests();
-    const second = routingClient({ rag_lexstats_status: () => READY, rag_lexical_rerank_stats: () => statsRows({}) });
-    const { out, record } = await run({ RAG_RERANK_LOCAL_STATS: 'tenant' }, second.client, fused((i) => (i === 2 ? { docType: null } : {})));
-    expect(second.calls.filter((c) => c.fn === 'rag_lexical_rerank_stats')).toEqual([]);
+  it('tenant: a candidate the read does not answer (another tenant or an unknown id) makes the pool serve the request', async () => {
+    const { client, calls } = routingClient({ rag_lexstats_status: () => READY, rag_lexical_rerank_stats: () => statsRows(calls.at(-1)!.args, ['c2']) });
+    const pool = await run({}, routingClient({}).client);
+    const { out, record } = await run({ RAG_RERANK_LOCAL_STATS: 'tenant' }, client);
     expect(out.rerank.model).toBe('bm25-v2');
     expect(record?.detail).toBe(`local_bm25:bm25-v2;${RERANK_STATS_UNAVAILABLE}`);
+    expect([...out.rerank.scoreByChunk.entries()]).toEqual([...pool.out.rerank.scoreByChunk.entries()]);
   });
 
   const fallbacks: Array<[string, () => { client: RpcClient | null; calls: Call[] }]> = [

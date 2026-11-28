@@ -22,7 +22,7 @@ const TRIGGER_FUNCTIONS = ['rag_lexstats_chunks_delete()', 'rag_lexstats_chunks_
 /** The fourteen callable functions of the phase: rag_lexical_dl (0900), the eight of 0902 (with the unguarded compaction body), the hook (0903), the search (0904), cluster enable and disable (0905), the rerank statistics read (0906). */
 const RPC_SIGNATURES = [
   'rag_lexical_dl(tsvector)',
-  'rag_lexical_rerank_stats(text,text[],text[],text[],jsonb)',
+  'rag_lexical_rerank_stats(text,text[],uuid[])',
   'rag_lexstats_check(text)',
   'rag_lexstats_cluster_disable(text)',
   'rag_lexstats_cluster_enable(text)',
@@ -67,8 +67,8 @@ function rpcCalls(tenant: string): Array<{ fn: string; body: Record<string, unkn
     },
     {
       fn: 'rag_lexical_rerank_stats',
-      body: { p_tenant_key: tenant, p_terms: ['w1'], p_doc_types: ['general'], p_languages: ['en'] },
-      sql: "SELECT * FROM public.rag_lexical_rerank_stats($1, ARRAY['w1'], ARRAY['general'], ARRAY['en'])",
+      body: { p_tenant_key: tenant, p_terms: ['w1'], p_chunk_ids: [] },
+      sql: "SELECT * FROM public.rag_lexical_rerank_stats($1, ARRAY['w1'], ARRAY[]::uuid[])",
       params: [tenant],
     },
     { fn: 'rag_lexstats_status', body: { p_tenant_key: tenant }, sql: 'SELECT public.rag_lexstats_status($1)', params: [tenant] },

@@ -15,7 +15,7 @@ import { assertTenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { FusedHit } from '../fusion/rrf';
 import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
-import { evalRetrievalOverrides, requestChunkingOverride } from './overrides';
+import { evalRetrievalOverrides } from './overrides';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
 import { documentBudgetOf } from '../context/pack';
@@ -96,16 +96,6 @@ async function embedPrecomputed(
 }
 
 /** D-21: whatever path the request leaves by, the speculation stops and its trace lands on the result (absent while off). */
-/** 04.4-21: the chunking override the rerank statistics read resolves profiles with; built only under RAG_RERANK_LOCAL_STATS=tenant. */
-function tenantRerankChunking(
-  profile: Profile,
-  input: RunRetrievalInput,
-  rolloutChunking: Record<string, string> | undefined,
-): { chunkingOverride?: Record<string, string> } {
-  const override = requestChunkingOverride(profile, input.stageOverrides?.retrievalOverrides, rolloutChunking);
-  return override ? { chunkingOverride: override } : {};
-}
-
 export async function runV2Pipeline(
   input: RunRetrievalInput,
   collector: TraceCollector,
@@ -506,7 +496,6 @@ async function runV2PipelineBody(
             ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
             : evalFinalTopK(profile, input, params.final_top_k),
         embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
-        ...(config.v2.rerankLocalStats === 'tenant' ? tenantRerankChunking(profile, input, rolloutChunking) : {}),
         ...(searchIdentifiers && searchIdentifiers.asked.length > 0
           ? {
               identifiers: {

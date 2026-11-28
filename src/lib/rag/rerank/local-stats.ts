@@ -6,90 +6,56 @@ import type { LocalStatsGroup, LocalStatsProvider } from './types';
 
 /**
  * 04.4-21 D-55: the tenant statistics read of the local reranker (RAG_RERANK_LOCAL_STATS=tenant). One rag_lexical_rerank_stats call per
- * rerank call, on the admin client with the caller's scopeKey as the only tenant input; the readiness answer of the lexical statistics
- * cache (04.4-08) is reused, so a tenant known not to be ready costs no read. Every failure answers null and the pool serves.
- * Logs carry a tenant-key hash and a code only (D-34).
+ * rerank call, on the admin client with the caller's scopeKey as the only tenant input. Each candidate is keyed by its chunk id; the SQL
+ * resolves the chunk's own chunking profile and language inside the caller's tenant, so a chunk of another tenant or an unknown id gets
+ * no statistics and the pool serves. The readiness answer of the lexical statistics cache (04.4-08) is reused, so a tenant known not to
+ * be ready costs no read. Every failure answers null. Logs carry a tenant-key hash and a code only (D-34).
  */
 export const RERANK_STATS_RPC = 'rag_lexical_rerank_stats';
 export const MAX_STATS_TERMS = 64;
-export const MAX_STATS_GROUPS = 64;
-const GROUP_SEPARATOR = '\u001f';
-
-export interface LocalStatsCandidate {
-  docType: string | null;
-  language: string | null;
-}
+export const MAX_STATS_CHUNKS = 500;
 
 function tenantHash(tenantKey: string): string {
   return createHash('sha256').update(tenantKey).digest('hex').slice(0, 12);
 }
 
-/** The statistics bucket of a chunk: its doc type (whose effective chunking profile the SQL resolves) and its language ('und' if none). */
-export function localStatsGroupOf(candidate: LocalStatsCandidate): string | null {
-  if (!candidate.docType) return null;
-  return `${candidate.docType}${GROUP_SEPARATOR}${candidate.language || 'und'}`;
-}
-
-function splitGroup(group: string): [string, string] {
-  const at = group.indexOf(GROUP_SEPARATOR);
-  return [group.slice(0, at), group.slice(at + 1)];
+function logUnavailable(tenantKey: string): void {
+  logger.warn('Document Search', 'rerank statistics read failed; pool statistics serve', { tenant: tenantHash(tenantKey), code: 'rerank_stats_unavailable' });
 }
 
 function parseRows(data: unknown): Map<string, LocalStatsGroup> | null {
   const out = new Map<string, LocalStatsGroup>();
   for (const value of rpcRows(data)) {
     const row = value as Record<string, unknown>;
-    const { terms, dfs, language } = row;
-    const group = row['doc_type'];
-    if (typeof group !== 'string' || typeof language !== 'string' || !Array.isArray(terms) || !Array.isArray(dfs)) return null;
-    if (terms.length !== dfs.length) return null;
+    const { chunk_id: chunkId, terms, dfs } = row;
+    if (typeof chunkId !== 'string' || !Array.isArray(terms) || !Array.isArray(dfs) || terms.length !== dfs.length) return null;
     const df = new Map<string, number>();
     terms.forEach((term, index) => {
       const count = Number(dfs[index]);
       if (typeof term === 'string' && Number.isFinite(count) && count > 0) df.set(term, count);
     });
-    out.set(`${group}${GROUP_SEPARATOR}${language}`, {
-      chunkCount: Number(row.chunk_count) || 0,
-      totalLength: Number(row.total_len) || 0,
-      df,
-    });
+    out.set(chunkId, { chunkCount: Number(row.chunk_count) || 0, totalLength: Number(row.total_len) || 0, df });
   }
   return out;
 }
 
-export function createTenantLocalStatsProvider(args: {
-  client: RpcClient;
-  tenantKey: string;
-  candidates: readonly LocalStatsCandidate[];
-  chunkingOverride?: Record<string, string>;
-}): LocalStatsProvider {
-  const { client, tenantKey, chunkingOverride } = args;
+export function createTenantLocalStatsProvider(args: { client: RpcClient; tenantKey: string; chunkIds: readonly string[] }): LocalStatsProvider {
+  const { client, tenantKey } = args;
   return {
-    groupByDoc: args.candidates.map(localStatsGroupOf),
+    groupByDoc: args.chunkIds.map((id) => (id ? id : null)),
     async read(terms, groups, signal) {
-      if (terms.length === 0 || terms.length > MAX_STATS_TERMS || groups.length === 0 || groups.length > MAX_STATS_GROUPS) return null;
+      if (terms.length === 0 || terms.length > MAX_STATS_TERMS || groups.length === 0 || groups.length > MAX_STATS_CHUNKS) return null;
       if (!(await lexstatsReady(client, tenantKey, Date.now(), signal))) return null;
-      const pairs = groups.map(splitGroup);
       try {
-        const response = await client
-          .rpc(RERANK_STATS_RPC, {
-            p_tenant_key: tenantKey,
-            p_terms: terms,
-            p_doc_types: pairs.map((pair) => pair[0]),
-            p_languages: pairs.map((pair) => pair[1]),
-            p_chunking_override: chunkingOverride ?? null,
-          })
-          .abortSignal(signal);
+        const response = await client.rpc(RERANK_STATS_RPC, { p_tenant_key: tenantKey, p_terms: terms, p_chunk_ids: groups }).abortSignal(signal);
         if (response.error) {
           if (/lexical_stats_not_ready/.test(response.error.message)) dropLexstatsReady(tenantKey);
-          else logger.warn('Document Search', 'rerank statistics read failed; pool statistics serve', { tenant: tenantHash(tenantKey), code: 'rerank_stats_unavailable' });
+          else logUnavailable(tenantKey);
           return null;
         }
         return parseRows(response.data);
       } catch {
-        if (!signal.aborted) {
-          logger.warn('Document Search', 'rerank statistics read failed; pool statistics serve', { tenant: tenantHash(tenantKey), code: 'rerank_stats_unavailable' });
-        }
+        if (!signal.aborted) logUnavailable(tenantKey);
         return null;
       }
     },

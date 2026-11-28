@@ -27,10 +27,10 @@ interface Tenant {
 }
 
 interface Seeded {
+  id: string;
   tenant: string;
-  docType: string;
   profile: string;
-  language: string;
+  language: string | null;
   tokens: string[];
   current: boolean;
 }
@@ -67,19 +67,20 @@ async function seedDocument(
   tenant: Tenant,
   docType: string,
   docLanguage: string,
-  chunks: Array<{ tokens: string[]; profile?: string; language?: string; current?: boolean }>,
-): Promise<void> {
+  chunks: Array<{ tokens: string[]; profile?: string; language?: string | null; current?: boolean }>,
+): Promise<Seeded[]> {
   const docId = crypto.randomUUID();
   await db.query(
     `INSERT INTO public.documents (id, filename, content, metadata, user_id, doc_type, language, is_current, status)
      VALUES ($1, $2, 'neutral sample', '{}'::jsonb, $3::uuid, $4, $5, true, 'ready')`,
     [docId, `rerank-${docId.slice(0, 8)}.txt`, tenant.userId, docType, docLanguage],
   );
-  const rows = chunks.map((c) => ({
+  const rows: Seeded[] = chunks.map((c) => ({
     id: crypto.randomUUID(),
-    text: c.tokens.join(' '),
-    language: c.language ?? docLanguage,
+    tenant: tenant.key,
     profile: c.profile ?? 'legacy',
+    language: c.language === undefined ? docLanguage : c.language,
+    tokens: c.tokens,
     current: c.current ?? true,
   }));
   await db.query(
@@ -87,20 +88,17 @@ async function seedDocument(
        chunking_profile_id, status, is_current)
      SELECT u.id, $1::uuid, u.txt, '{}'::jsonb, u.ord::int - 1, u.txt, u.lang, $2, 'text', u.profile, 'ready', u.cur
        FROM unnest($3::uuid[], $4::text[], $5::text[], $6::text[], $7::boolean[]) WITH ORDINALITY AS u(id, txt, lang, profile, cur, ord)`,
-    [docId, docType, rows.map((r) => r.id), rows.map((r) => r.text), rows.map((r) => r.language), rows.map((r) => r.profile), rows.map((r) => r.current)],
+    [docId, docType, rows.map((r) => r.id), rows.map((r) => r.tokens.join(' ')), rows.map((r) => r.language), rows.map((r) => r.profile), rows.map((r) => r.current)],
   );
-  chunks.forEach((c, i) => {
-    const row = rows[i] as (typeof rows)[number];
-    seeded.push({ tenant: tenant.key, docType, profile: row.profile, language: row.language, tokens: c.tokens, current: row.current });
-  });
+  seeded.push(...rows);
+  return rows;
 }
 
-/**
- * The reference: chunk count, total length and df per asked term over the tenant's current chunks of the effective profile and language.
- * Statistics are keyed by (chunking profile, language), so every doc type served by the same profile shares one bucket.
- */
-function recompute(seeded: Seeded[], tenant: string, docType: string, profile: string, language: string, terms: string[]) {
-  const members = seeded.filter((c) => c.tenant === tenant && c.current && c.tokens.length > 0 && c.profile === profile && c.language === language);
+/** The reference: chunk count, total length and df per asked term over the tenant's current chunks of one (profile, language) bucket. */
+function recompute(seeded: Seeded[], tenant: string, profile: string, language: string, terms: string[]) {
+  const members = seeded.filter(
+    (c) => c.tenant === tenant && c.current && c.tokens.length > 0 && c.profile === profile && (c.language ?? 'und') === language,
+  );
   return {
     chunk_count: members.length,
     total_len: members.reduce((sum, c) => sum + c.tokens.length, 0),
@@ -108,20 +106,13 @@ function recompute(seeded: Seeded[], tenant: string, docType: string, profile: s
   };
 }
 
-async function readStats(
-  db: PGlite,
-  tenant: string,
-  terms: string[],
-  docTypes: string[],
-  languages: string[],
-  override: Record<string, string> | null = null,
-): Promise<Row[]> {
+async function readStats(db: PGlite, tenant: string, terms: string[], chunkIds: string[]): Promise<Row[]> {
   return (
     await db.query<Row>(
-      `SELECT doc_type, language, chunking_profile_id, chunk_count::int AS chunk_count, total_len::int AS total_len, terms,
+      `SELECT chunk_id::text AS chunk_id, chunking_profile_id, language, chunk_count::int AS chunk_count, total_len::int AS total_len, terms,
               (SELECT array_agg(x::int ORDER BY o) FROM unnest(dfs) WITH ORDINALITY AS u(x, o)) AS dfs
-         FROM public.${FN}($1, $2::text[], $3::text[], $4::text[], $5::jsonb) ORDER BY doc_type, language`,
-      [tenant, terms, docTypes, languages, override === null ? null : JSON.stringify(override)],
+         FROM public.${FN}($1, $2::text[], $3::uuid[]) ORDER BY chunk_id`,
+      [tenant, terms, chunkIds],
     )
   ).rows;
 }
@@ -169,6 +160,8 @@ for (const mode of MODES) {
   describe(`0906 ${FN} (${mode})`, () => {
     let db: PGlite;
     const seeded: Seeded[] = [];
+    let general: Seeded[] = [];
+    let technical: Seeded[] = [];
 
     before(async () => {
       db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
@@ -180,16 +173,18 @@ for (const mode of MODES) {
       const corpus = neutralLexicalCorpus({ seed: 21, chunks: 120, vocabulary: 150, minLength: 4, maxLength: 30 });
       for (let d = 0; d < 12; d += 1) {
         const language = d % 3 === 2 ? 'it' : 'en';
-        await seedDocument(
-          db,
-          seeded,
-          tenantA,
-          'general',
-          language,
-          corpus.slice(d * 10, d * 10 + 10).map((tokens, i) => ({ tokens, language: i % 5 === 4 ? 'und' : language, current: !(d === 0 && i === 0) })),
+        general.push(
+          ...(await seedDocument(
+            db,
+            seeded,
+            tenantA,
+            'general',
+            language,
+            corpus.slice(d * 10, d * 10 + 10).map((tokens, i) => ({ tokens, language: i % 5 === 4 ? 'und' : language, current: !(d === 0 && i === 0) })),
+          )),
         );
       }
-      // product_technical: an active non-legacy profile; only its chunks are counted for that doc type.
+      // product_technical: an active non-legacy profile; a chunk still under legacy reads the legacy bucket (its own profile).
       await db.query(
         `INSERT INTO public.chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
          VALUES ($1, 'product_technical', 256, 'none', NULL, 'building', 'custom')`,
@@ -197,7 +192,7 @@ for (const mode of MODES) {
       );
       await db.query("UPDATE public.chunking_profiles SET status = 'retired' WHERE id = 'legacy' AND doc_type = 'product_technical'");
       await db.query("UPDATE public.chunking_profiles SET status = 'active' WHERE id = $1 AND doc_type = 'product_technical'", [ALT_PROFILE]);
-      await seedDocument(db, seeded, tenantA, 'product_technical', 'en', [
+      technical = await seedDocument(db, seeded, tenantA, 'product_technical', 'en', [
         { tokens: ['w1', 'w2', 'w3'], profile: 'legacy' },
         { tokens: ['w1', 'w2', 'w3', 'w4'], profile: ALT_PROFILE },
         { tokens: ['w2', 'w5'], profile: ALT_PROFILE },
@@ -211,90 +206,72 @@ for (const mode of MODES) {
     });
 
     test('the function exists once', async () => {
-      const { rows } = await db.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1`,
+      const { rows } = await db.query<{ sig: string }>(
+        `SELECT p.oid::regprocedure::text AS sig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = $1`,
         [FN],
       );
-      assert.equal(rows[0]?.n, 1);
+      assert.deepEqual(rows.map((r) => r.sig), [`${FN}(text,text[],uuid[])`]);
     });
 
-    test('a doc type served by the same profile reads the same bucket (statistics are per profile and language)', async () => {
-      const rows = await readStats(db, tenantA.key, ['w1', 'w2'], ['general', 'invoice_receipt', 'product_technical'], ['en', 'en', 'en']);
-      const byType = Object.fromEntries(rows.map((r) => [r.doc_type, { p: r.chunking_profile_id, n: r.chunk_count, len: r.total_len, dfs: r.dfs }]));
-      assert.deepEqual(byType.invoice_receipt, byType.general);
-      assert.notDeepEqual(byType.product_technical, byType.general);
-    });
-
-    test('counts per (doc type, language) equal a full recompute; terms come back in the asked order, an unknown term has df 0', async () => {
+    test("each candidate reads its own chunk's (profile, language) bucket, equal to a full recompute; terms in the asked order", async () => {
       const terms = ['w3', 'w1', 'w0', 'w149', 'w99999'];
-      const pairs: Array<[string, string]> = [
-        ['general', 'en'],
-        ['general', 'it'],
-        ['general', 'und'],
-        ['product_technical', 'en'],
-      ];
-      const rows = await readStats(db, tenantA.key, terms, pairs.map((p) => p[0]), pairs.map((p) => p[1]));
-      assert.equal(rows.length, pairs.length);
-      for (const [docType, language] of pairs) {
-        const row = rows.find((r) => r.doc_type === docType && r.language === language);
-        assert.ok(row, `${docType}/${language} answered`);
-        const profile = docType === 'product_technical' ? ALT_PROFILE : 'legacy';
-        assert.equal(row.chunking_profile_id, profile);
+      const asked = [...general.slice(1, 12), ...technical];
+      const rows = await readStats(db, tenantA.key, terms, asked.map((c) => c.id));
+      assert.equal(rows.length, asked.length);
+      for (const chunk of asked) {
+        const row = rows.find((r) => r.chunk_id === chunk.id);
+        assert.ok(row, 'answered');
+        const language = chunk.language ?? 'und';
+        assert.equal(row.chunking_profile_id, chunk.profile);
+        assert.equal(row.language, language);
         assert.deepEqual(row.terms, terms);
         assert.deepEqual(
           { chunk_count: row.chunk_count, total_len: row.total_len, dfs: row.dfs },
-          recompute(seeded, tenantA.key, docType, profile, language, terms),
-          `${docType}/${language}`,
+          recompute(seeded, tenantA.key, chunk.profile, language, terms),
+          `${chunk.profile}/${language}`,
         );
       }
+      const legacyTechnical = rows.find((r) => r.chunk_id === technical[0]?.id);
+      assert.equal(legacyTechnical?.chunking_profile_id, 'legacy', 'a chunk under legacy reads the legacy bucket, not the active profile');
     });
 
-    test('a pair without statistics answers chunk_count 0; duplicate terms and pairs are answered once; rejected term forms are left out', async () => {
-      const rows = await readStats(db, tenantA.key, ['w1', 'w1', "w'1", 'w 1', ''], ['general', 'general', 'general'], ['en', 'en', 'zh']);
-      assert.equal(rows.length, 2);
-      const missing = rows.find((r) => r.language === 'zh');
-      assert.deepEqual({ chunk_count: missing?.chunk_count, total_len: missing?.total_len, dfs: missing?.dfs }, { chunk_count: 0, total_len: 0, dfs: [0] });
-      for (const row of rows) assert.deepEqual(row.terms, ['w1']);
-    });
-
-    test('the chunking override names the profile counted for a doc type', async () => {
-      const rows = await readStats(db, tenantA.key, ['w1'], ['product_technical'], ['en'], { product_technical: 'legacy' });
-      assert.equal(rows[0]?.chunking_profile_id, 'legacy');
-      assert.deepEqual(
-        { chunk_count: rows[0]?.chunk_count, total_len: rows[0]?.total_len, dfs: rows[0]?.dfs },
-        recompute(seeded, tenantA.key, 'product_technical', 'legacy', 'en', ['w1']),
-      );
+    test('a non-current chunk still reads its bucket; an unknown id gives no row; duplicates are answered once; rejected term forms are left out', async () => {
+      const stale = general[0] as Seeded;
+      const rows = await readStats(db, tenantA.key, ['w1', 'w1', "w'1", 'w 1', ''], [stale.id, stale.id, crypto.randomUUID()]);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]?.chunk_id, stale.id);
+      assert.deepEqual(rows[0]?.terms, ['w1']);
     });
 
     test('pending deltas are not read: counters are the compacted ones, as in rag_bm25_search_chunks', async () => {
-      const before = await readStats(db, tenantA.key, ['w1'], ['general'], ['en']);
+      const ids = general.slice(1, 4).map((c) => c.id);
+      const before = await readStats(db, tenantA.key, ['w1'], ids);
       await seedDocument(db, [], tenantA, 'general', 'en', [{ tokens: ['w1', 'w1', 'w2'] }]);
       const { rows } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.rag_lexical_stats_pending WHERE tenant_key = $1', [tenantA.key]);
       assert.ok((rows[0]?.n ?? 0) > 0, 'the insert staged a delta');
-      assert.deepEqual(await readStats(db, tenantA.key, ['w1'], ['general'], ['en']), before);
+      assert.deepEqual(await readStats(db, tenantA.key, ['w1'], ids), before);
       await db.query('DELETE FROM public.rag_lexical_stats_pending WHERE tenant_key = $1', [tenantA.key]);
     });
 
-    test('argument limits raise 22023: mismatched pair arrays, more than 64 terms or 64 pairs', async () => {
-      const call = `SELECT * FROM public.${FN}($1, $2::text[], $3::text[], $4::text[])`;
-      assert.equal(codeOf(await errorOf(db, call, [tenantA.key, ['w1'], ['general', 'general'], ['en']])), '22023');
-      const many = Array.from({ length: 65 }, (_, i) => `w${i}`);
-      assert.equal(codeOf(await errorOf(db, call, [tenantA.key, many, ['general'], ['en']])), '22023');
-      assert.equal(codeOf(await errorOf(db, call, [tenantA.key, ['w1'], many.map(() => 'general'), many])), '22023');
-      const empty = await db.query(call, [tenantA.key, [], ['general'], ['en']]);
-      assert.equal(empty.rows.length, 0, 'no term asks nothing');
+    test('argument limits raise 22023: more than 64 terms or 500 chunks; no term or no chunk asks nothing', async () => {
+      const call = `SELECT * FROM public.${FN}($1, $2::text[], $3::uuid[])`;
+      const id = (general[1] as Seeded).id;
+      assert.equal(codeOf(await errorOf(db, call, [tenantA.key, Array.from({ length: 65 }, (_, i) => `w${i}`), [id]])), '22023');
+      assert.equal(codeOf(await errorOf(db, call, [tenantA.key, ['w1'], Array.from({ length: 501 }, () => crypto.randomUUID())])), '22023');
+      assert.equal((await db.query(call, [tenantA.key, [], [id]])).rows.length, 0);
+      assert.equal((await db.query(call, [tenantA.key, ['w1'], []])).rows.length, 0);
     });
 
     test('not ready: no state row or a building state raise lexical_stats_not_ready (55000)', async () => {
-      const key = tenantB?.key ?? null;
-      if (key) {
-        const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY['general'], ARRAY['en'])`, [key]);
+      const id = (general[1] as Seeded).id;
+      if (tenantB) {
+        const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY[$2]::uuid[])`, [tenantB.key, id]);
         assert.equal(codeOf(error), '55000', messageOf(error));
         assert.match(messageOf(error), /lexical_stats_not_ready/);
       }
       await db.query("UPDATE public.rag_lexical_stats_state SET status = 'building' WHERE tenant_key = $1", [tenantA.key]);
       try {
-        const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY['general'], ARRAY['en'])`, [tenantA.key]);
+        const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY[$2]::uuid[])`, [tenantA.key, id]);
         assert.equal(codeOf(error), '55000', messageOf(error));
         assert.match(messageOf(error), /lexical_stats_not_ready/);
       } finally {
@@ -302,32 +279,38 @@ for (const mode of MODES) {
       }
     });
 
-    test('isolation: another tenant never changes the answer; a key of the other mode is rejected', async () => {
+    test("isolation: another tenant's chunk ids give no row, its statistics never change the answer; a key of the other mode is rejected", async () => {
       const terms = ['w1', 'w2', 'w3', 'w50'];
-      const before = await readStats(db, tenantA.key, terms, ['general', 'general'], ['en', 'it']);
+      const ids = general.slice(1, 12).map((c) => c.id);
+      const before = await readStats(db, tenantA.key, terms, ids);
       if (tenantB) {
         const random = lcg(9);
-        const own: Seeded[] = [];
+        const bChunks: Seeded[] = [];
         for (let d = 0; d < 4; d += 1) {
-          await seedDocument(
-            db,
-            own,
-            tenantB,
-            'general',
-            'en',
-            Array.from({ length: 10 }, () => ({ tokens: Array.from({ length: 20 }, () => (random() < 0.7 ? 'w1' : `w${Math.floor(random() * 4)}`)) })),
+          bChunks.push(
+            ...(await seedDocument(
+              db,
+              [],
+              tenantB,
+              'general',
+              'en',
+              Array.from({ length: 10 }, () => ({ tokens: Array.from({ length: 20 }, () => (random() < 0.7 ? 'w1' : `w${Math.floor(random() * 4)}`)) })),
+            )),
           );
         }
         await db.query('SELECT public.rag_lexstats_enable($1)', [tenantB.key]);
         await db.query('SELECT public.rag_lexstats_rebuild($1)', [tenantB.key]);
-        assert.deepEqual(await readStats(db, tenantA.key, terms, ['general', 'general'], ['en', 'it']), before, 'B present');
+        assert.deepEqual(await readStats(db, tenantA.key, terms, ids), before, 'B present');
+        assert.deepEqual(await readStats(db, tenantA.key, terms, bChunks.map((c) => c.id)), [], "B's chunk ids under A's key");
+        assert.deepEqual(await readStats(db, tenantA.key, terms, [...ids, ...bChunks.slice(0, 5).map((c) => c.id)]), before, 'mixed ids keep only A');
         await db.query('UPDATE public.rag_lexical_df SET df = df * 7 + 3 WHERE tenant_key = $1', [tenantB.key]);
         await db.query('UPDATE public.rag_lexical_corpus SET chunk_count = chunk_count * 9, total_len = total_len * 2 WHERE tenant_key = $1', [tenantB.key]);
-        assert.deepEqual(await readStats(db, tenantA.key, terms, ['general', 'general'], ['en', 'it']), before, 'B statistics changed');
-        const bRows = await readStats(db, tenantB.key, ['w1'], ['general'], ['en']);
+        assert.deepEqual(await readStats(db, tenantA.key, terms, ids), before, 'B statistics changed');
+        const bRows = await readStats(db, tenantB.key, ['w1'], [bChunks[0]?.id as string]);
         assert.equal(bRows[0]?.chunk_count, 40 * 9, 'a call for B reads B');
+        assert.deepEqual(await readStats(db, tenantB.key, ['w1'], ids), [], "A's chunk ids under B's key");
       }
-      const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY['general'], ARRAY['en'])`, [wrongModeKey]);
+      const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY[]::uuid[])`, [wrongModeKey]);
       assert.equal(codeOf(error), '22023', messageOf(error));
       assert.match(messageOf(error), /tenant key/);
     });
@@ -346,7 +329,7 @@ for (const mode of MODES) {
       for (const role of ['anon', 'authenticated']) {
         await db.exec(`SET ROLE ${role}`);
         try {
-          const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY['general'], ARRAY['en'])`, [tenantA.key]);
+          const error = await errorOf(db, `SELECT * FROM public.${FN}($1, ARRAY['w1'], ARRAY[]::uuid[])`, [tenantA.key]);
           assert.equal(codeOf(error), '42501', `${role}: ${messageOf(error)}`);
         } finally {
           await db.exec('RESET ROLE');
