@@ -204,6 +204,45 @@ describe('buildPausedRunView', () => {
   });
 });
 
+describe('purge-cap pause (D-49)', () => {
+  const CAP_TEXT = {
+    en: 'The source reported 4 deleted files after this connection reached its daily purge limit of 3, so they were not purged.',
+    zh: '该连接已达到每日 3 个的清除上限，来源之后报告删除的 4 个文件因此没有被清除。',
+    it: 'La fonte ha segnalato 4 file eliminati dopo che questa connessione ha raggiunto il limite giornaliero di 3 eliminazioni definitive, quindi non sono stati eliminati.',
+  } as const;
+
+  it('uses paused.bodyCap with the count and the cap in en, zh and it, never the share sentence', () => {
+    const { buildPausedRunView, SOURCE_SYNC_LABELS } = loadModule();
+    for (const locale of ['en', 'zh', 'it'] as const) {
+      const run = pausedRun({ candidate_count: 4, total_count: null, pause_reason: 'purge_daily_cap', daily_cap: 3 });
+      const view = buildPausedRunView(run, locale, NOW, LIMITS);
+      expect(view.body, locale).toBe(CAP_TEXT[locale]);
+      const share = buildPausedRunView(pausedRun(), locale, NOW, LIMITS);
+      expect(view.body).not.toBe(share.body);
+      expect(SOURCE_SYNC_LABELS[locale]['paused.bodyCap']).toBeTruthy();
+    }
+    const fromLimits = buildPausedRunView(pausedRun({ candidate_count: 4, pause_reason: 'purge_daily_cap' }), 'en', NOW, { ...LIMITS, purge_daily_cap: 3 });
+    expect(fromLimits.body).toBe(CAP_TEXT.en);
+  });
+
+  it('a share pause view is unchanged whether pause_reason is share or absent', () => {
+    const { buildPausedRunView } = loadModule();
+    expect(buildPausedRunView(pausedRun({ pause_reason: 'share' }), 'en', NOW, LIMITS)).toEqual(buildPausedRunView(pausedRun(), 'en', NOW, LIMITS));
+  });
+
+  it('builds one paused view per entry of paused_runs, newest first, and falls back to paused_run', () => {
+    const { buildSourceSyncRowView } = loadModule();
+    const capRun = pausedRun({ id: 'run-cap', candidate_count: 4, total_count: null, pause_reason: 'purge_daily_cap', daily_cap: 3 });
+    const shareRun = pausedRun();
+    const both = buildSourceSyncRowView(rowB({ paused_run: capRun, paused_runs: [capRun, shareRun] }), 'en', LIMITS, NOW);
+    expect(both.pausedRuns.map((run: Row) => run.id)).toEqual(['run-cap', RUN_B]);
+    expect(both.pausedRun.id).toBe('run-cap');
+    const legacy = buildSourceSyncRowView(rowB(), 'en', LIMITS, NOW);
+    expect(legacy.pausedRuns.map((run: Row) => run.id)).toEqual([RUN_B]);
+    expect(buildSourceSyncRowView(rowA(), 'en', LIMITS, NOW).pausedRuns).toEqual([]);
+  });
+});
+
 describe('mapSourceSyncError', () => {
   it('maps every status and code of UI-SPEC 8.2', () => {
     const { mapSourceSyncError } = loadModule();
@@ -356,6 +395,24 @@ describe('SourceSyncPanel in a fake DOM', () => {
     const region = env.root.querySelector('[role="region"]');
     expect(region!.getAttribute('tabindex')).toBe('0');
     expect(env.status.textContent).toBe('Connections loaded: 2. Overdue: 1. Paused: 1.');
+  });
+
+  it('renders one paused block per open run, each with its own sentence and buttons (D-49)', async () => {
+    const capRun = pausedRun({ id: 'run-cap', candidate_count: 4, total_count: null, pause_reason: 'purge_daily_cap', daily_cap: 3, file_names: [], file_ids: ['src-1'] });
+    const env = await mounted(() => ok(listBody([rowB({ paused_run: capRun, paused_runs: [capRun, pausedRun()] })])));
+    const groups = env.root.querySelectorAll('[role="group"]');
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.getAttribute('data-source-sync-run'))).toEqual(['run-cap', RUN_B]);
+    expect(groups[0]!.textContent).toContain('daily purge limit of 3');
+    expect(groups[1]!.textContent).toContain('That is above the 30% limit');
+    for (const group of groups) {
+      expect(byText(group, 'button', 'Dismiss run')).toBeTruthy();
+      expect(byText(group, 'button', 'Remove documents…')).toBeTruthy();
+    }
+    byText(groups[0]!, 'button', 'Dismiss run')!.click();
+    await flush();
+    const dismissCall = env.calls.find((c) => c.path.endsWith('/dismiss'))!;
+    expect(dismissCall.path).toBe('admin/source-sync/runs/run-cap/dismiss');
   });
 
   it('shows the overdue summary alert naming the command, without a live role', async () => {

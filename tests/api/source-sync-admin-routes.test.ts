@@ -451,6 +451,78 @@ describe('GET /api/rag/admin/source-sync/connections', () => {
     expect(logged.join('\n')).not.toContain('owner@example.test');
   });
 
+  it('returns every open paused run as paused_runs with its pause_reason, the cap and the limit (D-49)', async () => {
+    vi.stubEnv('RAG_SOURCE_PURGE_DAILY_CAP', '3');
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const CAP_RUN = '00000000-0000-4000-8000-0000000000c2';
+    const EXPIRED_RUN = '00000000-0000-4000-8000-0000000000c3';
+    const future = new Date(NOW + 12 * 3_600_000).toISOString();
+    state.outcomes.rag_source_sync_admin_connections = {
+      data: [
+        listRow({
+          connection_id: CONN_THREE,
+          deletion_mode: 'purge',
+          last_reconcile_status: 'paused',
+          awaiting_run_id: CAP_RUN,
+          awaiting_created_at: daysAgo(0.1),
+          awaiting_expires_at: future,
+          awaiting_candidate_count: 2,
+          awaiting_total_count: null,
+        }),
+      ],
+      error: null,
+    };
+    const tenant = `u:${OWNER_ID}`;
+    state.tables.rag_source_reconcile_runs = [
+      { id: RUN_ID, connection_id: CONN_THREE, tenant_key: tenant, origin: 'scheduled', status: 'awaiting_confirmation', error_code: null, created_at: daysAgo(0.5), expires_at: future, candidate_count: 6, total_count: 10, candidate_file_ids: ['s-1'], pause_reason: null, daily_cap: null },
+      { id: CAP_RUN, connection_id: CONN_THREE, tenant_key: tenant, origin: 'change_feed', status: 'awaiting_confirmation', error_code: null, created_at: daysAgo(0.1), expires_at: future, candidate_count: 2, total_count: null, candidate_file_ids: ['c-1', 'c-2'], pause_reason: 'purge_daily_cap', daily_cap: 3 },
+      { id: EXPIRED_RUN, connection_id: CONN_THREE, tenant_key: tenant, origin: 'change_feed', status: 'awaiting_confirmation', error_code: null, created_at: daysAgo(2), expires_at: daysAgo(1), candidate_count: 1, total_count: null, candidate_file_ids: ['x-1'], pause_reason: 'purge_daily_cap', daily_cap: 3 },
+    ];
+    state.tables.nango_connections = [{ id: CONN_THREE, connection_id: 'nango-three', user_id: OWNER_ID, provider: 'dropbox' }];
+    state.tables.nango_sync_records = [{ connection_id: 'nango-three', user_id: OWNER_ID, file_id: 's-1', file_name: FILE_NAME }];
+
+    const response = await loaded.list.GET(req('/api/rag/admin/source-sync/connections'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.limits).toEqual({ max_age_days: 7, max_delete_share: 0.3, purge_daily_cap: 3 });
+    const [item] = body.items;
+    expect(item.paused_runs.map((run: Row) => run.id)).toEqual([CAP_RUN, RUN_ID]);
+    expect(item.paused_runs[0]).toEqual({
+      id: CAP_RUN,
+      found_at: daysAgo(0.1),
+      expires_at: future,
+      candidate_count: 2,
+      total_count: null,
+      file_names: [],
+      names_not_sent: 2,
+      pause_reason: 'purge_daily_cap',
+      daily_cap: 3,
+      file_ids: ['c-1', 'c-2'],
+    });
+    expect(item.paused_runs[1]).toMatchObject({ id: RUN_ID, pause_reason: 'share', candidate_count: 6, total_count: 10, file_names: [FILE_NAME], names_not_sent: 5 });
+    expect(item.paused_runs[1]).not.toHaveProperty('daily_cap');
+    expect(item.paused_runs[1]).not.toHaveProperty('file_ids');
+    expect(item.paused_run).toEqual(item.paused_runs[0]);
+  });
+
+  it('a share pause alone keeps the paused_run fields and adds pause_reason share; the cap limit is 0 by default', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_source_sync_admin_connections = {
+      data: [listRow({ connection_id: CONN_THREE, awaiting_run_id: RUN_ID, awaiting_created_at: daysAgo(0.5), awaiting_expires_at: new Date(NOW + 3_600_000).toISOString(), awaiting_candidate_count: 6, awaiting_total_count: 10 })],
+      error: null,
+    };
+    const response = await loaded.list.GET(req('/api/rag/admin/source-sync/connections'));
+    const body = await response.json();
+    expect(body.limits.purge_daily_cap).toBe(0);
+    expect(Object.keys(body.items[0].paused_run).sort()).toEqual(
+      ['candidate_count', 'expires_at', 'file_names', 'found_at', 'id', 'names_not_sent', 'pause_reason', 'total_count'],
+    );
+    expect(body.items[0].paused_run.pause_reason).toBe('share');
+    expect(body.items[0].paused_runs).toHaveLength(1);
+  });
+
   it('lists only what the SQL function returns for the verified admin (another user personal connection is not listed)', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
