@@ -320,6 +320,10 @@ export {
 export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
+export { answerStructureFor, answerStructureStage, decomposedAnswerFor } from './generation/decomposed-turn';
+export { isOutOfScopeResult, scopeGateNoticeFor, type ScopeNotice } from './generation/scope-notice';
+export type { DecomposedAnswerInput } from './generation/decomposed-answer';
+export type { AnswerStructure } from './generation/answer-structure';
 export {
   answerLanguageInstruction,
   answerLanguageOptions,

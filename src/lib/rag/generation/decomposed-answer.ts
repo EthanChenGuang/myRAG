@@ -18,6 +18,11 @@ export interface DecomposedAnswerInput {
   language: string | null;
   /** A citation strategy labelled the blocks (aliases exist). */
   citationsActive: boolean;
+  /**
+   * GEN-01 Citations path: the block aliases in the order the documents are attached. When set, a part names its
+   * documents by their 1-based position in this list instead of by alias.
+   */
+  documentOrder?: readonly string[];
 }
 
 type QueryLayerTexts = NonNullable<LanguagePack['texts']['query_layer']>;
@@ -65,6 +70,11 @@ function dataLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function documentPositions(aliases: readonly string[], order: readonly string[]): string[] {
+  const positions = aliases.map((alias) => order.indexOf(alias)).filter((index) => index >= 0);
+  return [...new Set(positions)].sort((a, b) => a - b).map((index) => String(index + 1));
+}
+
 /**
  * D-11, D-12: the localized per-sub-question instruction, or null for fewer than two sub-questions or when no pack
  * holds the texts (the switch-off behaviour). Every sentence comes from the language pack; an uncovered part carries
@@ -94,7 +104,8 @@ export function buildDecomposedAnswerBlock(input: DecomposedAnswerInput): string
           ),
         ]
       : [];
-    lines.push(aliases.length > 0 ? `${head} [${aliases.join(pack.list_separator)}]` : head);
+    const refs = input.documentOrder ? documentPositions(aliases, input.documentOrder) : aliases;
+    lines.push(refs.length > 0 ? `${head} [${refs.join(pack.list_separator)}]` : head);
   });
   lines.push(texts.parts);
   if (input.citationsActive) lines.push(texts.citeOwn);

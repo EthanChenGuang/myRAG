@@ -27,6 +27,10 @@ import {
   evalScope,
   bodyNamesAccessGroups,
   resolveAccessScope,
+  answerStructureFor,
+  decomposedAnswerFor,
+  type AnswerStructure,
+  type DecomposedAnswerInput,
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
@@ -503,6 +507,7 @@ async function generateClaudeAnswer(input: {
   answerLanguage?: AnswerLanguageOptions;
   answerTurn: AnswerTurn | null;
   answerRuleOptions: EvalAnswerRuleOptions;
+  decomposedAnswer?: DecomposedAnswerInput;
 }): Promise<{ text: string; finishReason: string } | null> {
   const { session, answerTurn } = input;
   let streamError: unknown = null;
@@ -510,7 +515,10 @@ async function generateClaudeAnswer(input: {
     const history: ModelMessage[] = session.stripHistory(
       input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
     ) as ModelMessage[];
-    const claudeSystem = appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage);
+    const claudeSystem = appendAnswerLanguage(
+      session.claudeSystemPrompt(resolveEvalPromptTemplate(), input.decomposedAnswer ? { decomposedAnswer: input.decomposedAnswer } : undefined),
+      input.answerLanguage,
+    );
     const stream = session.startClaude({
       // Phase 5.2 D-07: the chat route composes the same block into the direct Claude call's system text
       system: answerTurn ? answerTurn.composeSystemPrompt(claudeSystem, input.answerRuleOptions) : claudeSystem,
@@ -824,6 +832,8 @@ export async function POST(req: NextRequest) {
       let answer: string | null = null;
       let finishReason: string | null = null;
       let answerChain: AnswerTextPipelineResult | null = null;
+      let decomposedAnswer: DecomposedAnswerInput | undefined;
+      let answerStructure: AnswerStructure | null = null;
       const calcRun: { outcome: ReturnType<typeof runCalcChecks> | null } = { outcome: null };
       let calcObserved: CalcObserved | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
@@ -870,6 +880,9 @@ export async function POST(req: NextRequest) {
           answerRuleOptions = { ...answerRuleOptions, calculation: { mode: calcMode } };
         }
         const answerLanguage = answerLanguageOptions(result);
+        // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; undefined leaves the prompt unchanged
+        decomposedAnswer =
+          result.context.length > 0 ? decomposedAnswerFor(result, { citationsActive: Boolean(citationSession?.strategy) }) : undefined;
         // Phase 5.2 D-30: decided once, before the composer, with the chat route's rule (the eval request sets no limit of its own)
         if (answerTurn && answerTurn.config.maxOutputTokens.kind !== 'off') {
           answerTurn.decideOutputCap({
@@ -897,6 +910,7 @@ export async function POST(req: NextRequest) {
               ...(answerLanguage ? { answerLanguage } : {}),
               answerTurn,
               answerRuleOptions,
+              ...(decomposedAnswer ? { decomposedAnswer } : {}),
             });
             if (claude) {
               answer = claude.text;
@@ -912,6 +926,7 @@ export async function POST(req: NextRequest) {
               generatorModel,
               decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
+              ...(decomposedAnswer ? { decomposedAnswer } : {}),
               outputCap: answerTurn?.outputCapDecision() ?? null,
               ...(calcOffer
                 ? {
@@ -932,6 +947,10 @@ export async function POST(req: NextRequest) {
           const detail = errorDetail(error);
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
+        }
+        // D-12: report-only structure of the model's answer; never a regeneration
+        if (decomposedAnswer && answer !== null) {
+          answerStructure = answerStructureFor(decomposedAnswer, answer, citationSession?.strategy ? citationSession.aliases() : null);
         }
         // Phase 5.2 RESEARCH Pitfall 21: the eval does not stream, so the whole-text twin of the chain runs on the answer:
         // sentinel, output guard, then the notices as a final paragraph (D-16, D-35, D-11, D-33). Off: the answer is untouched.
@@ -1142,6 +1161,7 @@ export async function POST(req: NextRequest) {
         ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         ...(result.speculative ? { speculative: result.speculative } : {}),
         ...(result.sourceRecheck ? { stale_index_drop: result.sourceRecheck.dropped } : {}),
+        ...(answerStructure ? { answer_structure: answerStructure } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,

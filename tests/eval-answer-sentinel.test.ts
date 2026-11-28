@@ -27,7 +27,7 @@ function compact(source: string): string {
 
 /** D-04, D-07: the chat route appends the answer-rule block to the citation-decorated enhanced prompt. */
 const CHAT_COMPOSITION = compact(
-  'answerTurn.composeSystemPrompt(citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),',
+  'answerTurn.composeSystemPrompt(citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, promptOptions)),',
 );
 /** The eval route's decorateSystemPrompt hook: the same composer, after the same citation decoration. */
 const EVAL_COMPOSITION = compact(
@@ -73,7 +73,7 @@ describe('eval answer prompt assembly stays tied to the chat route', () => {
   test('ensureContextPlaceholder runs before the enhanced prompt or injectContext', () => {
     for (const source of [chatRoute, answerSource]) {
       const ensure = source.indexOf('SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt)');
-      const enhanced = source.indexOf('createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)');
+      const enhanced = source.indexOf('createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, promptOptions)');
       const inject = source.indexOf('SystemPromptManager.injectContext(ragSystemPrompt, context)');
       expect(ensure).toBeGreaterThan(-1);
       expect(enhanced).toBeGreaterThan(ensure);
