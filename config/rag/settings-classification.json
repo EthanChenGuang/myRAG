@@ -443,6 +443,10 @@
       "mechanism": "rechunk"
     },
     {
+      "name": "RAG_LANG_CONFIDENCE",
+      "side": "query"
+    },
+    {
       "name": "RAG_LEXICAL_BM25_B",
       "side": "query"
     },
@@ -767,6 +771,10 @@
     },
     {
       "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ROLLOUTS",
       "side": "query"
     },
     {

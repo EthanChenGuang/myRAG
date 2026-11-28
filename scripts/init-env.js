@@ -358,6 +358,9 @@ RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
 # Timeout for one domain embedding leg in milliseconds (100..5000)
 # Domain embedding leg timeout (ms)
 RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
+# Tenant or traffic-share rollouts of embedding profiles: true | false (false keeps the globally active profiles for every tenant)
+# Tenant or traffic-share rollouts
+RAG_ROLLOUTS=false
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 # Qwen embedding fallback host
 RAG_QWEN_EMBED_FALLBACK=openrouter
@@ -435,6 +438,9 @@ RAG_PRIMARY_LANGUAGE=
 # Language-aware chunking, sentence splitting and OCR: off | on
 # Language-aware ingestion
 RAG_LANGUAGE_AWARE_INGEST=off
+# Query language confidence: mapped | calibrated (mapped keeps the three values 1, 0.5 and empty)
+# Language confidence
+RAG_LANG_CONFIDENCE=mapped
 # Repeat table headers in split table chunks: profile | always
 # Table header repeat
 RAG_TABLE_HEADER_REPEAT=always

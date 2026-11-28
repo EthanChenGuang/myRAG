@@ -96,6 +96,7 @@ Every switch defaults to the behaviour that shipped before it existed: with a sw
 | `RAG_INGEST_PIPELINE` | Ingest pipeline | enum | `legacy` | `legacy`, `unified` | - |
 | `RAG_INVOICE_LLM_EXTRACT` | Model-assisted invoice extraction | bool | `false` | - | - |
 | `RAG_LANGUAGE_AWARE_INGEST` | Language-aware ingestion | enum | `off` | `off`, `on` | - |
+| `RAG_LANG_CONFIDENCE` | Language confidence | enum | `mapped` | `mapped`, `calibrated` | - |
 | `RAG_OPENAI_EMBEDDINGS_VIA` | OpenAI embedding host | enum | `openai` | `openai`, `openrouter` | - |
 | `RAG_PAGE_BOILERPLATE` | Page boilerplate removal | enum | `off` | `off`, `detect`, `rules`, `both` | `RAG_INGEST_PIPELINE=unified` |
 | `RAG_PARSER` | Document parser | enum | `llamaparse` | `llamaparse`, `docling` | - |
@@ -112,6 +113,7 @@ Every switch defaults to the behaviour that shipped before it existed: with a sw
 | `RAG_PRIMARY_LANGUAGE` | Primary language | string | (empty) | - | `RAG_SUPPORTED_LANGUAGES` |
 | `RAG_QWEN_EMBED_FALLBACK` | Qwen embedding fallback host | enum | `openrouter` | `openrouter`, `none` | - |
 | `RAG_QWEN_EMBED_PRIMARY` | Qwen embedding primary host | enum | `deepinfra` | `deepinfra`, `openrouter` | - |
+| `RAG_ROLLOUTS` | Tenant or traffic-share rollouts | bool | `false` | - | - |
 | `RAG_SCOPE_TAG_SUGGEST` | Scope tag suggestions | bool | `false` | - | `RAG_SCOPE_TAGS=true` |
 | `RAG_SECTION_RULES` | Section rules | enum | `off` | `off`, `on` | `RAG_INGEST_PIPELINE=unified` |
 | `RAG_SOURCE_RECONCILE_INTERVAL_DAYS` | Full reconcile interval (days) | number | `7` | - | - |
