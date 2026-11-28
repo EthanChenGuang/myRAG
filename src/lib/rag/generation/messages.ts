@@ -77,6 +77,19 @@ export function kbUnavailableLanguage(turn: FixedTextTurn | null | undefined, le
   return registryLanguage(turn) ?? knowledgeBaseUnavailableLanguage(legacyLanguage);
 }
 
+const EMPTY_REPLY_MESSAGES: Record<string, string> = {
+  en: 'I could not produce an answer this time. Please try again or rephrase your question.',
+  zh: '这次未能生成回答，请重试或换个问法。',
+  it: 'Questa volta non sono riuscito a generare una risposta. Riprova o riformula la domanda.',
+  es: 'Esta vez no pude generar una respuesta. Inténtalo de nuevo o reformula la pregunta.',
+};
+
+/** The notice streamed as an error part when the model finished without any text or tool call. */
+export function emptyReplyText(turn: FixedTextTurn | null | undefined, legacyLanguage: string): string {
+  const language = registryLanguage(turn) ?? legacyLanguage;
+  return EMPTY_REPLY_MESSAGES[Object.prototype.hasOwnProperty.call(EMPTY_REPLY_MESSAGES, language) ? language : 'en'];
+}
+
 const IDENTIFIER_SUGGESTION_MESSAGES: Record<string, (list: string) => string> = {
   en: (list) => `No passage names the identifier you asked about. Closest existing identifiers: ${list}.`,
   zh: (list) => `没有找到提到您所问标识符的内容。最接近的现有标识符：${list}。`,

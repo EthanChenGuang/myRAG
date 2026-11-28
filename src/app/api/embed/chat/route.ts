@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardEmptyReply } from '@/lib/chat/empty-reply';
 import { env } from '@/lib/env';
 import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
 import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
@@ -30,6 +31,7 @@ import {
   isSmallTalkResult,
   isV2Pipeline,
   createAnswerTurn,
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   readAnswerConfig,
@@ -640,7 +642,11 @@ export async function POST(request: NextRequest) {
       // Same composition as result.toUIMessageStreamResponse, with the first text delta observed
       return createUIMessageStreamResponse({
         stream: timeFirstText(
-          result.toUIMessageStream(streamOptions),
+          guardEmptyReply(result.toUIMessageStream(streamOptions), {
+            route: 'embed',
+            model: safeModelId,
+            message: () => emptyReplyText(answerTurn, preferredLanguage(request)),
+          }),
           timingCollector,
         ),
         headers: streamHeaders(),

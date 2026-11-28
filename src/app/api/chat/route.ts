@@ -1,4 +1,5 @@
 import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
+import { guardEmptyReply, type EmptyReplyInfo } from '@/lib/chat/empty-reply';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
@@ -49,6 +50,7 @@ import {
   CLAUDE_MAX_OUTPUT_TOKENS,
   createAnswerTurn,
   parseBodyChannel,
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   noInformationLanguage,
@@ -4462,6 +4464,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
+      let emptyReply: EmptyReplyInfo | null = null;
 
       let answerRecordPending = answerId !== null;
       const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
@@ -4578,6 +4581,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               }))
             });
           }
+          const guardAnswerStream = <T extends { type: string }>(stream: globalThis.ReadableStream<T>): globalThis.ReadableStream<T> =>
+            guardEmptyReply(stream, {
+              route: 'chat',
+              model: safeModelId,
+              message: () => emptyReplyText(answerTurn, fallbackLanguage),
+              onEmpty: (info) => {
+                emptyReply = info;
+              },
+            });
           const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
             if (part.type === 'start') {
               if (!ragTraceId && !answerId && injectionFlagged === undefined) return undefined;
@@ -4606,7 +4618,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               },
             );
             if (gate.kind === 'ok') {
-              writer.merge(gate.stream);
+              writer.merge(guardAnswerStream(gate.stream));
               return;
             }
             citationSession.fallback(gate.reason);
@@ -4616,10 +4628,10 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
           if (!result) return;
           // Merge AI stream
-          writer.merge(result.toUIMessageStream({
+          writer.merge(guardAnswerStream(result.toUIMessageStream({
             sendStart: precomputedSourceImages.length === 0,
             messageMetadata,
-          }));
+          })));
         },
         onFinish: ({ isAborted, finishReason, responseMessage }) => {
           if (claudeStream) {
@@ -4627,14 +4639,18 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             ragTrace?.collector.setReviewContent({ answer: directText, context, model: safeModelId });
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
-          if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          if (ragLogContext && (isAborted || generationFailed || emptyReply || finishReason === 'error')) setRagLogOutcome(null, null);
           // D-16: a sentinel refusal is logged like the server-side refusal
           if (answerTurn.refusedByModel()) setRagLogOutcome('refused_no_context', answerTurn.answerLanguage);
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
             const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
-            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
+            const rules = [
+              ...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []),
+              ...answerTrace.rules,
+              ...(emptyReply ? [`empty_reply:${emptyReply.finishReason ?? 'unknown'}`] : []),
+            ];
             ragTrace.collector.record({
               name: 'generation',
               status,
