@@ -206,7 +206,10 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
 
   test('guard per chunk: a chunk with only a near-miss of X is dropped although its document carries X (D-51, 04.2-40)', async () => {
     const on = await run(`What does entry ${X} say about the quandry settings?`, FILTER_ON);
-    assert.ok(on.candidates.some((candidate) => candidate.chunk_id === chunkOf.nearInDoc), 'the near-miss chunk of the carrying document is a candidate');
+    const guard = on.stages.find((entry) => entry.name === 'identifier_guard');
+    assert.equal(guard?.status, 'ok', JSON.stringify(guard));
+    assert.ok((guard?.counts?.dropped ?? 0) >= 1, `the near-miss chunk of the carrying document reaches the guard and is dropped: ${JSON.stringify(guard)}`);
+    assert.ok(!on.candidates.some((candidate) => candidate.chunk_id === chunkOf.nearInDoc), 'not a candidate after the guard');
     assert.ok(!on.kept.some((chunk) => chunk.chunk_id === chunkOf.nearInDoc), 'the guard drops it');
     assert.ok(on.kept.some((chunk) => chunk.chunk_id === chunkOf.x), 'a chunk carrying X is kept');
   });
