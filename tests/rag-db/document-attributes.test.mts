@@ -807,8 +807,10 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
         const own = crypto.randomUUID();
         await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [ADMIN_A]);
         await db.exec('SET ROLE authenticated');
+        let forged: Awaited<ReturnType<typeof failure>>;
         try {
-          await db.query(
+          forged = await failure(
+            db,
             `INSERT INTO documents (id, filename, content, metadata, user_id, attributes, attribute_header, attribute_header_stamp)
              VALUES ($1, 'direct.md', 'neutral', '{}'::jsonb, $2, '{"alpha_code":"X"}'::jsonb, 'forged header', 'forged-stamp')`,
             [own, ADMIN_A],
@@ -816,8 +818,9 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
         } finally {
           await db.exec('RESET ROLE');
         }
-        const stored = (await rows(db, 'SELECT attributes, attribute_header, attribute_header_stamp FROM documents WHERE id = $1', [own]))[0];
-        assert.deepEqual(stored, { attributes: null, attribute_header: null, attribute_header_stamp: null });
+        // UF-1 (0991): a client role cannot insert a document at all, so no forged attribute row can exist.
+        assert.equal(forged?.code, '42501', forged?.message);
+        assert.equal((await rows(db, 'SELECT 1 FROM documents WHERE id = $1', [own])).length, 0);
         const serviceDoc = crypto.randomUUID();
         await db.exec('SET ROLE service_role');
         try {

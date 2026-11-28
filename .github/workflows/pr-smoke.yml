@@ -21,6 +21,7 @@ env:
 jobs:
   ts-vitest:
     runs-on: ubuntu-latest
+    # The slowest shard ran 14 min of tests on recent runs, plus about 1 min of setup; 25 leaves 1.6x.
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -52,11 +53,14 @@ jobs:
 
   ts-db:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Train 38: the larger fixture corpus put the slowest shard (migration and fixture-rebuild suites) past 25 minutes.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        shard: ['1/10', '2/10', '3/10', '4/10', '5/10', '6/10', '7/10', '8/10', '9/10', '10/10']
+        # Balanced by scripts/ci/test-durations.json: about 8 min of tests per shard, 14.5 min for the one holding schema-migrations
+        # (a file runs its suites in series), plus about 1.5 min of setup.
+        shard: ['1/12', '2/12', '3/12', '4/12', '5/12', '6/12', '7/12', '8/12', '9/12', '10/12', '11/12', '12/12']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -79,11 +83,21 @@ jobs:
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: tsx DB tests (shard ${{ matrix.shard }})
-        run: node --import tsx --test --test-shard=${{ matrix.shard }} tests/rag-db/*.test.mts
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=$(node scripts/ci/test-shards.mjs --shard=${{ matrix.shard }} tests/rag-db/*.test.mts)
+          node --import tsx --test $files
 
   ts-tsx:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Three duration-balanced shards of about 5.5 min of tests (the longest file, security-gaps-rls, is 5.5 min), plus about
+    # 1.5 min of setup; 15 leaves 2x.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/3', '2/3', '3/3']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -105,16 +119,13 @@ jobs:
       - run: uv sync --directory eval --locked --all-extras
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py
-      - name: tsx tests
-        run: node --import tsx --test tests/*.test.mts
-      - name: tsx rag-e2e tests
+      - name: tsx and rag-e2e tests (shard ${{ matrix.shard }})
         shell: bash
         run: |
+          set -euo pipefail
           shopt -s nullglob
-          files=(tests/rag-e2e/*.test.mts)
-          if ((${#files[@]})); then
-            node --import tsx --test tests/rag-e2e/*.test.mts
-          fi
+          files=$(node scripts/ci/test-shards.mjs --shard=${{ matrix.shard }} tests/*.test.mts tests/rag-e2e/*.test.mts)
+          node --import tsx --test $files
 
   ts-checks:
     runs-on: ubuntu-latest
@@ -164,6 +175,8 @@ jobs:
         run: node --test scripts/tests/post-release-status.node-test.mjs scripts/tests/promote-production.node-test.mjs scripts/tests/check-branch-protection.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
+      - name: Test shard planner self-test
+        run: node --test scripts/tests/test-shards.node-test.mjs
       - name: New-code type-check
         run: npm run typecheck:new
       - name: Generate route types

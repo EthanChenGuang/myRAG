@@ -57,7 +57,13 @@ for (const mode of MODES) {
     before(async () => {
       db = (await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseFunctionDefaults: true })).db;
       await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING', [OWNER, 'owner@example.invalid']);
-      await asOwner(db, () => db.query('INSERT INTO documents (id, filename, content, user_id) VALUES ($1, $2, $3, $4)', [DOC, 'owned.md', 'body', OWNER]));
+      // 0991 (UF-1): client roles cannot insert documents; the owner's document is written by the service role, as the app does.
+      await db.exec('SET ROLE service_role');
+      try {
+        await db.query('INSERT INTO documents (id, filename, content, user_id) VALUES ($1, $2, $3, $4)', [DOC, 'owned.md', 'body', OWNER]);
+      } finally {
+        await db.exec('RESET ROLE');
+      }
     });
 
     after(async () => {
@@ -88,9 +94,10 @@ for (const mode of MODES) {
         ['metadata', viaMetadata, CLIENT_META_CHUNK],
         ['column', viaColumn, CLIENT_COLUMN_CHUNK],
       ] as const) {
-        assert.ok(code === null || code === '42501', `${label}: refused with 42501 or inserted, got ${code}`);
+        // 0991 (UF-1): a client INSERT into document_chunks is refused, so no row and no forged stamp exist.
+        assert.equal(code, '42501', `${label}: refused with 42501, got ${code}`);
         const stored = await stampOf(db, id);
-        if (code === null) assert.equal(stored.found, true, `${label}: inserted row exists`);
+        assert.equal(stored.found, false, `${label}: no row inserted`);
         assert.equal(stored.stamp, null, `${label}: no forged stamp`);
       }
     });

@@ -30,12 +30,12 @@
           "measures": {
             "analyze.p95_ms": 1.0,
             "assemble.p95_ms": 1.0,
-            "embed.p95_ms": 3.0,
-            "generation.p95_ms": 1.0,
+            "embed.p95_ms": 6.0,
+            "generation.p95_ms": 2.0,
             "legacy_rank.p95_ms": 0.0,
-            "post_filter.p95_ms": 3.0,
-            "retrieval_total.p95_ms": 17.0,
-            "search.p95_ms": 12.0
+            "post_filter.p95_ms": 7.0,
+            "retrieval_total.p95_ms": 36.0,
+            "search.p95_ms": 27.0
           },
           "name": "latency_budget",
           "passed": true
@@ -199,10 +199,10 @@
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 199,
-          "value": 0.24623115577889448
+          "n": 236,
+          "value": 0.23728813559322035
         },
-        "false_refusal_upper_95": 0.30164029338037646,
+        "false_refusal_upper_95": 0.287302096849407,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -212,36 +212,36 @@
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 199,
-          "value": 48.0
+          "n": 236,
+          "value": 55.0
         },
         "mrr": {
-          "n": 199,
-          "value": 0.6398659966499162
+          "n": 236,
+          "value": 0.6479519774011299
         },
         "ndcg_at_context_k": {
-          "n": 199,
-          "value": 0.6465952669763657
+          "n": 236,
+          "value": 0.656207602514886
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 199,
-          "value": 0.6708542713567839
+          "n": 236,
+          "value": 0.684322033898305
         },
         "recall_at_5": {
-          "n": 199,
-          "value": 0.6708542713567839
+          "n": 236,
+          "value": 0.684322033898305
         },
         "topk_redundancy": {
-          "n": 178,
-          "value": 0.6276123595505618
+          "n": 208,
+          "value": 0.5797596153846154
         }
       },
       "passed": true,
-      "run_config_hash": "f6eb7d4ddfe31597bc5be6796fad774b39dc570ac0cc1bdaff93058e508614c2",
+      "run_config_hash": "6bcde179f3d817f47f76696b23550353e813d2d295392ae5eda55bd56204529a",
       "switches": {
         "RAG_CONFIG_GATE": "off",
         "RAG_CONFIG_GATE_LIVE": "false",
@@ -269,13 +269,13 @@
           "measures": {
             "analyze.p95_ms": 1.0,
             "assemble.p95_ms": 1.0,
-            "embed.p95_ms": 3.0,
-            "exact_id_lookup.p95_ms": 11.0,
+            "embed.p95_ms": 5.0,
+            "exact_id_lookup.p95_ms": 23.0,
             "generation.p95_ms": 1.0,
             "legacy_rank.p95_ms": 0.0,
-            "post_filter.p95_ms": 3.0,
-            "retrieval_total.p95_ms": 28.0,
-            "search.p95_ms": 14.0
+            "post_filter.p95_ms": 5.0,
+            "retrieval_total.p95_ms": 55.0,
+            "search.p95_ms": 28.0
           },
           "name": "latency_budget",
           "passed": true
@@ -431,49 +431,61 @@
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 53,
+          "n": 62,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 53,
+          "n": 62,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 233,
-          "value": 0.1459227467811159
+          "n": 328,
+          "value": 0.19207317073170732
         },
-        "false_refusal_upper_95": 0.18948250540648431,
+        "false_refusal_upper_95": 0.23140443131567232,
         "intent_coverage": {
           "n": 9,
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 233,
-          "value": 33.0
+          "n": 328,
+          "value": 62.0
         },
         "mrr": {
-          "n": 233,
-          "value": 0.6924177396280401
+          "n": 328,
+          "value": 0.651155501003062
+        },
+        "named_document_recall": {
+          "n": 18,
+          "value": 0.1111111111111111
         },
         "ndcg_at_context_k": {
-          "n": 233,
-          "value": 0.7071595019576975
+          "n": 328,
+          "value": 0.6666166151209697
         },
         "recall_at_10": {
-          "n": 233,
-          "value": 0.778969957081545
+          "n": 328,
+          "value": 0.725609756097561
         },
         "recall_at_5": {
-          "n": 233,
-          "value": 0.7703862660944206
+          "n": 328,
+          "value": 0.7195121951219512
         },
         "topk_redundancy": {
-          "n": 233,
-          "value": 0.5322532188841201
+          "n": 299,
+          "value": 0.4682706089896726
+        },
+        "variant_accuracy": {
+          "n": 13,
+          "value": 0.6153846153846154
+        },
+        "wrong_document_at_1": {
+          "n": 2,
+          "value": 0.0
         }
       },
       "passed": true,
-      "run_config_hash": "4bc57841cb3f3c9211969f7f569bed10d99c201c4879e461e0a732874374d420",
+      "run_config_hash": "225b3d08f72ee98deba3898ea53020542e14801c271d79f94d01f378622b939d",
       "switches": {
         "RAG_CONFIG_GATE": "off",
         "RAG_CONFIG_GATE_LIVE": "false",

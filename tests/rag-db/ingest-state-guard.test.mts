@@ -38,6 +38,16 @@ async function attempt(db: PGlite, role: Role, userId: string | null, sql: strin
   }
 }
 
+async function insertAttempt(db: PGlite, role: Role, userId: string | null, sql: string, params: unknown[]): Promise<{ ok: boolean; code: string; message: string }> {
+  try {
+    await asRole(db, role, userId, () => db.query(sql, params));
+    return { ok: true, code: '', message: '' };
+  } catch (error) {
+    const code = typeof (error as { code?: unknown }).code === 'string' ? String((error as { code: string }).code) : '';
+    return { ok: false, code, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 async function seedDocument(db: PGlite, mode: DeploymentMode, doc: string, status: string, current: boolean, user: string, org: string | null): Promise<void> {
   const multi = mode === 'multi-tenant';
   const columns = ['id', 'filename', 'content', 'status', 'is_current', 'source', 'source_key', 'lineage_id', ...(multi ? ['user_id', 'organization_id'] : [])];
@@ -189,6 +199,97 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
         assert.equal(renamed.rows[0]?.filename, 'renamed.md');
       } finally {
         await restore(db);
+      }
+    });
+
+    const DIRECT_DOC = '00000000-0000-4000-8000-0000000d0091';
+    const DIRECT_CHUNK = '00000000-0000-4000-8000-0000000c0091';
+    const insertDocumentSql = (multi: boolean): string =>
+      multi
+        ? "INSERT INTO documents (id, filename, content, status, is_current, user_id, organization_id) VALUES ($1, 'direct.md', 'body', 'ready', true, $2, $3)"
+        : "INSERT INTO documents (id, filename, content, status, is_current, user_id) VALUES ($1, 'direct.md', 'body', 'ready', true, $2)";
+    const insertChunkSql = (multi: boolean): string =>
+      multi
+        ? "INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, status, is_current, organization_id) VALUES ($1, $2, 'planted chunk', $3::vector, 5, 'ready', true, $4)"
+        : "INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, status, is_current) VALUES ($1, $2, 'planted chunk', $3::vector, 5, 'ready', true)";
+    const docInserters: Array<{ label: string; user: string; org: string | null }> =
+      mode === 'single-tenant'
+        ? [
+            { label: 'uploader', user: UPLOADER, org: null },
+            { label: 'admin', user: ADMIN, org: null },
+          ]
+        : [
+            { label: 'uploader', user: UPLOADER, org: null },
+            { label: 'org member', user: MEMBER, org: ORG },
+          ];
+
+    for (const actor of docInserters) {
+      test(`${actor.label} cannot insert a ready document through the table (42501)`, async () => {
+        const db = shared;
+        try {
+          const params = mode === 'multi-tenant' ? [DIRECT_DOC, actor.user, actor.org] : [DIRECT_DOC, actor.user];
+          const result = await insertAttempt(db, 'authenticated', actor.user, insertDocumentSql(mode === 'multi-tenant'), params);
+          const left = await db.query('SELECT 1 FROM documents WHERE id = $1', [DIRECT_DOC]);
+          assert.equal(left.rows.length, 0, `a row was written (statement ok=${result.ok})`);
+          assert.equal(result.ok, false, 'the insert must be refused');
+          assert.equal(result.code, '42501', result.message);
+        } finally {
+          await db.query('DELETE FROM documents WHERE id = $1', [DIRECT_DOC]);
+        }
+      });
+    }
+
+    test('anon cannot insert a document through the table', async () => {
+      const db = shared;
+      try {
+        const params = mode === 'multi-tenant' ? [DIRECT_DOC, UPLOADER, null] : [DIRECT_DOC, UPLOADER];
+        const result = await insertAttempt(db, 'anon', null, insertDocumentSql(mode === 'multi-tenant'), params);
+        assert.equal(result.ok, false, 'the insert must be refused');
+        assert.equal((await db.query('SELECT 1 FROM documents WHERE id = $1', [DIRECT_DOC])).rows.length, 0);
+      } finally {
+        await db.query('DELETE FROM documents WHERE id = $1', [DIRECT_DOC]);
+      }
+    });
+
+    test('no authenticated user can plant a ready chunk under a ready document (42501)', async () => {
+      const db = shared;
+      const inserters = mode === 'single-tenant' ? [UPLOADER, ADMIN] : [UPLOADER];
+      try {
+        for (const user of inserters) {
+          const params = mode === 'multi-tenant' ? [DIRECT_CHUNK, OWN_READY, ZERO_VECTOR, null] : [DIRECT_CHUNK, OWN_READY, ZERO_VECTOR];
+          const result = await insertAttempt(db, 'authenticated', user, insertChunkSql(mode === 'multi-tenant'), params);
+          assert.equal((await db.query('SELECT 1 FROM document_chunks WHERE id = $1', [DIRECT_CHUNK])).rows.length, 0, `user ${user} ok=${result.ok}`);
+          assert.equal(result.ok, false, `user ${user}: the insert must be refused`);
+          assert.equal(result.code, '42501', result.message);
+        }
+        if (mode === 'multi-tenant') {
+          await seedDocument(db, mode, '00000000-0000-4000-8000-0000000d0092', 'ready', true, OTHER, ORG);
+          const result = await insertAttempt(db, 'authenticated', MEMBER, insertChunkSql(true), [DIRECT_CHUNK, '00000000-0000-4000-8000-0000000d0092', ZERO_VECTOR, ORG]);
+          assert.equal((await db.query('SELECT 1 FROM document_chunks WHERE id = $1', [DIRECT_CHUNK])).rows.length, 0, `org member ok=${result.ok}`);
+          assert.equal(result.ok, false, 'org member: the insert must be refused');
+          assert.equal(result.code, '42501', result.message);
+        }
+      } finally {
+        await db.query('DELETE FROM document_chunks WHERE id = $1', [DIRECT_CHUNK]);
+        await db.query("DELETE FROM documents WHERE id = '00000000-0000-4000-8000-0000000d0092'");
+      }
+    });
+
+    test('service_role and the database owner still insert documents and chunks', async () => {
+      const db = shared;
+      try {
+        const params = mode === 'multi-tenant' ? [DIRECT_DOC, UPLOADER, null] : [DIRECT_DOC, UPLOADER];
+        const doc = await insertAttempt(db, 'service_role', null, insertDocumentSql(mode === 'multi-tenant'), params);
+        assert.equal(doc.ok, true, doc.message);
+        const chunkParams = mode === 'multi-tenant' ? [DIRECT_CHUNK, DIRECT_DOC, ZERO_VECTOR, null] : [DIRECT_CHUNK, DIRECT_DOC, ZERO_VECTOR];
+        const chunk = await insertAttempt(db, 'service_role', null, insertChunkSql(mode === 'multi-tenant'), chunkParams);
+        assert.equal(chunk.ok, true, chunk.message);
+        await db.query('DELETE FROM document_chunks WHERE id = $1', [DIRECT_CHUNK]);
+        await db.query(insertChunkSql(mode === 'multi-tenant'), chunkParams);
+        assert.equal((await db.query('SELECT 1 FROM document_chunks WHERE id = $1', [DIRECT_CHUNK])).rows.length, 1);
+      } finally {
+        await db.query('DELETE FROM document_chunks WHERE id = $1', [DIRECT_CHUNK]);
+        await db.query('DELETE FROM documents WHERE id = $1', [DIRECT_DOC]);
       }
     });
 

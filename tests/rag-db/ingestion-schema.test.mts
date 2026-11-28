@@ -271,7 +271,8 @@ for (const mode of MODES) {
       // 0314 first: 0856 changed the rag_exact_id_documents signature that the 0425 precheck names (0856 header). 0306 and 0308 restore
       // the signatures 0930 dropped that the same precheck names, and 0933 is the last definition of the 08xx legs (0930 operator
       // rule; train 38, as hybrid-42-params already does).
-      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/(0306|0308|0314|042[5-7]|0440|0442|0706|08\d\d|0930|0933)_/.test(relpath))) {
+      // 0986 redefines 0933's rag_access_readiness, so it runs again after 0933 (its operator rule).
+      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/(0306|0308|0314|042[5-7]|0440|0442|0706|08\d\d|0930|0933|0986)_/.test(relpath))) {
         await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
       }
       const after = await catalogDump(once.db);
