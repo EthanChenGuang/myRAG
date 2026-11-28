@@ -279,7 +279,12 @@ def test_rebaseline_pre_existing_items_equal_the_previous_baseline(name):
         before = {metric: stat["runs"] for metric, stat in metrics.items()}
         after = {metric: stat["runs"] for metric, stat in current["slices"][slice_name].items()}
         # overall, the language slices and injection_evasive also hold new items; their pre-existing items are checked above.
-        if slice_name == "overall" or slice_name.startswith("language:") or slice_name == "category:injection_evasive":
+        # Plan 06.2-41 adds a gated en->zh cross_lingual item (dominant-language tenant) to cross_lingual and pair:en->zh.
+        if slice_name == "overall" or slice_name.startswith("language:") or slice_name in (
+            "category:injection_evasive",
+            "category:cross_lingual",
+            "pair:en->zh",
+        ):
             continue
         assert after == before, (name, slice_name)
     assert all(stat["spread"] == 0.0 for stats in current["slices"].values() for stat in stats.values()), name
