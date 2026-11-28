@@ -21,7 +21,7 @@ affects: [07-52]
 
 actuals:
   tasks: 3
-  commits: 8  # 3 x (test, feat), panel polish fix, SUMMARY
+  commits: 9  # 3 x (test, feat), panel polish fix, SUMMARY, SUMMARY gate update
 
 tech-stack:
   added: []
@@ -124,8 +124,8 @@ The route builds every answer from typed fields (`activeBody`, `endedBody`, `lan
 - `npx vitest run tests/rag/rollout tests/rag/admin/rollouts-route.test.ts tests/ui/config-rollouts-panel.test.ts`: 14 + 11 + 12 passed
 - Every test file importing a changed module (`git grep` on monitor/language-drop, rollout/cli, rollout/promote, rollout/resolve, route-harness) plus tests/rag/monitor, tests/api/language-quality-route.test.ts and the red-team panel test: 19 files, 237 passed, 11 skipped
 - UI tests that read index.html (`git grep -l index.html tests/ui tests/scripts`): 51 files, 1226 passed, 1 failed: `tests/ui/config-reranker-cohere-hint.test.ts` ("says so in the init-env template next to RAG_RERANKER"). **Pre-existing**: it also fails with this plan's changes stashed; it reads scripts/init-env.js, which this plan does not touch.
-- Broad run because src/lib/rag/index.ts changed: see "Broad vitest" below
-- `node scripts/ci/check-frontend-design-summary.mjs .planning/phases/07-external-backends-release-defaults`: see below
+- `node scripts/ci/check-frontend-design-summary.mjs .planning/phases/07-external-backends-release-defaults`: PASS
+- Broad `npx vitest run tests/rag tests/api` (optional, because src/lib/rag/index.ts gained barrel exports): **not completed**. The first attempt hit a 590 s local timeout; the rerun was lost when the container restarted. Not required by the brief (no core type, env.ts or test setup change; the index change is additive exports only); the merge train's full suite covers it.
 - Not run: rag-db (no SQL or migration changed; the route calls the existing 0743/0744 functions, covered by 07-46 and 07-47 rag-db tests), test-rag (no retrieval, ingest, generation or golden set change), Python, gen:schemas (no contract change), workflow check. Test-split ledger untouched (26/25).
 
 ## Deviations
