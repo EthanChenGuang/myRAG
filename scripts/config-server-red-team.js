@@ -334,7 +334,7 @@ function createRedTeamRunner(options) {
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        const match = PROGRESS_RE.exec(line);
+        const match = line.match(PROGRESS_RE);
         if (!match) continue;
         const done = Number(match[1]);
         const total = Number(match[2]);
