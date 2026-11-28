@@ -6,6 +6,7 @@ const { exec, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
 const ragGate = require('./config-server-rag-gate');
+const { formatEnvValue } = require('./config-env-quote');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -822,12 +823,12 @@ ${fullValues.RAG_FINETUNE !== undefined ? `RAG_FINETUNE=${fullValues.RAG_FINETUN
 ${fullValues.RAG_FT_EMBED_API_KEY !== undefined ? `RAG_FT_EMBED_API_KEY=${fullValues.RAG_FT_EMBED_API_KEY}` : 'RAG_FT_EMBED_API_KEY='}
 ${fullValues.RAG_FT_SLOT_A_BASE_URL !== undefined ? `RAG_FT_SLOT_A_BASE_URL=${fullValues.RAG_FT_SLOT_A_BASE_URL}` : 'RAG_FT_SLOT_A_BASE_URL='}
 ${fullValues.RAG_FT_SLOT_A_MODEL !== undefined ? `RAG_FT_SLOT_A_MODEL=${fullValues.RAG_FT_SLOT_A_MODEL}` : 'RAG_FT_SLOT_A_MODEL='}
-${fullValues.RAG_FT_SLOT_A_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_A_QUERY_PROMPT=${fullValues.RAG_FT_SLOT_A_QUERY_PROMPT}` : 'RAG_FT_SLOT_A_QUERY_PROMPT='}
-${fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_A_DOCUMENT_PROMPT=${fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT}` : 'RAG_FT_SLOT_A_DOCUMENT_PROMPT='}
+${fullValues.RAG_FT_SLOT_A_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_A_QUERY_PROMPT=${formatEnvValue(fullValues.RAG_FT_SLOT_A_QUERY_PROMPT)}` : 'RAG_FT_SLOT_A_QUERY_PROMPT='}
+${fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_A_DOCUMENT_PROMPT=${formatEnvValue(fullValues.RAG_FT_SLOT_A_DOCUMENT_PROMPT)}` : 'RAG_FT_SLOT_A_DOCUMENT_PROMPT='}
 ${fullValues.RAG_FT_SLOT_B_BASE_URL !== undefined ? `RAG_FT_SLOT_B_BASE_URL=${fullValues.RAG_FT_SLOT_B_BASE_URL}` : 'RAG_FT_SLOT_B_BASE_URL='}
 ${fullValues.RAG_FT_SLOT_B_MODEL !== undefined ? `RAG_FT_SLOT_B_MODEL=${fullValues.RAG_FT_SLOT_B_MODEL}` : 'RAG_FT_SLOT_B_MODEL='}
-${fullValues.RAG_FT_SLOT_B_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_B_QUERY_PROMPT=${fullValues.RAG_FT_SLOT_B_QUERY_PROMPT}` : 'RAG_FT_SLOT_B_QUERY_PROMPT='}
-${fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_B_DOCUMENT_PROMPT=${fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT}` : 'RAG_FT_SLOT_B_DOCUMENT_PROMPT='}
+${fullValues.RAG_FT_SLOT_B_QUERY_PROMPT !== undefined ? `RAG_FT_SLOT_B_QUERY_PROMPT=${formatEnvValue(fullValues.RAG_FT_SLOT_B_QUERY_PROMPT)}` : 'RAG_FT_SLOT_B_QUERY_PROMPT='}
+${fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT !== undefined ? `RAG_FT_SLOT_B_DOCUMENT_PROMPT=${formatEnvValue(fullValues.RAG_FT_SLOT_B_DOCUMENT_PROMPT)}` : 'RAG_FT_SLOT_B_DOCUMENT_PROMPT='}
 ${fullValues.RAG_OPENAI_EMBEDDINGS_VIA !== undefined ? `RAG_OPENAI_EMBEDDINGS_VIA=${fullValues.RAG_OPENAI_EMBEDDINGS_VIA}` : 'RAG_OPENAI_EMBEDDINGS_VIA=openai'}
 ${fullValues.RAG_PARSE_ROUTING !== undefined ? `RAG_PARSE_ROUTING=${fullValues.RAG_PARSE_ROUTING}` : 'RAG_PARSE_ROUTING=fixed'}
 ${fullValues.RAG_PARSER_ALLOW_CLOUD !== undefined ? `RAG_PARSER_ALLOW_CLOUD=${fullValues.RAG_PARSER_ALLOW_CLOUD}` : 'RAG_PARSER_ALLOW_CLOUD=true'}
@@ -1862,12 +1863,12 @@ RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
 RAG_FT_EMBED_API_KEY=${getEnvValue('RAG_FT_EMBED_API_KEY') || ''}
 RAG_FT_SLOT_A_BASE_URL=${getEnvValue('RAG_FT_SLOT_A_BASE_URL') || ''}
 RAG_FT_SLOT_A_MODEL=${getEnvValue('RAG_FT_SLOT_A_MODEL') || ''}
-RAG_FT_SLOT_A_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT') || ''}
-RAG_FT_SLOT_A_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_A_QUERY_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT'))}
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT'))}
 RAG_FT_SLOT_B_BASE_URL=${getEnvValue('RAG_FT_SLOT_B_BASE_URL') || ''}
 RAG_FT_SLOT_B_MODEL=${getEnvValue('RAG_FT_SLOT_B_MODEL') || ''}
-RAG_FT_SLOT_B_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT') || ''}
-RAG_FT_SLOT_B_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_B_QUERY_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT'))}
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT'))}
 RAG_OPENAI_EMBEDDINGS_VIA=${getEnvValue('RAG_OPENAI_EMBEDDINGS_VIA') || 'openai'}
 RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
 RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
@@ -2406,12 +2407,12 @@ RAG_FINETUNE=${getEnvValue('RAG_FINETUNE') || 'off'}
 RAG_FT_EMBED_API_KEY=${getEnvValue('RAG_FT_EMBED_API_KEY') || ''}
 RAG_FT_SLOT_A_BASE_URL=${getEnvValue('RAG_FT_SLOT_A_BASE_URL') || ''}
 RAG_FT_SLOT_A_MODEL=${getEnvValue('RAG_FT_SLOT_A_MODEL') || ''}
-RAG_FT_SLOT_A_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT') || ''}
-RAG_FT_SLOT_A_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_A_QUERY_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_A_QUERY_PROMPT'))}
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_A_DOCUMENT_PROMPT'))}
 RAG_FT_SLOT_B_BASE_URL=${getEnvValue('RAG_FT_SLOT_B_BASE_URL') || ''}
 RAG_FT_SLOT_B_MODEL=${getEnvValue('RAG_FT_SLOT_B_MODEL') || ''}
-RAG_FT_SLOT_B_QUERY_PROMPT=${getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT') || ''}
-RAG_FT_SLOT_B_DOCUMENT_PROMPT=${getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT') || ''}
+RAG_FT_SLOT_B_QUERY_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_B_QUERY_PROMPT'))}
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=${formatEnvValue(getEnvValue('RAG_FT_SLOT_B_DOCUMENT_PROMPT'))}
 RAG_OPENAI_EMBEDDINGS_VIA=${getEnvValue('RAG_OPENAI_EMBEDDINGS_VIA') || 'openai'}
 RAG_PARSE_ROUTING=${getEnvValue('RAG_PARSE_ROUTING') || 'fixed'}
 RAG_PARSER_ALLOW_CLOUD=${getEnvValue('RAG_PARSER_ALLOW_CLOUD') || 'true'}
