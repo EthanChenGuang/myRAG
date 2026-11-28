@@ -56,7 +56,7 @@
   },
   "gate": {
     "path": "eval/reports/phase-04.1/fixture/defaults-gate.json",
-    "sha256": "e171ff692ad389571dd157391aa7f15ffcda92a36da81652cc22d6565377e7df"
+    "sha256": "356c9196bbf9cd831ff49c6ed0509597f3b0a311dbc71761dcbfe0ac59e22a81"
   },
   "gate_passed": false,
   "gate_failures": [
@@ -15603,5 +15603,12 @@
       "two-tenant matrix under the D-01 values: node --test name pattern 'under the D-01 values: multi-tenant' exit 0, 'under the D-01 values: single-tenant' exit 0 (keyless and with the fixture key)"
     ]
   },
-  "caveat": "Provisional: every golden item is synthetic fixture data, retrieved with the lexical fixture embedder (research R-4). When the real dev split first reaches the live calibration minimums, G1 to G4 run again on it (D-14)."
+  "caveat": "Provisional: every golden item is synthetic fixture data, retrieved with the lexical fixture embedder (research R-4). When the real dev split first reaches the live calibration minimums, G1 to G4 run again on it (D-14).",
+  "git_sha": "12598da41b7a6eaaead8fcf93309240e65fedf2e",
+  "run_date": "2026-11-26",
+  "historical": {
+    "as_of_git_sha": "12598da41b7a6eaaead8fcf93309240e65fedf2e",
+    "reason": "Kept as the record of the 04.1-17 re-run, which did not flip; not rebuilt when baselines, noise or criteria move on (04.1 verification G-04). The gate file gained only git_sha afterwards.",
+    "original_gate_sha256": "e171ff692ad389571dd157391aa7f15ffcda92a36da81652cc22d6565377e7df"
+  }
 }

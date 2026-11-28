@@ -5,6 +5,7 @@ Refusal basis: single_threshold
 Floor: none chosen; no-key fallback: none chosen
 Noise band: max(3.0 x spread, 0.02)
 G2 absolute ingest Recall@10 floor (derived): 0.685479
+Git sha: 12598da41b7a6eaaead8fcf93309240e65fedf2e; evaluated at: not recorded
 
 ## Failures
 
@@ -54,7 +55,7 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a |  | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
 | G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
@@ -96,19 +97,19 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
@@ -155,7 +156,7 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a |  | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
 | G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
@@ -197,19 +198,19 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.1667 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
@@ -256,10 +257,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.5556 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.4286 |  | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.5000 |  | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.5556 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.4286 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.5000 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8333 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0536 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.1030 | pass |
 | G3 (fail) | refusal | overall | correct_refusal_rate | 0.5000 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
@@ -301,10 +302,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 |  | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 |  | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 | n/a | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 | n/a | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8721 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
 | G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8721 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0274 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.0616 | pass |
@@ -351,7 +352,7 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a |  | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
 | G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
@@ -393,18 +394,18 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6575 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
@@ -451,10 +452,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 |  | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 |  | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8810 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
 | G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
@@ -496,50 +497,50 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 |  | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 |  | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 |  | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 |  | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 |  | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 |  | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 |  | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 |  | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 |  | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 |  | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
@@ -586,10 +587,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 |  | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 |  | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8810 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
 | G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
@@ -631,50 +632,50 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 |  | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 |  | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 |  | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 |  | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 |  | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 |  | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 |  | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 |  | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 |  | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 |  | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
@@ -721,10 +722,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.4444 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 |  | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3750 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 |  | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.4444 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3750 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8601 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0089 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0417 | pass |
 | G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
@@ -766,30 +767,30 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0870 |  | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0870 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0870 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 |  | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 |  | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 0.6667 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0870 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0870 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0870 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3636 | n/a | 0.4345 | 0.4545 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.3000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3793 | n/a | 0.5317 | 0.5517 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 0.6667 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8037 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
 | G2 (pass) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.8037 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0959 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.1458 | pass |
@@ -836,10 +837,10 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 |  | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 |  | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 |  | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | correct_refusal_rate | 0.3333 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | correct_refusal_rate | 0.2857 | n/a | 0.6943 | 0.7143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | correct_refusal_rate | 0.5000 | n/a | 0.7300 | 0.7500 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | correct_refusal_rate | 0.3750 | n/a | 0.6883 | 0.7083 | n/a | n/a | fail (noise_band) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.8601 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.0268 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.0678 | pass |
 | G3 (fail) | refusal | overall | correct_refusal_rate | 0.3750 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | fail |
@@ -881,50 +882,50 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 |  | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 |  | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 |  | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.1746 |  | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | mrr | 0.0641 |  | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 |  | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | mrr | 0.1096 |  | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 |  | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 |  | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 |  | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 |  | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 |  | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 |  | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 |  | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 |  | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 |  | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 |  | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | false_refusal_rate | 1.0000 | n/a | 0.4113 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | mrr | 0.0000 | n/a | 0.3496 | 0.3696 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_10 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | category:cross_lingual | recall_at_5 | 0.0000 | n/a | 0.3713 | 0.3913 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.8095 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | mrr | 0.1746 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.1905 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.9231 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | mrr | 0.0641 | n/a | 0.4911 | 0.5111 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.0769 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.9318 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | mrr | 0.0568 | n/a | 0.6323 | 0.6523 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.0682 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.0682 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.8767 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | mrr | 0.1096 | n/a | 0.5805 | 0.6005 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.1233 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.1233 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | mrr | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_10 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->it | recall_at_5 | 0.0000 | n/a | 0.3133 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | false_refusal_rate | 1.0000 | n/a | 0.4200 | 0.4000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | mrr | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_10 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:en->zh | recall_at_5 | 0.0000 | n/a | 0.1800 | 0.2000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | false_refusal_rate | 1.0000 | n/a | 0.4486 | 0.4286 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | mrr | 0.0000 | n/a | 0.1943 | 0.2143 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_10 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:it->zh | recall_at_5 | 0.0000 | n/a | 0.2657 | 0.2857 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | false_refusal_rate | 1.0000 | n/a | 0.3533 | 0.3333 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | mrr | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_10 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->en | recall_at_5 | 0.0000 | n/a | 0.6467 | 0.6667 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | false_refusal_rate | 1.0000 | n/a | 0.5200 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | mrr | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_10 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | pair:zh->it | recall_at_5 | 0.0000 | n/a | 0.4800 | 0.5000 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.1233 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.8767 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.9188 | fail |
@@ -971,7 +972,7 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a |  | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
 | G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
@@ -1013,19 +1014,19 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.5926 |  | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5926 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
@@ -1072,7 +1073,7 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (pass) | noise_gate |  |  | n/a |  | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
+| G1 (pass) | noise_gate |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass (no offender; 7 skipped) |
 | G2 (pass) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.5893 | 112 | 0.5068 | 0.5268 | 0.0200 | n/a | pass |
 | G3 (pass) | refusal | overall | false_refusal_rate | 0.3750 | 112 | 0.3950 | 0.3750 | 0.0200 | 0.4566 | pass |
 | G3 (pass) | refusal | overall | correct_refusal_rate | 0.7083 | 24 | 0.6883 | 0.7083 | 0.0200 | n/a | pass |
@@ -1114,19 +1115,19 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 |  | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | mrr | 0.5926 |  | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 |  | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 |  | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 |  | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 |  | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 |  | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 |  | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 |  | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 |  | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
-| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 |  | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | false_refusal_rate | 0.2698 | n/a | 0.2263 | 0.2063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | mrr | 0.5926 | n/a | 0.5996 | 0.6196 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_10 | 0.6825 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:en | recall_at_5 | 0.6667 | n/a | 0.6863 | 0.7063 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | false_refusal_rate | 0.3333 | n/a | 0.2508 | 0.2308 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_10 | 0.6154 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:it | recall_at_5 | 0.5897 | n/a | 0.6210 | 0.6410 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | false_refusal_rate | 0.3182 | n/a | 0.2473 | 0.2273 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_10 | 0.6818 | n/a | 0.7414 | 0.7614 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | language:zh | recall_at_5 | 0.6818 | n/a | 0.6959 | 0.7159 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | false_refusal_rate | 0.3014 | n/a | 0.2392 | 0.2192 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_10 | 0.6644 | n/a | 0.6855 | 0.7055 | n/a | n/a | fail (noise_band) |
+| G1 (fail) | noise_gate | overall | recall_at_5 | 0.6507 | n/a | 0.6718 | 0.6918 | n/a | n/a | fail (noise_band) |
 | G2 (fail) | recall_at_10_vs_baseline | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G2 (fail) | recall_at_10_absolute_floor | overall | recall_at_10 | 0.6644 | 146 | 0.6855 | 0.7055 | 0.0200 | n/a | fail |
 | G3 (fail) | refusal | overall | false_refusal_rate | 0.3014 | 146 | 0.2392 | 0.2192 | 0.0200 | 0.3699 | fail |
@@ -1173,13 +1174,13 @@ G2 absolute ingest Recall@10 floor (derived): 0.685479
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G6 (pass) | paired_all_zero |  |  | n/a |  | n/a | n/a | n/a | n/a | pass |
+| G6 (pass) | paired_all_zero |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass |
 
 ### ingest: run 2f5f7b2c-5fca-4c07-8b1d-6d95cb887cc4, run_config_hash fe268dbb9f94b6a346212ba24070a8f487db77f056dfc337c0f1ae53afec95d7, report sha256 f8c86c2f3ac6ac39cf35bc80064512bca2b77b54b0419c8c2c2e8283e4cb9343
 
 | Criterion | Check | Slice | Metric | Observed | n | Bound | Baseline | Band | Upper 95 | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| G6 (pass) | paired_all_zero |  |  | n/a |  | n/a | n/a | n/a | n/a | pass |
+| G6 (pass) | paired_all_zero |  |  | n/a | n/a | n/a | n/a | n/a | n/a | pass |
 
 ## G8
 

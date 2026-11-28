@@ -280,7 +280,8 @@ def test_a_pending_live_result_records_g7_not_run_and_keeps_the_code_default(tmp
     assert record.g7.status == "pending_live"
     assert record.g7.models == []
     assert record.hosted.basis == "pending_live"
-    assert record.auto_hosted_profiles == ["chat", "embed", "eval", "voice"]
+    assert record.auto_hosted_profiles == ["chat", "embed", "eval"]
+    assert [(d.profile, d.reason) for d in record.hosted.dropped] == [("voice", dd.VOICE_UNMEASURED)]
     assert record.status == "flip"
 
 
@@ -419,3 +420,40 @@ def test_check_current_rejects_a_record_that_does_not_validate(tmp_path, capsys)
     data["provisional"] = False
     path.write_text(json.dumps(data), encoding="utf-8")
     assert main(["check-current", "--decision", str(path)]) == 2
+
+
+# ---------- quick-41 G-04: run provenance and the historical marker
+
+
+def test_build_copies_the_git_sha_and_the_run_date_of_the_gate(tmp_path):
+    gate = _gate(tmp_path)
+    gate["git_sha"] = "b" * 40
+    gate["evaluated_at"] = "2026-01-03T00:00:00+00:00"
+    record = _build(tmp_path, gate)
+    assert record.git_sha == "b" * 40
+    assert record.run_date == "2026-01-03"
+    assert record.historical is None
+
+
+def test_check_current_names_a_historical_record_and_still_reports_drift(tmp_path, capsys):
+    out = tmp_path / "decision"
+    assert _cli_build(tmp_path, out) == 0
+    path = tmp_path / "decision.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["historical"] = {"as_of_git_sha": "c" * 40, "reason": "kept as the record of a run that did not flip"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    capsys.readouterr()
+    assert main(["check-current", "--decision", str(path)]) == 0
+    assert "historical" in capsys.readouterr().out
+    (tmp_path / "ingest.json").write_text("re-recorded", encoding="utf-8")
+    assert main(["check-current", "--decision", str(path)]) == 1
+    err = capsys.readouterr().err
+    assert "historical" in err and "c" * 40 in err
+
+
+def test_the_committed_decision_is_marked_historical_with_its_run_sha():
+    committed = Path(__file__).resolve().parents[1] / "decisions" / "04.1-retrieval-defaults.json"
+    record = DecisionRecord.model_validate_json(committed.read_text(encoding="utf-8"))
+    assert record.status == "not_flipped"
+    assert record.historical is not None and record.historical.as_of_git_sha.startswith("12598da4")
+    assert record.git_sha == record.historical.as_of_git_sha
