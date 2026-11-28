@@ -55,8 +55,8 @@ Meanwhile 06.2-30 can run both voice arms with `--gates-mode report` explicitly,
 
 ## Resolution (2026-11-28)
 The owner chose option 1 (recorded in `06.2-CONTEXT.md`, "Owner decision (2026-11-28, 08:57Z): voice entry absolute gate mode").
-- `resolveGatesMode` takes the run's `entryProfile`. A voice entry run without an explicit flag resolves to `report` (source
-  `voice_entry`, no tier). `run-smoke.mts` passes `runConfig.entryProfile` and logs the voice mode line. Explicit flags still win.
+- `resolveGatesMode` takes the run's `entryProfile`. An in-process voice entry run without an explicit flag resolves to `report`
+  (source `voice_entry`, no tier). A live or overridden voice run keeps the gate default, enforce. `run-smoke.mts` passes `runConfig.entryProfile` and logs the voice mode line. Explicit flags still win.
 - RED first: `tests/eval-gate-mode-default.test.ts`, describe "a voice entry run does not take a text tier mode". It checks that a
   voice run resolves to report, that the text `smoke` tier still resolves to enforce with `false_refusal_rate` report-only, and
   that explicit flags win.

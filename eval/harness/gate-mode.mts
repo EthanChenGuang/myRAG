@@ -69,8 +69,9 @@ export interface GatesModeResolution {
  * fixture mode's tier, which is the mode pr-smoke runs that tier in. A live run (--base-url), a --gates or --golden override
  * (the record measures eval/config/quality-gates.json on the default golden set), a missing record or an unmeasured tier keeps
  * the gate default, enforce. An explicit --gates-report-only list wins; otherwise a measured enforce tier brings the report-only
- * ceilings its record lists, and an explicit --gates-mode brings none. A voice entry run measures retrieval only and no voice
- * tier is measured, so without a flag it runs the absolute gate in report mode (owner decision 2026-11-28, 06.2-CONTEXT).
+ * ceilings its record lists, and an explicit --gates-mode brings none. An in-process voice entry run measures retrieval only and
+ * no voice tier is measured, so instead of the text tier it runs the absolute gate in report mode; a live or overridden voice run
+ * keeps the gate default (owner decision 2026-11-28, 06.2-CONTEXT).
  */
 export function resolveGatesMode(
   explicit: GatesMode | undefined,
@@ -80,8 +81,8 @@ export function resolveGatesMode(
 ): GatesModeResolution {
   if (explicitReportOnly !== undefined) return { mode: explicit ?? 'enforce', source: 'flag', tier: null, reportOnly: [...explicitReportOnly] };
   if (explicit !== undefined) return { mode: explicit, source: 'flag', tier: null, reportOnly: [] };
-  if (run.entryProfile === 'voice') return { mode: 'report', source: 'voice_entry', tier: null, reportOnly: [] };
   if (run.live || run.customInputs) return { mode: undefined, source: 'gate_default', tier: null, reportOnly: [] };
+  if (run.entryProfile === 'voice') return { mode: 'report', source: 'voice_entry', tier: null, reportOnly: [] };
   const tier = FIXTURE_MODE_TIERS[run.fixtureMode];
   const measured = measuredTierModes(measurementPath).get(tier) ?? null;
   if (measured === null || measured.mode === null) return { mode: undefined, source: 'gate_default', tier, reportOnly: [] };
