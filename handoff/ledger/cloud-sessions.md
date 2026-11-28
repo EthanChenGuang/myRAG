@@ -1035,3 +1035,5 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - 4.2 gate PASS (v2 rule). 4.4 gate FAIL on ingest scanned recall@10: 0.9286 < 0.98 (n=14). Routed to 04.4-16..19 (cluster DF); the 17..19 gate runs merge min-gate-n first.
   - Orchestrator decision: old PASS reports stay as history. The v2 reports under */min-gate-n-v2/ are the current ones.
 - 01:00Z 06.3-16 DONE (exec/06.3-16, no migration) and archived; goes into train 42. Its operator check is eval-only and waits for 0720/0721. The READY detector found no new autonomous plans; 06.3-18 waits on 17.
+- 01:01Z quick-06-cache-gaps DONE (exec/quick-06-cache-gaps, base quick-term-glossary-wiring) and archived; queued for train 42. 06-46 Task 4 (real Redis) is now unblocked: owner live checkpoint. Morning item: the owner may register W-1 as T-06-111.
+- 01:01Z t41 progress 2/4 @ af688dbd9: train41-live.sql is on ops/owner-actions (911b3dc92). The 4.2 gate in t41 still FAILs under the old rule; min-gate-n v2 plus 04.2-40 cover it. The builder is checking purge-store coverage for 7 tables.
