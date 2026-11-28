@@ -111,3 +111,26 @@
   - every uploaded document deleted through DELETE /api/documents/<id>, all versions included (200, plus an expected 404 for the second id of the same lineage).
 - Result: version tags PASS. "Also in" not verifiable in the UI: empty model reply bug, reported to the orchestrator.
 - Local only: .env.local switches set by the script's setup (backup .env.local.walkthrough-backup), restored with `node walkthrough-sources.mjs restore`.
+
+## 2026-11-28 ~08:40 UTC: EVAL (fsgaeysipkukqoocgzbx) rehearsal of trains 38-41 + NF-1 0989 + UF-1 0991 (main e6afe8a2), DONE
+- Orchestrator handoff, owner approved ("可以，先在 EVAL 上演练"; EVAL steps pre-approved by the owner). Order:
+  t38, t39, 0989, 0991, t40, t41.
+- Applied (apply_migration, one call at a time, names eval_trainNN_<file>):
+  - t38: 0930, 0930.mt, 0933, 0741, 0981, 0984, 0409 delta, 0410 r21
+  - t39: 0982, 0983, 0985, 1010, 0410 r22
+  - quick fixes: eval_nf1_0989_chats_shared_rls, eval_uf1_0991_block_direct_document_insert. Only the BEGIN..COMMIT apply block was applied; the probes contain ROLLBACK, so they ran separately.
+  - t40: 0723, 0724, 0724.mt, 0726, 0727, 0986, 0988, 0410 r23
+  - t41: 0720, 0721, 0721.mt, 0722, 0728, 0937, 0987, 0990, 1011, 0410 r23
+- md5: all 33 train sections and both quick-fix apply blocks match the files byte for byte.
+- Verify (each train's own verify):
+  - t38: one overload each, all with access params and search_path="". No client EXECUTE. Readiness listed only rag_attribute_filter_values and rag_attribute_documents, as the file expects.
+  - t39: readiness ready=true. 9 scope triggers. New tables have RLS on and 0 policies. glossary_term_lost is in the CHECK.
+  - 0989: chats policies have no "shared" reference. anon sees 0 shared rows.
+  - 0991: 2 guard triggers (O). No INSERT policies on documents or chunks. An authenticated insert is refused with 42501 (rolled back).
+  - t40: one rag_tenant_doc_types(text,text[],boolean). Readiness ready. rag_purge_audit has RLS on.
+  - t41: 6 nullable columns. 2 tables with RLS on and 0 policies. 7 triggers (O). The review policy is RESTRICTIVE and checks enforcement. Readiness ready. unowned_with_log=0.
+  - Overall: rag_access_enforced()=false.
+- Data writes: none, apart from guarded backfills that are no-ops while enforcement is off.
+- Notes for PROD:
+  - NF-1 file header says "owner desk / SQL editor"; on prod the owner chooses whether to paste it or have me apply the block.
+  - Train 41 DEPLOY CAUTION: set NANGO_WEBHOOK_SECRET before deploying the train-41 app.
