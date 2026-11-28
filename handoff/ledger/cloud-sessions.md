@@ -921,3 +921,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - plan-41-18-revise (Fable) is replanning; re-execute after it.
   - Archived.
 - 00:02Z quick-43-apply-test DONE exec/quick-43-apply-test d3bfbb3c6 -> train 41. The access-migrations apply test passes 8/8 in both modes, and still passes with 0986-0990 copied in. The 53 plan list is corrected. Archived.
+- 00:04Z OWNER chose (B) for the 4.4 BM25 question: keep not_flipped and plan cluster-aware DF. plan-44-cluster-df (Fable) dispatched.
