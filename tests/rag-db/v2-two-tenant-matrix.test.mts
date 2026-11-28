@@ -1489,6 +1489,83 @@ describe('the BM25 leg reads only the caller statistics: direct calls, score sta
     await assertClean(a.scopeKey, 'tenant a untouched');
   });
 
+  test("RAG_RERANK_LOCAL_STATS=tenant (04.4-21): tenant a's local rerank scores read a's statistics only and do not move while tenant b writes", async () => {
+    const { createLocalBm25Reranker, LOCAL_BM25_TENANT_MODEL } = await import('../../src/lib/rag/rerank/local-bm25.ts');
+    const { createTenantLocalStatsProvider } = await import('../../src/lib/rag/rerank/local-stats.ts');
+    const { resetLexstatsCacheForTests } = await import('../../src/lib/rag/lexical/stats.ts');
+    type Rpc = import('../../src/lib/rag/backend/supabase-rpc.ts').RpcClient;
+    const rpcCalls: Array<{ fn: string; tenant: unknown }> = [];
+    const client: Rpc = {
+      rpc(fn, args) {
+        rpcCalls.push({ fn, tenant: args.p_tenant_key });
+        const run = async () => {
+          try {
+            if (fn === 'rag_lexstats_status') {
+              return { data: await asServiceRole(db(), 'SELECT public.rag_lexstats_status($1) AS rag_lexstats_status', [args.p_tenant_key]), error: null };
+            }
+            const rows = await asServiceRole<Record<string, unknown>>(
+              db(),
+              'SELECT chunk_id::text AS chunk_id, chunk_count, total_len, terms, dfs FROM public.rag_lexical_rerank_stats($1, $2::text[], $3::uuid[])',
+              [args.p_tenant_key, args.p_terms, args.p_chunk_ids],
+            );
+            return { data: rows, error: null };
+          } catch (error) {
+            return { data: null, error: { message: error instanceof Error ? error.message : String(error) } };
+          }
+        };
+        const request = { abortSignal: () => request, then: (ok: never, ko: never) => run().then(ok, ko) } as unknown as ReturnType<Rpc['rpc']>;
+        return request;
+      },
+    };
+    const a = tenant('a');
+    const b = tenant('b');
+    const candidates = (
+      await db().query<{ id: string; lexical_text: string }>(
+        `SELECT id::text AS id, lexical_text FROM document_chunks
+          WHERE tenant_key = $1 AND is_current AND lexical_text IS NOT NULL AND lexical_text <> '' ORDER BY id LIMIT 12`,
+        [a.scopeKey],
+      )
+    ).rows;
+    assert.ok(candidates.length > 1, 'tenant a has rerank candidates');
+    const query = [...new Set(candidates.flatMap((row) => row.lexical_text.split(' ').slice(0, 2)))].slice(0, 4).join(' ');
+    const rerankA = async () => {
+      resetLexstatsCacheForTests();
+      const localStats = createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: candidates.map((row) => row.id) });
+      return createLocalBm25Reranker().rerank(query, candidates.map((row) => row.lexical_text), { signal: AbortSignal.timeout(30_000), localStats });
+    };
+    const terms = [...new Set(query.split(' '))];
+    const readA = async () => {
+      resetLexstatsCacheForTests();
+      const provider = createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: candidates.map((row) => row.id) });
+      const map = await provider.read(terms, candidates.map((row) => row.id), AbortSignal.timeout(30_000));
+      return map === null ? null : [...map.entries()].map(([id, g]) => [id, g.chunkCount, g.totalLength, [...g.df.entries()].sort()]);
+    };
+    const statsBefore = await readA();
+    assert.ok(statsBefore !== null && statsBefore.length === candidates.length, 'every candidate of a has statistics');
+    const baseline = await rerankA();
+    assert.equal(baseline.localStats, 'tenant', 'tenant statistics served a');
+    assert.equal(baseline.model, LOCAL_BM25_TENANT_MODEL);
+    assert.ok(baseline.scores.every((row) => Number.isFinite(row.score)), 'finite scores');
+    assert.ok(rpcCalls.every((call) => call.tenant === a.scopeKey), 'every read names tenant a only');
+
+    const { chunkIds } = await ingest(b, Array.from({ length: 40 }, (_, i) => `${query} ${query} w${i}`));
+    await compact(b.scopeKey);
+    assert.deepEqual(await rerankA(), baseline, 'after b ingests');
+    assert.deepEqual(await readA(), statsBefore, "a's statistics after b ingests a's terms");
+    // A chunk id of b among a's candidates gets no statistics under a's key, so the pool serves that request (never b's statistics).
+    resetLexstatsCacheForTests();
+    const mixed = await createLocalBm25Reranker().rerank(query, [...candidates.map((row) => row.lexical_text), 'x'], {
+      signal: AbortSignal.timeout(30_000),
+      localStats: createTenantLocalStatsProvider({ client, tenantKey: a.scopeKey, chunkIds: [...candidates.map((row) => row.id), chunkIds[0] as string] }),
+    });
+    assert.equal(mixed.localStats, 'pool');
+    await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [chunkIds.slice(0, 20)]);
+    await compact(b.scopeKey);
+    assert.deepEqual(await rerankA(), baseline, 'after b deletes');
+    assert.deepEqual(await readA(), statsBefore, "a's statistics after b deletes");
+    assert.ok(rpcCalls.every((call) => call.tenant === a.scopeKey), 'no read named another tenant');
+  });
+
   test("after delete and version replace within tenant a, the removed and superseded chunks are gone and b's result does not move", async () => {
     const a = tenant('a');
     const b = tenant('b');
