@@ -3,7 +3,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { FakeDocument, FakeElement } from './helpers/html-fake-dom';
+import { FakeDocument, FakeElement, XSS_PAYLOAD, injectedElements } from './helpers/html-fake-dom';
 
 const require = createRequire(import.meta.url);
 const configUiDir = path.resolve(import.meta.dirname, '../../scripts/config-ui');
@@ -435,3 +435,335 @@ describe('index.html loads the panel', () => {
   });
 });
 
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+function modeSelect(root: FakeElement, id: string): FakeElement {
+  const el = root.querySelector(`[data-source-sync-mode="${id}"]`);
+  expect(el, `mode select for ${id}`).toBeTruthy();
+  return el!;
+}
+
+function choose(select: FakeElement, value: string) {
+  select.value = value;
+  select.dispatch('change');
+}
+
+function openDialog(doc: FakeDocument): FakeElement | undefined {
+  return doc.querySelectorAll('dialog').find((d) => d.open);
+}
+
+function listResponder(rows: () => Row[], extra: Record<string, Responder> = {}): Responder {
+  return (call) => {
+    for (const [suffix, fn] of Object.entries(extra)) if (call.path.includes(suffix)) return fn(call);
+    return ok(listBody(rows()));
+  };
+}
+
+describe('deletion mode select', () => {
+  it('Soft delete saves at once: select disabled with Saving… in place of the help line, then mode.saved', async () => {
+    const gate = deferred<Row>();
+    const env = await mounted(listResponder(() => [rowA()], { 'deletion-mode': () => gate.promise }));
+    const select = modeSelect(env.root, CONN_A);
+    choose(select, 'soft');
+    await flush(2);
+    const put = env.calls.find((c) => c.path.endsWith('/deletion-mode'))!;
+    expect(put.path).toBe(`admin/source-sync/connections/${CONN_A}/deletion-mode`);
+    expect(put.init.method).toBe('PUT');
+    expect(JSON.parse(String(put.init.body))).toEqual({ mode: 'soft' });
+    expect(select.disabled).toBe(true);
+    const help = env.doc.getElementById(select.getAttribute('aria-describedby')!)!;
+    expect(help.textContent).toContain('Saving…');
+    gate.resolve(ok({ success: true, id: CONN_A, deletion_mode: 'soft' }));
+    await flush();
+    expect(select.disabled).toBe(false);
+    expect(help.textContent).toMatch(/^The document stops being used in answers/);
+    expect(env.status.textContent).toBe('Deletion mode for Provider A: Soft delete. It applies to deletions from now on.');
+    expect(openDialog(env.doc)).toBeUndefined();
+  });
+
+  it('Default sends mode null', async () => {
+    const env = await mounted(listResponder(() => [rowC()], { 'deletion-mode': () => ok({ success: true, id: CONN_C, deletion_mode: null }) }));
+    choose(modeSelect(env.root, CONN_C), '');
+    await flush();
+    const put = env.calls.find((c) => c.path.endsWith('/deletion-mode'))!;
+    expect(JSON.parse(String(put.init.body))).toEqual({ mode: null });
+  });
+
+  it('Purge mode dialog: nothing is saved before the dialog, Keep restores the previous value and focuses the select', async () => {
+    const env = await mounted(listResponder(() => [rowA()], { 'deletion-mode': () => ok({ success: true }) }));
+    const select = modeSelect(env.root, CONN_A);
+    choose(select, 'purge');
+    await flush(2);
+    expect(env.calls.some((c) => c.path.endsWith('/deletion-mode'))).toBe(false);
+    const dialog = openDialog(env.doc)!;
+    expect(dialog).toBeTruthy();
+    expect(dialog.getAttribute('lang')).toBe('en');
+    expect(dialog.querySelector('h3')!.textContent).toBe('Use Purge mode for Provider A?');
+    expect(dialog.textContent).toContain('more than 30% of this connection');
+    expect(env.doc.activeElement!.textContent).toBe('Keep current mode');
+    byText(dialog, 'button', 'Keep current mode')!.click();
+    await flush(2);
+    expect(select.value).toBe('');
+    expect(env.doc.activeElement).toBe(select);
+    expect(env.calls.some((c) => c.path.endsWith('/deletion-mode'))).toBe(false);
+  });
+
+  it('Purge mode dialog: Escape restores the previous value', async () => {
+    const env = await mounted(listResponder(() => [rowC()], { 'deletion-mode': () => ok({ success: true }) }));
+    const select = modeSelect(env.root, CONN_C);
+    choose(select, 'purge');
+    const dialog = openDialog(env.doc)!;
+    const cancel = dialog.dispatch('cancel');
+    expect(cancel.defaultPrevented).toBe(false);
+    dialog.close();
+    await flush(2);
+    expect(select.value).toBe('soft');
+    expect(env.calls.some((c) => c.path.endsWith('/deletion-mode'))).toBe(false);
+  });
+
+  it('Purge mode dialog: Use Purge mode saves purge', async () => {
+    const env = await mounted(listResponder(() => [rowA()], { 'deletion-mode': () => ok({ success: true, id: CONN_A, deletion_mode: 'purge' }) }));
+    const select = modeSelect(env.root, CONN_A);
+    choose(select, 'purge');
+    byText(openDialog(env.doc)!, 'button', 'Use Purge mode')!.click();
+    await flush();
+    const put = env.calls.find((c) => c.path.endsWith('/deletion-mode'))!;
+    expect(JSON.parse(String(put.init.body))).toEqual({ mode: 'purge' });
+    expect(select.value).toBe('purge');
+    expect(env.status.textContent).toContain('Purge');
+  });
+
+  it('a refused save restores the value and shows mode.failed in a role=alert line, cleared on the next change', async () => {
+    let fail = true;
+    const env = await mounted(listResponder(() => [rowC()], {
+      'deletion-mode': () => (fail ? { ok: false, status: 500, body: { error: 'unavailable' } } : ok({ success: true })),
+    }));
+    const select = modeSelect(env.root, CONN_C);
+    choose(select, '');
+    await flush();
+    expect(select.value).toBe('soft');
+    const alert = env.root.querySelectorAll('[role="alert"]').find((el) => el.textContent === 'The deletion mode was not changed. Try again.');
+    expect(alert).toBeTruthy();
+    fail = false;
+    choose(select, '');
+    await flush();
+    expect(env.root.querySelectorAll('[role="alert"]').some((el) => el.textContent.includes('was not changed'))).toBe(false);
+  });
+
+  it('a 404 announces error.connectionGone and reloads the list', async () => {
+    const env = await mounted(listResponder(() => [rowA()], { 'deletion-mode': () => ({ ok: false, status: 404, body: { success: false, error: 'not_found' } }) }));
+    choose(modeSelect(env.root, CONN_A), 'soft');
+    await flush();
+    expect(env.status.textContent).toMatch(/^This connection no longer exists/);
+    expect(env.calls.filter((c) => c.path.startsWith('admin/source-sync/connections?')).length).toBe(2);
+  });
+});
+
+describe('Remove documents', () => {
+  it('opens the dialog on Go back with the mode sentence; while running it is inert; then it reloads and announces', async () => {
+    const gate = deferred<Row>();
+    let confirmed = false;
+    const env = await mounted(listResponder(() => (confirmed ? [rowA(), rowB({ paused_run: null, states: ['overdue'] })] : [rowA(), rowB()]), {
+      '/confirm': () => gate.promise,
+    }));
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Remove documents…')!.click();
+    const dialog = openDialog(env.doc)!;
+    expect(dialog.querySelector('h3')!.textContent).toBe('Remove documents from Provider B?');
+    expect(dialog.textContent).toContain('Documents: 25');
+    expect(dialog.textContent).toContain('This cannot be undone.');
+    expect(env.doc.activeElement!.textContent).toBe('Go back');
+    const confirm = byText(dialog, 'button', 'Remove documents')!;
+    const goBack = byText(dialog, 'button', 'Go back')!;
+    confirm.click();
+    await flush(2);
+    const post = env.calls.find((c) => c.path.endsWith('/confirm'))!;
+    expect(post.path).toBe(`admin/source-sync/runs/${RUN_B}/confirm`);
+    expect(post.init.method).toBe('POST');
+    expect(confirm.disabled).toBe(true);
+    expect(goBack.disabled).toBe(true);
+    expect(confirm.textContent).toContain('Removing…');
+    expect(dialog.dispatch('cancel').defaultPrevented).toBe(true);
+    expect(dialog.open).toBe(true);
+    confirmed = true;
+    gate.resolve(ok({ success: true, removed: 25, failed: 0 }));
+    await flush();
+    expect(dialog.open).toBe(false);
+    expect(env.status.textContent).toBe('Removed from Provider B: 25.');
+    expect(env.doc.activeElement).toBe(modeSelect(env.root, CONN_B));
+  });
+
+  it('a partial removal shows remove.partial in a warning alert above the table', async () => {
+    const env = await mounted(listResponder(() => [rowB()], { '/confirm': () => ok({ success: true, removed: 20, failed: 5 }) }));
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Remove documents…')!.click();
+    byText(openDialog(env.doc)!, 'button', 'Remove documents')!.click();
+    await flush();
+    const partial = env.root.querySelectorAll('.alert-warning').find((el) => el.textContent.includes('Not removed: 5.'));
+    expect(partial).toBeTruthy();
+  });
+
+  it('409 confirmation_expired turns the block into the expired form with only Dismiss run', async () => {
+    const env = await mounted(listResponder(() => [rowB()], { '/confirm': () => ({ ok: false, status: 409, body: { success: false, error: 'confirmation_expired' } }) }));
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Remove documents…')!.click();
+    byText(openDialog(env.doc)!, 'button', 'Remove documents')!.click();
+    await flush();
+    const group = env.root.querySelector('[role="group"]')!;
+    expect(group.className).not.toContain('alert-warning');
+    expect(group.textContent).toContain('older than 24 hours');
+    expect(byText(group, 'button', 'Remove documents…')).toBeUndefined();
+    expect(byText(group, 'button', 'Dismiss run')).toBeTruthy();
+  });
+
+  it('5xx keeps the block with remove.failed in a role=alert line and focus on the used button', async () => {
+    const env = await mounted(listResponder(() => [rowB()], { '/confirm': () => ({ ok: false, status: 500, body: { success: false, error: 'unavailable' } }) }));
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Remove documents…')!.click();
+    byText(openDialog(env.doc)!, 'button', 'Remove documents')!.click();
+    await flush();
+    const group = env.root.querySelector('[role="group"]')!;
+    const line = group.querySelectorAll('[role="alert"]').find((el) => el.textContent === 'The documents were not removed. Try again.');
+    expect(line).toBeTruthy();
+    expect(env.doc.activeElement!.textContent).toBe('Remove documents…');
+  });
+
+  it('a run handled elsewhere announces error.runGone and reloads', async () => {
+    const env = await mounted(listResponder(() => [rowB()], { '/dismiss': () => ({ ok: false, status: 409, body: { success: false, error: 'run_not_pending' } }) }));
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Dismiss run')!.click();
+    await flush();
+    expect(env.status.textContent).toBe('This run was already confirmed or dismissed. The list was reloaded.');
+    expect(env.calls.filter((c) => c.path.startsWith('admin/source-sync/connections?')).length).toBe(2);
+  });
+
+  it('Dismiss run shows its in-flight text and disables the sibling button', async () => {
+    const gate = deferred<Row>();
+    const env = await mounted(listResponder(() => [rowB()], { '/dismiss': () => gate.promise }));
+    const group = env.root.querySelector('[role="group"]')!;
+    const dismiss = byText(group, 'button', 'Dismiss run')!;
+    const remove = byText(group, 'button', 'Remove documents…')!;
+    dismiss.click();
+    await flush(2);
+    expect(dismiss.disabled).toBe(true);
+    expect(remove.disabled).toBe(true);
+    expect(dismiss.textContent).toContain('Dismissing…');
+    gate.resolve(ok({ success: true, status: 'dismissed' }));
+    await flush();
+  });
+
+  it('an expired run by expires_at offers only Dismiss run', async () => {
+    const env = await mounted(() => ok(listBody([rowB({ paused_run: pausedRun({ expires_at: '2000-01-01T00:00:00Z' }) })])));
+    const group = env.root.querySelector('[role="group"]')!;
+    expect(byText(group, 'button', 'Remove documents…')).toBeUndefined();
+    expect(byText(group, 'button', 'Dismiss run')).toBeTruthy();
+  });
+
+  it('Show files lists ids in monospace when no names are sent, and the not-shown count', async () => {
+    const env = await mounted(() => ok(listBody([rowB({ paused_run: pausedRun({ file_names: [], file_ids: ['id-1'], names_not_sent: 25 }) })])));
+    const details = env.root.querySelector('details')!;
+    expect(details.querySelector('summary')!.textContent).toBe('Show files: 25');
+    const id = details.querySelectorAll('li').find((li) => li.textContent === 'id-1')!;
+    expect(id.className).toContain('font-mono');
+  });
+
+  it('paused.bodyAll replaces paused.body when the source returned no files', async () => {
+    const env = await mounted(() => ok(listBody([rowB({ paused_run: pausedRun({ candidate_count: 40, total_count: 40 }) })])));
+    expect(env.root.querySelector('[role="group"]')!.textContent).toContain('The source returned no files.');
+  });
+});
+
+describe('panel states', () => {
+  it('401 replaces the data view with the sign-in sentence and Reload panel; Settings stays usable', async () => {
+    const env = await mounted(() => ({ ok: false, status: 401, body: { error: 'Unauthorized' } }));
+    expect(env.root.querySelector('table')).toBeNull();
+    const warn = env.root.querySelectorAll('.alert-warning').find((el) => el.textContent.includes('Admin sign-in required'));
+    expect(warn).toBeTruthy();
+    expect(byText(warn!, 'button', 'Reload panel')).toBeTruthy();
+    const tabs = env.root.querySelectorAll('[role="tab"]');
+    tabs[1]!.click();
+    const settingsPanel = env.doc.getElementById(tabs[1]!.getAttribute('aria-controls')!)!;
+    expect(settingsPanel.hidden).toBe(false);
+  });
+
+  it('503 after a load keeps the table dimmed and shows list.unavailable with Reload panel', async () => {
+    let fail = false;
+    const env = await mounted(() => (fail ? { ok: false, status: 503, body: {} } : ok(listBody([rowA()]))));
+    fail = true;
+    byText(env.root, 'button', 'Refresh connections')!.click();
+    await flush();
+    expect(env.root.querySelector('table')).toBeTruthy();
+    const err = env.alertHost.querySelectorAll('.alert-error').find((el) => el.textContent.includes('Connections could not be loaded.'));
+    expect(err).toBeTruthy();
+    expect(byText(err!, 'button', 'Reload panel')).toBeTruthy();
+    const view = env.root.querySelector('[data-source-sync-view]')!;
+    expect(view.className).toContain('opacity-60');
+  });
+
+  it('a refresh keeps the content at 60% opacity with aria-busy while loading', async () => {
+    let gate: ReturnType<typeof deferred<Row>> | null = null;
+    const env = await mounted(() => (gate ? gate.promise : ok(listBody([rowA()]))));
+    gate = deferred<Row>();
+    byText(env.root, 'button', 'Refresh connections')!.click();
+    await flush(2);
+    const view = env.root.querySelector('[data-source-sync-view]')!;
+    expect(view.getAttribute('aria-busy')).toBe('true');
+    expect(view.className).toContain('opacity-60');
+    expect(env.root.querySelector('table')).toBeTruthy();
+    gate.resolve(ok(listBody([rowA()])));
+    await flush();
+    expect(view.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('first load shows the spinner with the loading text', () => {
+    const env = setupPanel(() => new Promise(() => {}));
+    (env.context.initSourceSyncPanel as () => void)();
+    const view = env.root.querySelector('[data-source-sync-view]')!;
+    expect(view.textContent).toContain('Loading connections…');
+    expect(view.querySelector('.loading')).toBeTruthy();
+  });
+
+  it('empty list shows the empty title and body and Open Connectors opens that tab', async () => {
+    const env = await mounted(() => ok(listBody([])));
+    expect(env.root.textContent).toContain('No connections to manage');
+    let opened = false;
+    env.connectorsLink.addEventListener('click', () => {
+      opened = true;
+    });
+    byText(env.root, 'button', 'Open Connectors')!.click();
+    expect(opened).toBe(true);
+  });
+
+  it('Load more connections requests the next page and appends it', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => rowA({ id: `id-${i}`, provider_name: `Provider ${String(i).padStart(2, '0')}` }));
+    const env = await mounted((call) => {
+      if (call.path.includes('offset=50')) return ok(listBody([rowA({ id: 'id-50', provider_name: 'Provider 50' })], { total: 51, offset: 50 }));
+      return ok(listBody(page1, { total: 51 }));
+    });
+    byText(env.root, 'button', 'Load more connections')!.click();
+    await flush();
+    expect(env.calls.at(-1)!.path).toBe('admin/source-sync/connections?limit=50&offset=50');
+    expect(env.root.querySelectorAll('select').length).toBe(51);
+    expect(byText(env.root, 'button', 'Load more connections')).toBeUndefined();
+  });
+
+  it('file names and owner labels render as text only (XSS)', async () => {
+    const env = await mounted(() =>
+      ok(listBody([rowB({ provider_name: XSS_PAYLOAD, owner: { id: 'x', label: XSS_PAYLOAD }, workspace_key: XSS_PAYLOAD, paused_run: pausedRun({ file_names: [XSS_PAYLOAD] }) })])),
+    );
+    byText(env.root.querySelector('[role="group"]')!, 'button', 'Remove documents…')!.click();
+    expect(injectedElements(env.doc)).toEqual([]);
+    expect(env.root.textContent).toContain(XSS_PAYLOAD);
+    expect(env.doc.innerHtmlWrites).toBe(0);
+  });
+
+  it('source has no innerHTML and no top-level name outside the panel prefixes', () => {
+    const source = fs.readFileSync(panelFile, 'utf8');
+    expect(source.includes('innerHTML')).toBe(false);
+    const names = [...source.matchAll(/^(?:const|let|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]!);
+    const allowed = /^(SourceSync|SOURCE_SYNC_|sourceSync|buildSourceSyncRowView$|buildPausedRunView$|mapSourceSyncError$|initSourceSyncPanel$|bindSourceSyncPanel$)/;
+    expect(names.filter((n) => !allowed.test(n))).toEqual([]);
+  });
+});
