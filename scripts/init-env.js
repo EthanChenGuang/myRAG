@@ -666,6 +666,7 @@ RAG_LEXICAL_QUANTITY=false
 # -----------------------------
 # Reranker: none | auto | cohere | voyage | local_bm25
 # auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
+# With auto and COHERE_API_KEY set, query and candidate text are sent to Cohere (chat, embed, eval; voice stays local)
 # Reranker
 RAG_RERANKER=none
 # Chat rerank tier
