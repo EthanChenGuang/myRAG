@@ -1173,3 +1173,20 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 06:56Z t43 progress: gates green so far. train43-live.sql (92c72ee6) has 0742-0745 and runs after train42-live. Waiting for the quick-63-gaps hash, the verify-7 fixes and the t42 merge.
 - 06:59Z secure-phase 5.1.1 DONE (SECURED) and archived. Dispatched quick-511-sec (T-07-77, mining reasons, tmp modes, static gate).
 - 07:01Z t42 PR #142 opened; subscribed. The 4.2 gate now FAILs on colloquial MRR 0.3344 < 0.3352 (n=21), which goes to the owner.
+
+## 2026-11-28 07:09Z OWNER DECISIONS (in person, in this orchestrator session: "以上全部按你的建议做")
+1a 05.2.1-23 must_keep: change the golden/fixture, bump the version and re-record.
+2b 04.1-18 p52: re-label the planned band of en-off-topic-context-002.
+3A 4.4 scanned: record it as a fixture reranker boundary flip; plan C (corpus-level local_bm25 stats) becomes its own plan.
+4b 4.2 diversity colloquial: keep diversity off and do not sign that gate.
+5a D-20: relax the fast-tier rule (conversational + retrieval hit + short query), then 06.2-30.
+6a The 26/25 test-split overrun is accepted.
+7a The 07-33 incumbent is the shipped Phase 4 values.
+8  The 07-43 decision (b) is confirmed.
+9  D-59 is confirmed.
+10 Register T-06-111 and close it.
+11b Only the dominant tenant records documents.language.
+12a Scrub candidate ids from rag_review_items snapshots on purge.
+13 RAG_SOURCE_PURGE_DAILY_CAP=200 when purge mode is turned on.
+14 Drain scheduler pg_cron + pg_net; backend-canary becomes a required check on main (repo setting, owner); vendor/region choice still open.
+Signatures were NOT covered by this; they are asked for separately.
