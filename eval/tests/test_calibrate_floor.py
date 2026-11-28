@@ -277,3 +277,44 @@ def test_rerun_with_unchanged_inputs_leaves_the_floor_file_byte_identical(tmp_pa
     _run(tmp_path, golden, sims, write=True, floor_path=floor)
     assert floor.read_bytes() == first
     assert str(tmp_path) not in json.dumps(json.loads(first))
+
+
+def test_calibration_runs_install_no_fixture_floor(tmp_path):
+    golden, _, sims = _world(tmp_path)
+    calls: list[dict] = []
+
+    class _Recording(_FloorRunner):
+        def __call__(self, **kwargs):
+            calls.append(kwargs)
+            return super().__call__(**kwargs)
+
+    run_refusal_calibration(
+        V2_RECOMMENDED,
+        tmp_path / "out",
+        golden=golden,
+        runner=_Recording(sims),
+        now=DAY,
+        thresholds_path=_empty_thresholds(tmp_path),
+        floor_path=tmp_path / "fixture-score-calibration.json",
+    )
+    assert [call.get("fixture_floor") for call in calls] == [False]
+
+
+def test_run_harness_passes_no_fixture_floor_only_when_asked(tmp_path):
+    from types import SimpleNamespace
+
+    from rag_eval.harness_runner import HarnessError, run_harness
+
+    golden, _, _ = _world(tmp_path)
+    seen: list[list[str]] = []
+
+    def spawner(argv, cwd):
+        seen.append(list(argv))
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    config = tmp_path / "base.json"
+    config.write_text(json.dumps({"name": "x", "env": {}}), encoding="utf-8")
+    for floor in (True, False):
+        with pytest.raises(HarnessError):
+            run_harness(run_config=config, golden=golden, out=tmp_path / f"run-{floor}", spawner=spawner, fixture_floor=floor)
+    assert ["--no-fixture-floor" in argv for argv in seen] == [False, True]
