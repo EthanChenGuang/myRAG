@@ -356,3 +356,52 @@ describe('Phase 4.4 BM25 document frequency mode in every config location (04.4-
     }
   });
 });
+
+describe('Phase 4.4 local reranker statistics in every config location (04.4-20, D-54)', () => {
+  const NAME = 'RAG_RERANK_LOCAL_STATS';
+
+  it('the five locations, the manifest, the classification and the eval pin carry it with default pool', () => {
+    expect(initEnv).toMatch(/^RAG_RERANK_LOCAL_STATS=pool$/m);
+    expect(server).toContain(`'${NAME}=pool'`);
+    expect(server).toContain(`${NAME}=\${getEnvValue('${NAME}') || 'pool'}`);
+    expect([...server.matchAll(new RegExp(`${NAME}=`, 'g'))].length).toBe([...server.matchAll(/RAG_LEXICAL_STEM_IT=/g)].length);
+    expect(envTs).toContain(`${NAME}: process.env.${NAME} || 'pool'`);
+    const row = entries<{ name: string; status: string; default?: string; options?: string[] }>(manifest).find((item) => item.name === NAME);
+    expect(row?.status).toBe('managed');
+    expect(row?.default).toBe('pool');
+    expect(row?.options).toEqual(['pool', 'tenant']);
+    const side = entries<{ name: string; side: string; mechanism?: string }>(classification).find((item) => item.name === NAME);
+    expect(side?.side).toBe('query');
+    expect(side?.mechanism).toBeUndefined();
+    expect(evalEnv[NAME]).toBe('pool');
+  });
+
+  it('the select sits after the lexical scoring controls and before the reranker, offers pool and tenant with pool selected', () => {
+    const content = phase4Box();
+    const df = content.indexOf('id="RAG_LEXICAL_DF_MODE"');
+    const stats = content.indexOf(`id="${NAME}"`);
+    expect(stats).toBeGreaterThan(df);
+    expect(content.indexOf('id="RAG_RERANKER"')).toBeGreaterThan(stats);
+    const tag = openingTag(NAME);
+    expect(attr(tag, 'name')).toBe(NAME);
+    expect(attr(tag, 'translate')).toBe('no');
+    expect(attr(tag, 'aria-describedby')).toBe(helpId(NAME));
+    const block = new RegExp(`<select\\b[^>]*\\bid="${NAME}"[^>]*>([\\s\\S]*?)</select>`).exec(html)?.[1] ?? '';
+    const options = [...block.matchAll(/<option value="([^"]*)"( selected)?>([^<]*)<\/option>/g)];
+    expect(options.map((m) => m[1])).toEqual(['pool', 'tenant']);
+    expect(options.filter((m) => m[2]).map((m) => m[1])).toEqual(['pool']);
+    expect(html).toContain(`<label class="label" for="${NAME}">`);
+    expect(html).toContain(`data-rag-i18n="${NAME}.label"`);
+    expect(html).toContain(`data-rag-i18n="${NAME}.help"`);
+    const help = new RegExp(`<p\\b[^>]*\\bid="${helpId(NAME)}"[^>]*>([\\s\\S]*?)</p>`).exec(html)?.[1] ?? '';
+    expect(help).toContain('npm run rag:lexstats -- enable');
+    expect(help).toContain('tenants without ready statistics keep pool statistics');
+    expect(help).toContain('RAG_PIPELINE=v2');
+    expect(help).not.toMatch(/travel|lodging|hotel|leave days|salar|restaurant|\bfaq\b|vpn|password|branch|reimburs|expense|vacation/i);
+  });
+
+  it('the control is not tied to the bm25 scoring mode (it applies to the local reranker under either lexical scoring)', () => {
+    expect(String(lexicalScoringMethod())).toContain('RAG_LEXICAL_DF_MODE');
+    expect(String(lexicalScoringMethod())).not.toContain(NAME);
+  });
+});
