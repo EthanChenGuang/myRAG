@@ -258,9 +258,10 @@ for (const mode of MODES) {
       await ctx.db.exec(fs.readFileSync(file, 'utf8'));
       // 0856 drops rag_exact_id_documents by catalog lookup; the 0930 block (Phase 4.3) defines it last, so it runs again too (its operator rule).
       // 0933 (04.3-11) is the last definition of the 0810, 0858, 0861 and 0862 legs, so it runs again after them (train 38).
+      // 0986 redefines 0933's rag_access_readiness, so it runs again after 0933 (train 40).
       const later = migrationFiles(ctx.mode).filter((relpath) => {
         const name = path.basename(relpath);
-        return name > path.basename(MIGRATION) && (name.startsWith('08') || name.startsWith('0930_') || name.startsWith('0933_'));
+        return name > path.basename(MIGRATION) && (name.startsWith('08') || name.startsWith('0930_') || name.startsWith('0933_') || name.startsWith('0986_'));
       });
       await applyMigrationFiles(ctx.db, later);
       const second = await catalog(ctx.db);

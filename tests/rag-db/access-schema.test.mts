@@ -332,8 +332,21 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       const groupsOf = async (docId: string): Promise<unknown> =>
         (await db.query<Row>('SELECT access_groups FROM documents WHERE id = $1', [docId])).rows[0]?.access_groups;
 
-      await asRole(db, 'authenticated', MEMBER_A, () => insertDoc(clientDoc));
-      assert.deepEqual(await groupsOf(clientDoc), ['all'], 'a client insert gets the default');
+      await assert.rejects(
+        () => asRole(db, 'authenticated', MEMBER_A, () => insertDoc(clientDoc)),
+        (error: unknown) =>
+          (error as { code?: string }).code === '42501' && /cannot be inserted by role authenticated/.test(error instanceof Error ? error.message : String(error)),
+        'a client cannot insert a document at all (0991)',
+      );
+      assert.equal(await groupsOf(clientDoc), undefined, 'the refused client insert wrote no row');
+      await asRole(db, 'service_role', null, () =>
+        db.query(
+          `INSERT INTO documents (id, filename, content, user_id${multi ? ', organization_id' : ''})
+           VALUES ($1, 'client.md', 'Neutral synthetic client record.', $2${multi ? ', $3' : ''})`,
+          multi ? [clientDoc, MEMBER_A, ORG] : [clientDoc, MEMBER_A],
+        ),
+      );
+      assert.deepEqual(await groupsOf(clientDoc), ['all'], 'an insert without a label gets the default');
       await asRole(db, 'authenticated', MEMBER_A, async () => {
         await rejects(
           () => db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [clientDoc, [`g:${groupA}`]]),
@@ -358,21 +371,16 @@ for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       const clientDoc = id('9205', 1);
       const chunkId = id('9206', 1);
       const expected = [`g:${groupA}`];
-      const refused = /permission denied|row-level security/;
-      const clientInsert = await asRole(db, 'authenticated', MEMBER_A, async () => {
-        try {
-          await db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]);
-          return true;
-        } catch (error) {
-          assert.match(error instanceof Error ? error.message : String(error), refused, 'client chunk insert');
-          return false;
-        }
-      });
-      // Single-tenant owners may write chunks of their own documents; the multi-tenant policies refuse a not-yet-ready document's chunk.
-      assert.equal(clientInsert, mode === 'single-tenant', 'which modes let the client insert a chunk at all');
-      if (!clientInsert) {
-        await db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]);
-      }
+      await assert.rejects(
+        () =>
+          asRole(db, 'authenticated', MEMBER_A, () =>
+            db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]),
+          ),
+        (error: unknown) =>
+          (error as { code?: string }).code === '42501' && /cannot be inserted by role authenticated/.test(error instanceof Error ? error.message : String(error)),
+        'client chunk insert is refused in both modes (0991)',
+      );
+      await db.query("INSERT INTO document_chunks (id, document_id, content, access_groups) VALUES ($1, $2, 'Neutral synthetic client chunk.', '{all}')", [chunkId, clientDoc]);
       const chunkGroups = async (): Promise<unknown> => (await db.query<Row>('SELECT access_groups FROM document_chunks WHERE id = $1', [chunkId])).rows[0]?.access_groups;
       assert.deepEqual(await chunkGroups(), expected, 'client chunk insert');
       await asRole(db, 'authenticated', MEMBER_A, () => db.query("UPDATE document_chunks SET access_groups = '{all}' WHERE id = $1", [chunkId]));

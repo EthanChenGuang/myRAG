@@ -796,12 +796,6 @@ CREATE POLICY "Allow read access to anonymous users" ON documents
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Authenticated users insert own documents" ON documents;
-CREATE POLICY "Authenticated users insert own documents" ON documents
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    user_id = (SELECT auth.uid())
-    AND (NOT kb_writes_locked() OR is_admin((SELECT auth.uid())))
-  );
 
 DROP POLICY IF EXISTS "Owners and admins update documents" ON documents;
 CREATE POLICY "Owners and admins update documents" ON documents
@@ -835,18 +829,6 @@ CREATE POLICY "Allow read access to anonymous users" ON document_chunks
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON document_chunks;
-CREATE POLICY "Authenticated users insert chunks of own documents" ON document_chunks
-  FOR INSERT TO authenticated
-  WITH CHECK (
-    is_admin((SELECT auth.uid()))
-    OR (
-      NOT kb_writes_locked()
-      AND EXISTS (
-        SELECT 1 FROM documents d
-        WHERE d.id = document_chunks.document_id AND d.user_id = (SELECT auth.uid())
-      )
-    )
-  );
 
 DROP POLICY IF EXISTS "Owners and admins update chunks" ON document_chunks;
 CREATE POLICY "Owners and admins update chunks" ON document_chunks
@@ -911,7 +893,7 @@ CREATE POLICY "Users can delete their own folders"
 DROP POLICY IF EXISTS "Users can view their own chats" ON chats;
 CREATE POLICY "Users can view their own chats"
   ON chats FOR SELECT
-  USING (((SELECT auth.uid()) = user_id) OR (shared = true));
+  USING ((SELECT auth.uid()) = user_id);
 
 DROP POLICY IF EXISTS "Users can insert their own chats" ON chats;
 CREATE POLICY "Users can insert their own chats"
@@ -928,10 +910,8 @@ CREATE POLICY "Users can delete their own chats"
   ON chats FOR DELETE
   USING ((SELECT auth.uid()) = user_id);
 
+-- Shared chats are read only by the service-role share page and route (by share_id), never through client RLS (NF-1).
 DROP POLICY IF EXISTS "Allow public access to shared chats" ON chats;
-CREATE POLICY "Allow public access to shared chats"
-  ON chats FOR SELECT
-  USING (shared = true);
 
 -- Subscription policies
 DROP POLICY IF EXISTS "Users can view their own subscription" ON subscriptions;
@@ -5773,6 +5753,39 @@ CREATE TRIGGER rag_guard_ingest_state
     'status', 'is_current', 'version', 'tenant_key', 'document_id', 'provisional', 'doc_type', 'doc_date', 'language', 'source',
     'chunk_kind', 'content_hash', 'parser_used', 'embedding_text_version'
   );
+
+-- 0991 (UF-1): client roles cannot INSERT into documents or document_chunks; every app writer uses the service role.
+CREATE OR REPLACE FUNCTION public.rag_guard_direct_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF current_user IN ('service_role', 'postgres', 'supabase_admin') THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'rows of %.% cannot be inserted by role %', TG_TABLE_SCHEMA, TG_TABLE_NAME, current_user
+    USING ERRCODE = '42501';
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_guard_direct_insert() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_guard_direct_insert() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_guard_direct_insert ON public.documents;
+CREATE TRIGGER rag_guard_direct_insert
+  BEFORE INSERT ON public.documents
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_direct_insert();
+
+DROP TRIGGER IF EXISTS rag_guard_direct_insert ON public.document_chunks;
+CREATE TRIGGER rag_guard_direct_insert
+  BEFORE INSERT ON public.document_chunks
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_direct_insert();
+
+DROP POLICY IF EXISTS "Authenticated users insert own documents" ON public.documents;
+DROP POLICY IF EXISTS "Authenticated users insert chunks of own documents" ON public.document_chunks;
+DROP POLICY IF EXISTS "Users can create documents" ON public.documents;
+DROP POLICY IF EXISTS "Users can create chunks" ON public.document_chunks;
 
 COMMIT;
 
