@@ -306,6 +306,45 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     expect(ignored.out.cacheTicket?.turn.versionScope).toBeUndefined();
   });
 
+  it('W-1: a request filter bypasses with retrieval_filters, so filtered and unfiltered turns never share an entry (chat, embed)', async () => {
+    const filterSets: RetrievalFilterInput[] = [
+      { dateRange: { from: '2026-01-01', to: '2026-06-30' } },
+      { sources: ['sample-source'] },
+      { documentIds: [DOC_1] },
+      { docTypes: ['report'] },
+      { languages: ['en'] },
+      { invoice: { currency: 'EUR' } },
+      { scopes: ['area:alpha'] },
+      { attributes: { area: ['alpha'] } },
+    ];
+    for (const profile of ['chat', 'embed'] as const) {
+      const memory = memoryCache();
+      const seed = await runLayer(memory.cache, { profile });
+      expect(seed.record).toMatchObject({ status: 'ok', detail: 'miss' });
+      const ticket = seed.out.cacheTicket!;
+      await memory.cache.store(
+        { ...ticket.key, scope: SCOPE_SINGLE, standalone: ticket.standalone, vector: ticket.vector, embeddingProfileId: ticket.embeddingProfileId },
+        cachedAnswer(),
+      );
+      const plain = await runLayer(memory.cache, { profile });
+      expect(plain.out.cacheHit).toBeDefined();
+      const checksBefore = memory.checks.length;
+
+      for (const retrievalFilters of filterSets) {
+        const filtered = await runLayer(memory.cache, { profile, retrievalFilters });
+        expect(filtered.record).toMatchObject({ status: 'disabled', detail: 'bypass=retrieval_filters' });
+        expect(filtered.out.cacheHit).toBeUndefined();
+        expect(filtered.out.cacheTicket).toBeUndefined();
+      }
+      expect(memory.checks).toHaveLength(checksBefore);
+      expect(memory.entries).toHaveLength(1);
+
+      const empty = await runLayer(memory.cache, { profile, retrievalFilters: {} });
+      expect(empty.out.cacheHit).toBeDefined();
+      expect(computeCacheKeyHash(memory.checks.at(-1)!)).toBe(computeCacheKeyHash(memory.checks[0]!));
+    }
+  });
+
   it('non-default retrieval options bypass with retrieval_options; the configured count checks normally', async () => {
     const memory = memoryCache();
     const runs = await Promise.all([

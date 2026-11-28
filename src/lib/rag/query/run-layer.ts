@@ -469,6 +469,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     : 'current';
   if (versionScope !== 'current') facts.versionScope = versionScope;
   else if (subQuestionScope !== 'current') facts.versionScope = subQuestionScope;
+  if (input.retrievalFilters) facts.retrievalFilters = input.retrievalFilters;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     // D-42 e: the eval report reads bypass_<reason> from the stage counts.

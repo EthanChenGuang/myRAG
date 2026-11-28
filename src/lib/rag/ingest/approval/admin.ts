@@ -4,6 +4,7 @@ import { getRagDeps } from '../../deps';
 import type { UploadApprovalMode } from '../config';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
+import { scheduleRedisvlInvalidation } from '../../cache/emit';
 import { afterPublish } from '../post-publish';
 import { activeUploaderHolds } from '../../security/uploader-hold';
 import { currentUploaderHoldMode } from './decide';
@@ -282,8 +283,10 @@ export async function approveUpload(input: ApprovalScopeInput & { documentId: st
   const approvedId = row ? text(row, 'document_id') : null;
   const version = row ? integer(row, 'version') : null;
   if (!row || approvedId === null || version === null || text(row, 'outcome') !== 'published') return { ok: false, reason: 'unavailable' };
+  const supersededDocumentId = text(row, 'superseded_document_id');
+  scheduleRedisvlInvalidation(input.tenantKey, [approvedId, supersededDocumentId]);
   void afterPublish({ documentId: approvedId, tenantKey: input.tenantKey });
-  return { ok: true, documentId: approvedId, version, supersededDocumentId: text(row, 'superseded_document_id') };
+  return { ok: true, documentId: approvedId, version, supersededDocumentId };
 }
 
 /** Rejects one held upload through the soft delete; the current version of its lineage, if any, stays in use. */

@@ -12,6 +12,9 @@ import { hashedTenantKey } from './index';
 import { resolveCachedSources, type ResolvedSource } from './sources';
 import type { CacheTicket, SemanticCache } from './types';
 
+/** The answer before CachedAnswerSchema enforces the storable groundedness and refusal rules (W-2). */
+type CachedAnswerDraft = Omit<CachedAnswer, 'groundedness' | 'is_refusal'> & { groundedness: AnswerGroundedness; is_refusal: boolean };
+
 /** Phase 5 scores within 20 s (RAG_GROUNDEDNESS_TIMEOUT_MS default) plus the record update; a label later than this is not waited for. */
 export const CACHE_STORE_GROUNDEDNESS_WAIT_MS = 25_000;
 const RESOLVE_TIMEOUT_MS = 2000;
@@ -201,7 +204,7 @@ async function runStore(
     groundedness,
     trace_id: input.traceId,
     created_at: deps.now().toISOString(),
-  } satisfies CachedAnswer);
+  } satisfies CachedAnswerDraft);
   if (!parsed.success) throw new StoreSkipped('invalid_answer');
 
   await cache.store(

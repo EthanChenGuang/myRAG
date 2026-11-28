@@ -1,4 +1,5 @@
 import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
+import { scheduleRedisvlInvalidation } from '../../cache/emit';
 import type { TenantScope } from '../../tenant/scope';
 import type { IngestConfig } from '../config';
 import { currentIngestConfig } from '../current-config';
@@ -226,6 +227,7 @@ export async function importAttributeRows(
   if (!result.ok) return result;
   const row = result.rows[0] ?? {};
   const changedDocumentIds = Array.isArray(row.changed_document_ids) ? row.changed_document_ids.map(String) : [];
+  if (!options.dryRun) scheduleRedisvlInvalidation(tenantKey, changedDocumentIds);
   if (!options.dryRun && changedDocumentIds.length > 0 && attributeHeaderEnabled(options.config ?? currentIngestConfig())) {
     const rendered = await renderDocumentHeaders(db, tenantKey, changedDocumentIds, options.signal);
     if (!rendered.ok) return { ok: false, reason: 'attribute_header_failed' };
