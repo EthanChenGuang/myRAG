@@ -659,6 +659,7 @@ function openPurgeDialog(documentId, filename, source) {
   reasonLabel.appendChild(purgeEl('span', 'label-text', t('dialog.reasonLabel')));
   const select = purgeEl('select', 'select select-bordered select-sm w-full');
   select.id = uid + '-reason';
+  select.setAttribute('name', 'reason_code');
   select.setAttribute('required', '');
   const placeholder = purgeEl('option', '', t('dialog.reasonPlaceholder'));
   placeholder.setAttribute('value', '');
@@ -680,6 +681,7 @@ function openPurgeDialog(documentId, filename, source) {
   noteLabel.append(purgeEl('span', 'label-text', t('dialog.noteLabel')), noteHint);
   const note = purgeEl('textarea', 'textarea textarea-bordered textarea-sm w-full break-words');
   note.id = uid + '-note';
+  note.setAttribute('name', 'reason_note');
   note.setAttribute('rows', '3');
   note.setAttribute('maxlength', String(PURGE_NOTE_MAX));
   note.setAttribute('aria-describedby', uid + '-note-help');
@@ -1125,7 +1127,7 @@ class PurgePanel {
       if (details.hasAttribute('open') || details.open) this.openDetails.add(view.id);
       else this.openDetails.delete(view.id);
     });
-    const summary = purgeEl('summary', 'cursor-pointer text-sm rounded focus-visible:outline focus-visible:outline-2', this.t('action.details'));
+    const summary = purgeEl('summary', 'cursor-pointer text-sm rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', this.t('action.details'));
     details.appendChild(summary);
     const inner = purgeEl('div', 'mt-2 min-w-0');
     const narrow = purgeEl('div', 'md:hidden mb-2');
