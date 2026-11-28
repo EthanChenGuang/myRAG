@@ -315,19 +315,31 @@ for (const mode of MODES) {
       assert.deepEqual((await pending(db)).map((r) => [r.tenant_key, r.lexemes]), [[tenantB, ['w3', 'w4']]]);
     });
 
-    test('an authenticated owner insert succeeds and still stages its row through the definer trigger', async () => {
+    test('an authenticated insert is refused (UF-1), and an owner delete still stages its row through the definer trigger', async () => {
       await enable(db, tenantA);
       const docA = await createDocument(db, mode, FIXTURE_USER_ID);
-      await db.exec('SET ROLE authenticated');
-      try {
-        await db.query("SELECT set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claim.role', 'authenticated', false)", [FIXTURE_USER_ID]);
+      const asOwner = async <T,>(run: () => Promise<T>): Promise<T> => {
+        await db.exec('SET ROLE authenticated');
+        try {
+          await db.query("SELECT set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claim.role', 'authenticated', false)", [FIXTURE_USER_ID]);
+          return await run();
+        } finally {
+          await db.exec('RESET ROLE');
+          await db.query("SELECT set_config('request.jwt.claim.sub', '', false), set_config('request.jwt.claim.role', '', false)");
+        }
+      };
+      await asOwner(async () => {
         await assert.rejects(() => db.query('SELECT 1 FROM public.rag_lexical_stats_pending'), (e: unknown) => (e as { code?: string }).code === '42501');
-        await insertChunks(db, docA, [{ text: 'w1 w2' }]);
-      } finally {
-        await db.exec('RESET ROLE');
-        await db.query("SELECT set_config('request.jwt.claim.sub', '', false), set_config('request.jwt.claim.role', '', false)");
-      }
-      assert.deepEqual((await pending(db)).map((r) => [r.tenant_key, r.sign, r.lexemes]), [[tenantA, 1, ['w1', 'w2']]]);
+        await assert.rejects(() => insertChunks(db, docA, [{ text: 'w1 w2' }]), (e: unknown) => (e as { code?: string }).code === '42501');
+      });
+      assert.deepEqual(await pending(db), [], 'a refused insert stages nothing');
+      const [chunk] = await insertChunks(db, docA, [{ text: 'w1 w2' }]);
+      const deleted = await asOwner(() => db.query('DELETE FROM public.document_chunks WHERE id = $1 RETURNING id', [chunk]));
+      assert.equal(deleted.rows.length, 1, 'the owner may delete their own chunk');
+      assert.deepEqual((await pending(db)).map((r) => [r.tenant_key, r.sign, r.lexemes]), [
+        [tenantA, 1, ['w1', 'w2']],
+        [tenantA, -1, ['w1', 'w2']],
+      ]);
     });
   });
 }

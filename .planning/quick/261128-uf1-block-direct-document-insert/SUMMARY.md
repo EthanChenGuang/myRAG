@@ -23,6 +23,10 @@ RED commit first (assertion failures "a row was written"), then GREEN:
 - `tests/rag-db/ingest-state-guard.test.mts`: authenticated document and chunk inserts refused with 42501 (uploader, single-tenant admin, org member), anon refused, service_role and owner still insert.
 - `tests/rag-db/upload-approval.test.mts`: a member cannot insert a ready document past the hold; no client can plant a ready chunk under a published document (not retrievable); service_role still writes.
 - `tests/security-gaps-rls.test.mts`: the old "owner may insert own document" expectation now asserts refusal.
+- `tests/rag-db/document-attributes.test.mts` and `tests/rag-db/lexical-stats-triggers.test.mts` encoded the old client insert; they now assert the 42501 refusal (lexical stats: an owner DELETE still stages through the definer trigger).
+
+## Gates
+`npx next typegen && npx tsc --noEmit` (0 errors), `npm run typecheck:new`, `check-config`, `check-rag-boundary`, `check-language-literals`, `check-settings-classification`; node --test: ingest-state-guard, upload-approval, upload-approval-two-tenant, schema-equality, definer-search-path-pglite, search-path-empty, hybrid-grants, lexical-stats-grants, search-rpc-grants-pglite, security-gaps-rls, document-attributes, lexical-stats-triggers (both modes, all pass); vitest: tests/rag/search-rpc-grants, security-definer-search-path and 23 upload/ingest files (386 pass). Full rag-db not run locally (orchestrator rule 2026-11-28: merge CI runs it); a partial shard found the two tests above, a static scan found no other test inserting as a client role.
 
 ## Production
 `prod-apply.sql` in this directory: the migration body plus checks (triggers, function grants, no INSERT/ALL policy left, RLS on, rolled-back probe). Not executed.
