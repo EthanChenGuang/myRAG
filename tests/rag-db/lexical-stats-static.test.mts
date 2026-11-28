@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Static scan of the Phase 4.4 migration block (0900 to 0919, D-04; D-31, D-32): every function sets an empty search_path, the listed
+ * Static scan of the Phase 4.4 migration block (0900 to 0919, plus 0938, 0746 and 1014 numbered outside it; D-04; D-31, D-32): every function sets an empty search_path, the listed
  * built-ins are always schema-qualified, every function taking p_tenant_key asserts the key before any other statement, no GRANT names a
  * client role, and no file in the block creates, replaces, alters or drops hybrid_search_chunks. Each offence prints its file and line.
  */
@@ -23,6 +23,8 @@ const BUILTINS = ['unnest', 'ts_rank', 'ts_rank_cd', 'cardinality', 'ln', 'quote
  * (outside this block, T-04.4-09) redefines it with the guard first and makes compact_all skip a refused key
  * (tests/rag-db/lexical-stats-compact-guard.test.mts); this exception covers only the superseded 0902 and 0905 bodies.
  */
+/** The tenant guard: rag_assert_tenant_key, or rag_ingest_assert_tenant_key (0425), which the Phase 6.3 purge bodies in 0746 use. */
+const TENANT_GUARD = /^PERFORM\s+public\.rag(?:_ingest)?_assert_tenant_key\s*\(\s*p_tenant_key\s*\)$/i;
 const UNGUARDED_BODIES = new Set(['rag_lexstats_compact_tenant']);
 
 interface SqlFile {
@@ -45,7 +47,7 @@ function stripComments(line: string): string {
 function loadBlock(): SqlFile[] {
   return fs
     .readdirSync(MIGRATIONS)
-    .filter((name) => BLOCK.test(name))
+    .filter((name) => BLOCK.test(name) || EXTRA_FILES.includes(name.slice(0, 4)))
     .sort()
     .map((name) => {
       const lines = fs.readFileSync(path.join(MIGRATIONS, name), 'utf8').split('\n').map(stripComments);
@@ -94,7 +96,8 @@ describe('Phase 4.4 migration block, static scan', () => {
   const defs = files.flatMap(functions);
 
   test('the block holds 0900 to 0904 and at least one function', () => {
-    assert.deepEqual(files.slice(0, EXPECTED_FIRST.length).map((file) => file.name.slice(0, 4)), EXPECTED_FIRST);
+    const block = files.filter((file) => BLOCK.test(file.name));
+    assert.deepEqual(block.slice(0, EXPECTED_FIRST.length).map((file) => file.name.slice(0, 4)), EXPECTED_FIRST);
     assert.ok(defs.length >= 14, `found ${defs.length} function definitions`);
   });
 
@@ -119,21 +122,21 @@ describe('Phase 4.4 migration block, static scan', () => {
     assert.deepEqual(offences, [], offences.join('\n'));
   });
 
-  test('every function with a p_tenant_key asserts it with rag_assert_tenant_key before any other statement', () => {
+  test('every function with a p_tenant_key asserts it with rag_assert_tenant_key (or rag_ingest_assert_tenant_key) before any other statement', () => {
     const offences: string[] = [];
     let guarded = 0;
     for (const def of defs) {
       if (!/\bp_tenant_key\b/i.test(def.header) || UNGUARDED_BODIES.has(def.name)) continue;
       guarded += 1;
       const first = firstStatement(def);
-      if (!/^PERFORM\s+public\.rag_assert_tenant_key\s*\(\s*p_tenant_key\s*\)$/i.test(first)) offences.push(`${def.file.name}:${def.line}: ${def.name} starts with "${first.slice(0, 80)}"`);
+      if (!TENANT_GUARD.test(first)) offences.push(`${def.file.name}:${def.line}: ${def.name} starts with "${first.slice(0, 80)}"`);
     }
     assert.ok(guarded >= 8, `guarded functions found: ${guarded}`);
     assert.deepEqual(offences, [], offences.join('\n'));
   });
 
   test('the unguarded compaction body stays the only exception and is never granted beyond service_role', () => {
-    const unguarded = defs.filter((def) => /\bp_tenant_key\b/i.test(def.header) && !/^PERFORM\s+public\.rag_assert_tenant_key/i.test(firstStatement(def)));
+    const unguarded = defs.filter((def) => /\bp_tenant_key\b/i.test(def.header) && !TENANT_GUARD.test(firstStatement(def)));
     assert.deepEqual([...new Set(unguarded.map((def) => def.name))], [...UNGUARDED_BODIES]);
   });
 

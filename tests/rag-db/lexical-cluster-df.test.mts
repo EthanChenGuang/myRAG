@@ -183,6 +183,15 @@ async function ledger(db: PGlite, tenantKey: string): Promise<Row[]> {
   ).rows;
 }
 
+/** Policies on public.<table>, read from pg_catalog; a failing query throws instead of reading as zero. */
+async function policyCount(db: PGlite, table: string): Promise<number> {
+  const r = await db.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM pg_catalog.pg_policies WHERE schemaname = 'public' AND tablename = $1",
+    [table],
+  );
+  return r.rows[0]!.n;
+}
+
 async function count(db: PGlite, table: string, where = 'true', params: unknown[] = []): Promise<number> {
   return (await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM public.${table} WHERE ${where}`, params)).rows[0]!.n;
 }
@@ -330,10 +339,11 @@ for (const mode of MODES) {
           assert.equal(ok.rows[0]?.ok, false, `${role} ${signature}`);
         }
       }
+      assert.ok((await policyCount(db, 'documents')) > 0, 'the policy query sees the policies on public.documents');
       for (const table of CLUSTER_TABLES) {
         const rls = await db.query<{ rls: boolean }>('SELECT relrowsecurity AS rls FROM pg_class WHERE oid = $1::regclass', [`public.${table}`]);
         assert.equal(rls.rows[0]?.rls, true, table);
-        assert.equal(await count(db, 'pg_policies', 'tablename = $1', [table]).catch(async () => 0), 0, `${table}: no policy`);
+        assert.equal(await policyCount(db, table), 0, `${table}: no policy`);
         for (const role of ['anon', 'authenticated']) {
           const ok = await db.query<{ ok: boolean }>("SELECT has_table_privilege($1, $2, 'SELECT') AS ok", [role, `public.${table}`]);
           assert.equal(ok.rows[0]?.ok, false, `${role} SELECT ${table}`);
@@ -751,6 +761,11 @@ for (const mode of MODES) {
       for (const line of before) assert.match(line, /anon=false authenticated=false service_role=true$/, line);
       await db.exec(fs.readFileSync(file, 'utf8'));
       await db.exec(fs.readFileSync(file, 'utf8'));
+      // AGENTS.md 6.3: after re-running 0746, re-run 0747 (common file, then the mode file), which redefines both bodies.
+      for (const name of ['0747_purge_gap_closure.sql', `0747_purge_gap_closure.${mode}.sql`]) {
+        const later = path.join(REPO_ROOT, 'supabase/migrations', name);
+        if (fs.existsSync(later)) await db.exec(fs.readFileSync(later, 'utf8'));
+      }
       assert.deepEqual(await definitions(), before);
     });
 
