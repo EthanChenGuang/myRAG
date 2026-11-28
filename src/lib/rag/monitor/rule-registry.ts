@@ -91,8 +91,8 @@ export type RuleKindEntry =
 export type RuleKindRegistry = Partial<Record<MonitorRuleKind, RuleKindEntry>>;
 
 /**
- * One entry per rule kind; `language_drop` is the LANG-10 context entry (Phase 7 plan 07-46, src/lib/rag/monitor/language-drop.ts). Phase 6.3 adds
- * `stale_index_drop` (RET-14). `source_sync` has no entry: those alerts are raised by raiseSourceAlert, not by a daily rule.
+ * One entry per rule kind. `language_drop` is the LANG-10 context entry (Phase 7 plan 07-46, src/lib/rag/monitor/language-drop.ts);
+ * Phase 6.3 adds `stale_index_drop` (RET-14). `source_sync` has no entry: those alerts are raised by raiseSourceAlert, not by a daily rule.
  * A configured kind without an entry is skipped and counted as rules_unregistered.
  */
 export const RULE_KIND_REGISTRY: RuleKindRegistry = {
@@ -102,8 +102,8 @@ export const RULE_KIND_REGISTRY: RuleKindRegistry = {
   judge_mean: { input: 'daily_cells', evaluate: evaluateJudgeMean },
   drift: { input: 'report' },
   offline_online_gap: { input: 'report' },
-  language_drop: { input: 'context', evaluate: evaluateLanguageDropRule },
   stale_index_drop: { input: 'context', evaluate: evaluateStaleIndexDrop },
+  language_drop: { input: 'context', evaluate: evaluateLanguageDropRule },
 };
 
 export function registryEntryFor(

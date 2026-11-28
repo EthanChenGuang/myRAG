@@ -384,6 +384,56 @@ describe('AGENTS.md reflects the Phase 4.3 document access groups', () => {
   });
 });
 
+describe('AGENTS.md reflects Phase 6.3 (source deletion sync and purge)', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const start = section6.indexOf('### Source deletion sync and purge (Phase 6.3)');
+  const next = section6.indexOf('\n### ', start + 1);
+  const subsection = start === -1 ? '' : section6.slice(start, next === -1 ? undefined : next);
+  const ENV = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+
+  test.each([
+    '`RAG_SOURCE_RECHECK=false`',
+    '`RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7`',
+    '`RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3`',
+    '`RAG_SOURCE_PURGE_DAILY_CAP=0` (0 is off: no cap)',
+    '`npm run rag:source-reconcile`',
+    '`POST /api/internal/rag/source-reconcile` (refused unless `RAG_SIDECAR_SECRET` is set',
+    'not Vercel cron',
+    'confirms within 24 hours',
+    '`POST /api/rag/admin/documents/[id]/purge`',
+    '`rag_purge_verify`',
+    '`rag_purge_store_inventory()`',
+    'always on for Weaviate and Qdrant',
+    'a source-sync purge leaves none',
+    'After re-running 0727, re-run 0746 and then 0747',
+    'after re-running 0963, re-run 1013',
+    '`rag_monitor_alerts`',
+    'set `RAG_SOURCE_PURGE_DAILY_CAP=200` (the shipped default stays 0)',
+    'tagged `source_purged`',
+  ])('mentions %s', (fragment) => {
+    expect(subsection).toContain(fragment);
+  });
+
+  test('section 9 names the SharePoint and OneDrive switch and keys', () => {
+    const section9 = AGENTS.slice(AGENTS.indexOf('## 9. Cloud Connectors'), AGENTS.indexOf('## 10. MCP'));
+    for (const name of ['`NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false`', '`NANGO_SHAREPOINT_INTEGRATION_KEY`', '`NANGO_ONEDRIVE_INTEGRATION_KEY`']) {
+      expect(section9).toContain(name);
+    }
+  });
+
+  test('the 4.2 and 4.4 re-run rules go through 0932 before 0936 and end with 0938', () => {
+    expect(AGENTS).toContain('re-run 0932, 0936 and then 0938 (Phase 4.4) in that order: with 0938 applied, 0936 on its own stops with 55000.');
+    expect(AGENTS).toContain('Never re-run 0936 alone once 0938 is applied');
+    expect(AGENTS).not.toContain('after re-running 0932 or 0936, re-run what follows it in that order');
+  });
+
+  test('the documented defaults match src/lib/env.ts', () => {
+    expect(ENV).toContain("RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK || 'false'");
+    expect(ENV).toContain("RAG_SOURCE_PURGE_DAILY_CAP: process.env.RAG_SOURCE_PURGE_DAILY_CAP || '0'");
+    expect(ENV).toContain("RAG_SOURCE_RECONCILE_MAX_AGE_DAYS: process.env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS || '7'");
+  });
+});
+
 describe('AGENTS.md reflects the Phase 7 RAG pipeline guide', () => {
   test.each([
     'README_RAG_PIPELINE.md',
@@ -476,52 +526,22 @@ describe('AGENTS.md reflects the Phase 7 setup fold (07-31)', () => {
   });
 });
 
-describe('AGENTS.md reflects Phase 6.3 (source deletion sync and purge)', () => {
-  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
-  const start = section6.indexOf('### Source deletion sync and purge (Phase 6.3)');
-  const next = section6.indexOf('\n### ', start + 1);
-  const subsection = start === -1 ? '' : section6.slice(start, next === -1 ? undefined : next);
-  const ENV = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+describe('AGENTS.md and the pipeline guide carry the quick-deferred-batch rules', () => {
+  const README = fs.readFileSync(path.resolve(__dirname, '../../README_RAG_PIPELINE.md'), 'utf8');
 
-  test.each([
-    '`RAG_SOURCE_RECHECK=false`',
-    '`RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7`',
-    '`RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3`',
-    '`RAG_SOURCE_PURGE_DAILY_CAP=0` (0 is off: no cap)',
-    '`npm run rag:source-reconcile`',
-    '`POST /api/internal/rag/source-reconcile` (refused unless `RAG_SIDECAR_SECRET` is set',
-    'not Vercel cron',
-    'confirms within 24 hours',
-    '`POST /api/rag/admin/documents/[id]/purge`',
-    '`rag_purge_verify`',
-    '`rag_purge_store_inventory()`',
-    'always on for Weaviate and Qdrant',
-    'a source-sync purge leaves none',
-    'After re-running 0727, re-run 0746 and then 0747',
-    'after re-running 0963, re-run 1013',
-    '`rag_monitor_alerts`',
-    'set `RAG_SOURCE_PURGE_DAILY_CAP=200` (the shipped default stays 0)',
-    'tagged `source_purged`',
-  ])('mentions %s', (fragment) => {
-    expect(subsection).toContain(fragment);
+  test('the 4.4 re-run rules name 1014 after 0902 or 0905', () => {
+    expect(AGENTS).toContain('after re-running 0902 or 0905, re-run 1014');
   });
 
-  test('section 9 names the SharePoint and OneDrive switch and keys', () => {
-    const section9 = AGENTS.slice(AGENTS.indexOf('## 9. Cloud Connectors'), AGENTS.indexOf('## 10. MCP'));
-    for (const name of ['`NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false`', '`NANGO_SHAREPOINT_INTEGRATION_KEY`', '`NANGO_ONEDRIVE_INTEGRATION_KEY`']) {
-      expect(section9).toContain(name);
-    }
+  test('the language-quality cells are documented as API only, with no UI', () => {
+    expect(AGENTS).toContain('`/api/rag/admin/language-quality` is offered as an API only');
+    expect(README).toContain('offered as an API only: no Config UI panel or app page calls it');
   });
+});
 
-  test('the 4.2 and 4.4 re-run rules go through 0932 before 0936 and end with 0938', () => {
-    expect(AGENTS).toContain('re-run 0932, 0936 and then 0938 (Phase 4.4) in that order: with 0938 applied, 0936 on its own stops with 55000.');
-    expect(AGENTS).toContain('Never re-run 0936 alone once 0938 is applied');
-    expect(AGENTS).not.toContain('after re-running 0932 or 0936, re-run what follows it in that order');
-  });
-
-  test('the documented defaults match src/lib/env.ts', () => {
-    expect(ENV).toContain("RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK || 'false'");
-    expect(ENV).toContain("RAG_SOURCE_PURGE_DAILY_CAP: process.env.RAG_SOURCE_PURGE_DAILY_CAP || '0'");
-    expect(ENV).toContain("RAG_SOURCE_RECONCILE_MAX_AGE_DAYS: process.env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS || '7'");
+describe('AGENTS.md routes the fine-tune slot comparison through the lifecycle harness', () => {
+  test('section 6.1 says run-profile-compare has no slot arm and names the lifecycle harness', () => {
+    expect(AGENTS).toContain('`eval/harness/run-profile-compare.mts` has no slot arm');
+    expect(AGENTS).toContain('`tests/helpers/finetune-lifecycle.mts`');
   });
 });

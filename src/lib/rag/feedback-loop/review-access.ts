@@ -70,6 +70,8 @@ const REVIEW_REASONS = [
   'version_conflict',
   'representative',
   're_review',
+  'calc_mismatch',
+  'calc_unverified',
 ] as const;
 /** rag_review_item_strata.source (0967); a mined item has none. */
 export const REVIEW_SOURCES = ['representative', 'pilot', 'drift_fill', 'historical'] as const;
