@@ -12,41 +12,46 @@ A lambda is eligible when no slice (overall, every language, every category) dro
 
 ## Result
 
-Chosen lambda: 0.9
-- chosen lambda 0.9: duplicate_flood intent_coverage 1.0, topk_redundancy 0.1503968253968254, mean Recall@10 0.706411799054849
+No lambda chosen: no eligible lambda. The default 0.7 stays.
+- lambda 0.5: ineligible, Recall@10 drop beyond the band: category:scanned: 0.7500 < 1.0000 - 0.0200
+- lambda 0.6: ineligible, Recall@10 drop beyond the band: category:scanned: 0.7500 < 1.0000 - 0.0200
+- lambda 0.7: ineligible, Recall@10 drop beyond the band: category:scanned: 0.7500 < 1.0000 - 0.0200
+- lambda 0.8: ineligible, Recall@10 drop beyond the band: category:scanned: 0.7500 < 1.0000 - 0.0200
+- lambda 0.9: ineligible, Recall@10 drop beyond the band: category:scanned: 0.7500 < 1.0000 - 0.0200
+- no eligible lambda: nothing chosen, the default 0.7 stays
 
 | lambda | duplicate_flood intent_coverage | duplicate_flood topk_redundancy | mean Recall@10 | eligible |
 | --- | --- | --- | --- | --- |
-| collapse (reference) | 1.0000 | 0.1504 | 0.7031 |  |
-| 0.5 | 1.0000 | 0.1504 | 0.7064 | yes |
-| 0.6 | 1.0000 | 0.1504 | 0.7064 | yes |
-| 0.7 | 1.0000 | 0.1504 | 0.7064 | yes |
-| 0.8 | 1.0000 | 0.1504 | 0.7064 | yes |
-| 0.9 | 1.0000 | 0.1504 | 0.7064 | yes |
+| collapse (reference) | 1.0000 | 0.1504 | 0.7288 |  |
+| 0.5 | 1.0000 | 0.1504 | 0.7186 | no |
+| 0.6 | 1.0000 | 0.1504 | 0.7186 | no |
+| 0.7 | 1.0000 | 0.1504 | 0.7186 | no |
+| 0.8 | 1.0000 | 0.1504 | 0.7186 | no |
+| 0.9 | 1.0000 | 0.1504 | 0.7186 | no |
 
 ## Recall@10 per slice
 
-| lambda | category:ambiguous | category:cache_near_miss | category:cache_paraphrase | category:colloquial | category:compound | category:cross_lingual | category:duplicate_flood | category:exact_term | category:general | category:identifier_near_miss | category:injection | category:injection_evasive | category:multi_turn | category:no_answer | category:scanned | category:selective_filter | category:small_talk | category:table | category:typo | language:en | language:it | language:zh | overall |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| collapse | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6017 | 0.7232 | 0.6961 | 0.6717 |
-| 0.5 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4762 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6186 | 0.7232 | 0.6961 | 0.6777 |
-| 0.6 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4762 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6186 | 0.7232 | 0.6961 | 0.6777 |
-| 0.7 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4762 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6186 | 0.7232 | 0.6961 | 0.6777 |
-| 0.8 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4762 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6186 | 0.7232 | 0.6961 | 0.6777 |
-| 0.9 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.4762 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.5000 | n/a | 0.4545 | 0.3333 | 0.6186 | 0.7232 | 0.6961 | 0.6777 |
+| lambda | category:ambiguous | category:cache_near_miss | category:cache_paraphrase | category:colloquial | category:compound | category:context_overflow | category:cross_lingual | category:duplicate_flood | category:exact_term | category:general | category:identifier_near_miss | category:implicit_condition | category:injection | category:injection_evasive | category:multi_step_calc | category:multi_turn | category:no_answer | category:off_topic_context | category:partial_answer | category:scanned | category:selective_filter | category:small_talk | category:stale_version | category:table | category:typo | language:en | language:it | language:zh | overall |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| collapse | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 1.0000 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6566 | 0.7622 | 0.7676 | 0.7267 |
+| 0.5 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6446 | 0.7622 | 0.7676 | 0.7225 |
+| 0.6 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6446 | 0.7622 | 0.7676 | 0.7225 |
+| 0.7 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6446 | 0.7622 | 0.7676 | 0.7225 |
+| 0.8 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6446 | 0.7622 | 0.7676 | 0.7225 |
+| 0.9 | 0.6667 | 0.6364 | 0.7778 | 0.7500 | 0.4444 | 0.0000 | 0.4286 | 1.0000 | 0.8750 | 0.8158 | 0.8889 | 1.0000 | 1.0000 | 1.0000 | 0.9643 | 0.5000 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 1.0000 | 0.4545 | 0.3333 | 0.6446 | 0.7622 | 0.7676 | 0.7225 |
 
 ## nDCG@k per slice
 
 nDCG@k per slice is report-only: it is not a selection criterion.
 
-| lambda | category:ambiguous | category:cache_near_miss | category:cache_paraphrase | category:colloquial | category:compound | category:cross_lingual | category:duplicate_flood | category:exact_term | category:general | category:identifier_near_miss | category:injection | category:injection_evasive | category:multi_turn | category:no_answer | category:scanned | category:selective_filter | category:small_talk | category:table | category:typo | language:en | language:it | language:zh | overall |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| collapse | 0.5594 | 0.5392 | 0.7222 | 0.4529 | 0.4355 | 0.4286 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4386 | n/a | 0.8289 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5233 | 0.6407 | 0.6644 | 0.6063 |
-| 0.5 | 0.5594 | 0.5392 | 0.7222 | 0.4588 | 0.4355 | 0.4436 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4332 | n/a | 0.8391 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5342 | 0.6357 | 0.6644 | 0.6085 |
-| 0.6 | 0.5594 | 0.5392 | 0.7222 | 0.4588 | 0.4355 | 0.4436 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4332 | n/a | 0.8391 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5342 | 0.6357 | 0.6644 | 0.6085 |
-| 0.7 | 0.5594 | 0.5392 | 0.7222 | 0.4588 | 0.4355 | 0.4436 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4332 | n/a | 0.8391 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5342 | 0.6357 | 0.6644 | 0.6085 |
-| 0.8 | 0.5594 | 0.5392 | 0.7222 | 0.4588 | 0.4355 | 0.4436 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4332 | n/a | 0.8391 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5342 | 0.6357 | 0.6644 | 0.6085 |
-| 0.9 | 0.5594 | 0.5392 | 0.7222 | 0.4588 | 0.4355 | 0.4436 | 0.8932 | 0.8750 | 0.8337 | 0.8889 | 0.7047 | 1.0000 | 0.4332 | n/a | 0.8391 | 0.5000 | n/a | 0.4210 | 0.3333 | 0.5342 | 0.6357 | 0.6644 | 0.6085 |
+| lambda | category:ambiguous | category:cache_near_miss | category:cache_paraphrase | category:colloquial | category:compound | category:context_overflow | category:cross_lingual | category:duplicate_flood | category:exact_term | category:general | category:identifier_near_miss | category:implicit_condition | category:injection | category:injection_evasive | category:multi_step_calc | category:multi_turn | category:no_answer | category:off_topic_context | category:partial_answer | category:scanned | category:selective_filter | category:small_talk | category:stale_version | category:table | category:typo | language:en | language:it | language:zh | overall |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| collapse | 0.5594 | 0.5392 | 0.7368 | 0.4529 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9104 | 0.4285 | n/a | n/a | 1.0000 | 0.8333 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5716 | 0.6748 | 0.7397 | 0.6580 |
+| 0.5 | 0.5556 | 0.5392 | 0.7368 | 0.4425 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9129 | 0.4234 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5686 | 0.6713 | 0.7397 | 0.6558 |
+| 0.6 | 0.5556 | 0.5392 | 0.7368 | 0.4425 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9129 | 0.4234 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5686 | 0.6713 | 0.7397 | 0.6558 |
+| 0.7 | 0.5556 | 0.5392 | 0.7368 | 0.4425 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9129 | 0.4234 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5686 | 0.6713 | 0.7397 | 0.6558 |
+| 0.8 | 0.5556 | 0.5392 | 0.7368 | 0.4425 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9129 | 0.4234 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5686 | 0.6713 | 0.7397 | 0.6558 |
+| 0.9 | 0.5556 | 0.5392 | 0.7368 | 0.4425 | 0.4355 | 0.0000 | 0.4286 | 0.8932 | 0.8750 | 0.8073 | 0.8889 | 1.0000 | 0.7047 | 1.0000 | 0.9129 | 0.4234 | n/a | n/a | 1.0000 | 0.7500 | 0.5000 | n/a | 0.6678 | 0.4210 | 0.3333 | 0.5686 | 0.6713 | 0.7397 | 0.6558 |
 
 ## Notes
 

@@ -70,7 +70,15 @@ export async function pgvectorFactory(): Promise<ConformanceContext> {
             ],
           );
         }
-        return { token, identifier, supersededChunkId: oldChunk, currentChunkId: newChunk };
+        // 04.2-40 (D-59): a sibling chunk of the current version without the identifier qualifies through its document.
+        const siblingChunk = crypto.randomUUID();
+        const siblingText = `${token} sibling neutral wording`;
+        await db.query(
+          `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, chunk_index, metadata, language, doc_type, is_current, status, identifiers_norm)
+           VALUES ($1, $2, $3, $4::vector, $5, 1, '{}'::jsonb, 'en', 'general', true, 'ready', NULL)`,
+          [siblingChunk, newDoc, siblingText, `[${embedText(siblingText).join(',')}]`, chunkLexicalText({ sectionPath: [], content: siblingText, documentFilename: 'history-v2.md' })],
+        );
+        return { token, identifier, supersededChunkId: oldChunk, currentChunkId: newChunk, siblingChunkId: siblingChunk };
       },
       close: async () => {
         await edge.close();

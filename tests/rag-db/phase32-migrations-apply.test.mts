@@ -222,7 +222,9 @@ for (const mode of MODES) {
         assert.deepEqual(differences(withoutFunctions(final), withoutFunctions(reapplied)), [], 'tables, columns, constraints, indexes, triggers and policies');
         // The 0930 block (Phase 4.3) redefines hybrid_search_chunks and rag_exact_id_documents last, and 0933 hybrid_search_translations
         // (their operator rule: re-run them after).
-        const restore = [...laterFiles(mode), ...migrationFiles(mode).filter((file) => numberOf(file) === 930 || numberOf(file) === 933)];
+        // 0936 (04.2-40) redefines four of them after 0930 and 0933, so the restore list keeps migration order.
+        const restoreSet = new Set([...laterFiles(mode), ...migrationFiles(mode).filter((file) => numberOf(file) === 930 || numberOf(file) === 933)]);
+        const restore = migrationFiles(mode).filter((file) => restoreSet.has(file));
         const laterNames = namesCreated(restore, 'FUNCTION');
         const changed = changedFunctionNames(final, reapplied);
         assert.deepEqual(changed.filter((name) => !laterNames.has(name)), [], 'only functions a later 08xx, the 0930 or the 0933 file redefines change');
