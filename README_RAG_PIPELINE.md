@@ -11,7 +11,11 @@ Every value in this guide is a placeholder (`<APP_URL>`, `https://app.example.co
 3. [Vector sync](#vector-sync)
 4. [Backends](#backends)
 5. [Evaluation workflow](#evaluation-workflow)
-6. [Data flow](#data-flow)
+6. [Per-language monitoring](#per-language-monitoring)
+7. [Rollouts](#rollouts)
+8. [Language addition and removal](#language-addition-and-removal)
+9. [Red-team run](#red-team-run)
+10. [Data flow](#data-flow)
 
 ## Sidecar
 
@@ -341,6 +345,23 @@ Supabase is the only source of truth. Weaviate and Qdrant are copies, fed by a t
 - **Dead letters**: a change that keeps failing becomes a dead letter and never reaches the target. Fix the cause, then `npm run rag:vector-sync -- requeue-dead --target <target>`.
 - **Lag bound and readiness**: an external index counts as ready for a tenant only while its sync lag is at most `RAG_VECTOR_SYNC_MAX_LAG_SECONDS` (default 300) and its collection matches the active embedding profile. A tenant that is not ready is answered from pgvector and marked degraded.
 
+### Purges
+
+A lineage purge (Phase 6.3 `rag_purge_lineage`) also removes the lineage's points from Weaviate and Qdrant, through the same outbox: `rag_vector_sync_enqueue_purge` writes one `purge` row per applicable target (at most 1000 document ids per purge), and the drain deletes the points in slices of 100.
+
+- **Every collection**: the drain sweeps every `myrag_chunks_` collection the store lists, not only the synced profiles, recounts afterwards and marks the purge done only after a count of zero; otherwise the row fails with `purge_incomplete` and is retried.
+- **Disabled backends are still purged**: a target counts as applicable when it is enabled or still holds index state for the tenant, so turning a target off does not leave purged text behind in it.
+- **Status**: `rag_vector_sync_purge_status(p_tenant_key, p_lineage_id)` (service role only) returns one row per target with its state (`not_applicable`, `pending`, `dead`, `done`), the collections checked, the points deleted and the completion time.
+- **Reconcile re-open**: `npm run rag:reconcile` checks per target and tenant that purged points stay absent. When one reappears, it re-opens the purge (`rag_vector_sync_purge_reopen`) and marks every synced profile of that tenant stale, so pgvector serves the tenant until the drain has deleted the points again. Reconcile itself never deletes.
+
+### Lexical parameters on external backends
+
+While `RAG_LEXICAL_SCORING=bm25` is effective, Weaviate and Qdrant score their lexical leg with the k1 and b of `RAG_LEXICAL_BM25_K1` and `RAG_LEXICAL_BM25_B`; otherwise they use the default pair (1.2 and 0.75). Each collection records the pair it was built with (`lexical_bm25 { k1, b }`).
+
+- **Weaviate** binds the pair into the index. A collection built with another pair is not served: the request is answered from pgvector and marked degraded (`backend_not_ready`), and one `[RAG Backend]` line names the command that rebuilds it.
+- **Qdrant** sends the pair with each query, so a differing record is only refreshed (one `[Vector Sync]` line); nothing is rebuilt.
+- **Rebuild**: `npm run rag:vector-sync -- rebuild-lexical --target <weaviate|qdrant>` only reports what it would do (per profile: would rebuild, refresh, matches or no collection) and exits 2. With `--confirm` (the target must be enabled) it recreates each mismatched Weaviate collection and refills it through reconcile and drain, while pgvector serves; on Qdrant it refreshes the record.
+
 ### Scheduler
 
 The drain route needs a caller. Choose one:
@@ -369,6 +390,21 @@ To rotate a key: create the new key at the vendor, set it in `.env.local` (Confi
 - **Transport**: production requires `https://` for every store URL that carries a key.
 - **Voice**: voice uses `RAG_RETRIEVAL_BACKEND_VOICE` with the voice latency budget; keep it on pgvector until the voice latency of the external store is measured.
 
+### Source-of-truth recheck
+
+On Weaviate and Qdrant the re-validation against Supabase always runs, whatever `RAG_SOURCE_RECHECK` says: it is the source-of-truth recheck for external candidates, done in the same single query, so the Phase 6.3 recheck stage does not run a second time. pgvector behaves as before.
+
+- **Trace**: the search span and the eval trace record the number of dropped stale ids as `stale_index_drop`, next to the unchanged `tenant_validation_dropped`.
+- **Bounded repair**: after the response, at most 200 dropped ids per target and tenant, and at most one call per minute, are queued as stale (`rag_vector_sync_enqueue_stale`) and a drain is kicked. A batch holding an id of another tenant is refused as a whole (`tenant_mismatch`) and left to reconcile.
+
+### Access groups on external backends
+
+Phase 4.3 document access groups also hold on Weaviate and Qdrant. Every point carries the `access_groups` payload field (a Qdrant keyword index, a filterable Weaviate text array); a point without valid keys is refused, never defaulted to `all`.
+
+- **Filter**: while `RAG_DOC_ACCESS_GROUPS=on` (Phase 4.3 owns the switch, default `off`; Phase 7 adds none), Qdrant puts the caller's groups next to the tenant clause in the top filter and in every prefetch at every depth, and Weaviate adds the same condition to both legs. The BM25 corpus stays tenant-wide.
+- **Re-validation**: hits are re-read with `rag_validate_chunks_for_groups`, which also requires the document's groups to overlap the caller's; admins and the switch off use the plain re-validation. A request whose access scope does not match what the adapter sent is refused (`access_filter_mismatch`).
+- **Upgrade**: migration 0742 adds the field to the sync rows and queues one tenant re-sync per enabled target; re-run 0742 after re-running 0702.
+
 ## Evaluation workflow
 
 Every change to retrieval or answers is proven against a baseline before it ships. Commands run from `eval/` with `uv run python -m ...`, or from the root with `uv run --directory eval python -m ...`.
@@ -379,6 +415,47 @@ Every change to retrieval or answers is proven against a baseline before it ship
 - **Regression and release defaults**: `rag_eval.regression plan|run|decide` compares the shipped defaults with candidate configurations. Pre-registration comes first: the plan (`regression plan`) is committed and pushed before any run, and its hash pins every registered config. Stage A uses the dev split; stage B uses the frozen test split. Every test-split use is appended to `eval/decisions/test-split-ledger.jsonl`, and a test-split run outside the plan needs `--reason`. A fixture regression writes a provisional record only; only a live record in `eval/config/release-defaults.json` changes a shipped default.
 - **Review queue and promotion**: with the feedback loop on, `npm run rag:feedback-loop -- mine` fills the review queue from failed queries; domain experts label items in the review panel, and `python -m rag_eval.review_queue promote-db --tenant <key> --base-url <url>` promotes labelled items into the private domain set. See the Phase 5.1.1 lines in AGENTS.md §6.
 - **Failure and weekly reports**: `python -m rag_eval.failure_report --since <date>` and `python -m rag_eval.weekly_report --since <date>` summarise failures with counts, ids and hashes only.
+
+### Decision-record numbers
+
+The release-defaults record carries cost, latency and per-language blocks next to the quality numbers. `uv run --directory eval python -m rag_eval.regression decide` writes them, and `regression annotate --record eval/config/release-defaults.json --plan <plan> [--check]` adds them to an existing record.
+
+- **Cost**: priced from `config/rag/price-table.json`. A price without a recorded source is left empty and reads `not_provided`; a quantity that was not recorded reads `not_measured`. No number is estimated.
+- **Latency**: per-stage p50 and p95 against `eval/config/latency-budgets.json` (report-only until live measurements ratify the budgets).
+- **Per language**: each enabled language's slice against its baseline; a language below its baseline blocks the candidate (`language_below_baseline`).
+
+## Per-language monitoring
+
+Quality is watched per language, not only overall. Every value is a language code (`und` when unknown), never the text it was derived from.
+
+- **Trace**: the `languages` block of the RAG trace holds the query language, its confidence, the kept chunks' languages and the answer language (null on production traces while `RAG_RETRIEVAL_LOG` is off). The online judge summary adds a `by_language` breakdown.
+- **Cells**: `GET /api/rag/admin/language-quality` (admin, 404 while `RAG_MONITOR` is off, at most 90 days) returns refusal, not-helpful and judge cells per tenant and language from `rag_language_quality_cells` (migration 0743).
+- **Alert**: the `language_drop` rule of the daily monitor job (`eval/config/monitor-alerts.json`) compares each language's refusal rate, not-helpful rate and judge mean over one day with its 30-day baseline (at least 50 and 200 samples) (bands per measure for the language and overall) and alerts when a language falls beyond them. `und` is never alerted.
+- **Confidence**: `RAG_LANG_CONFIDENCE=mapped` (default) keeps today's detector confidence; `calibrated` stores calibrated values in the retrieval log. The bins come from `npx tsx eval/harness/calibrate-language-confidence.mts` (`--check` verifies), the only writer of `eval/config/language-confidence-calibration.json`.
+
+## Rollouts
+
+`RAG_ROLLOUTS=true` (default `false`: nothing is read and the route answers 404) serves a candidate embedding profile, chunking profile or rebuild run to part of the tenants before it becomes the default. Under `RAG_PIPELINE=legacy` rollouts are ignored with one `[RAG Config]` line.
+
+- **Start**: `npm run rag:rollout -- start --kind embedding_profile|chunking_profile|rebuild_run --candidate <id> (--tenants <key>,<key> | --share <0-100>)`. Share membership is a hashed bucket with a per-rollout salt that is never printed.
+- **Per-tenant rollback**: `npm run rag:rollout -- exclude <rollout_id> --tenant <key>` returns one tenant to the incumbent; `include` adds one. `rollback <rollout_id>` ends the rollout for every tenant; `list` shows the open ones.
+- **Promotion gate**: `npm run rag:rollout -- promote <rollout_id>` promotes only when the policy in `config/rag/rollout-policy.json` holds (observation period, minimum samples per language, no per-language drop in refusal rate, and for an external backend a ready index); otherwise it exits 2 with a code such as `rollout_observation_too_short`.
+- **Admin**: the Config UI Rollouts panel and `/api/rag/admin/rollouts` do the same; the search span records `rollout=<id>:<arm>`, and a failed rollout read serves the incumbent (`[RAG Rollout]`).
+
+## Language addition and removal
+
+`npm run rag:languages` changes `RAG_SUPPORTED_LANGUAGES` and `RAG_PRIMARY_LANGUAGE` safely; the Config UI Languages panel previews the same plan.
+
+- **Baseline first**: `npm run rag:languages -- baseline <code>` records the eval baseline of a language before it is added (`eval/baselines/languages/<code>.json`; live runs go under `eval/golden/private/`). Adding a language without one is refused (`language_baseline_missing`); the very first choice of languages is exempt.
+- **Plan and apply**: `plan --languages <a,b>` prints the change, `add <code>` and `remove <code>` apply it (`--dry-run` only reports), `selection` lists the documents a language addition re-processes (unknown language first, then scanned, then stale) and `rebuild` starts that re-processing.
+- **Removal** is query-side only: it deletes nothing, and documents in the removed language stay searchable.
+
+## Red-team run
+
+`npm run rag:red-team -- run --tenant <key>` attacks a deployment with the committed corpus and sends every successful attack to the review queue (tags `red_team` and `rt_<technique>`). It needs `RAG_DOMAIN_EXPERT_REVIEW=true`; otherwise it skips (exit 4, `domain_expert_review_off`). The Config UI Red-team runs panel starts and lists runs.
+
+- **Corpus**: `eval/fixtures/red-team/attack-corpus.jsonl` (synthetic items in every registry language, techniques in `config/rag/red-team-techniques.json`); `python -m rag_eval.red_team add|check|report` maintains it. Each item plants one canary in an attack document only. Operator-only items go in a private corpus under `eval/golden/private/`.
+- **Domain neutrality**: corpus items use invented, neutral nouns (synthetic instruments and readings) and never a domain example string; review every new item for this before committing it, since no automated check enforces it yet.
 
 ## Data flow
 
