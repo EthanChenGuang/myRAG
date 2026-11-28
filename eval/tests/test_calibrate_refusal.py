@@ -712,6 +712,7 @@ def _patch_cli(monkeypatch, tmp_path: Path, scores, *, thresholds: Path | None =
     runner = _Runner(scores)
     monkeypatch.setattr(refusal_module, "_default_runner", runner)
     monkeypatch.setattr(refusal_module, "FLOOR_PATH", tmp_path / "fixture-score-calibration.json")
+    monkeypatch.setattr(refusal_module, "FLOOR_PATHS", {"prechunked": refusal_module.FLOOR_PATH, "ingest": refusal_module.FLOOR_PATH})
     monkeypatch.setattr(refusal_module, "CALIBRATION_PATH", _unset_calibration(tmp_path))
     if thresholds is not None:
         monkeypatch.setattr(refusal_module, "THRESHOLDS_PATH", thresholds)

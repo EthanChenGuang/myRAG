@@ -179,7 +179,7 @@ const ANSWER_SECTIONS: Record<CorpusLanguage, { partial: string[]; adjacent: str
 // scoring below and half above the eval refusal threshold with the fixture embedder.
 const OFF_TOPIC_QUESTIONS: Array<{ language: CorpusLanguage; question: string; adjacent: string; band: 'below_threshold' | 'above_threshold' }> = [
   { language: 'en', question: 'What speeds and bowl size does the Quillon SP-7 slip pump have?', adjacent: 'Quillon GM-1 glaze mixer', band: 'above_threshold' },
-  { language: 'en', question: 'Where does the Orrinvale draughts club post its weekly puzzles?', adjacent: 'Orrinvale Chess Circle puzzle corner', band: 'above_threshold' },
+  { language: 'en', question: 'Where does the Orrinvale draughts club post its weekly puzzles?', adjacent: 'Orrinvale Chess Circle puzzle corner', band: 'below_threshold' },
   { language: 'en', question: 'Do mixers splash slip?', adjacent: 'Quillon GM-1 glaze mixer', band: 'below_threshold' },
   { language: 'en', question: 'Can a warming mat go brittle?', adjacent: 'Tessaly ST-4 seed tray heater', band: 'below_threshold' },
   { language: 'zh', question: '岚溪泥浆泵有几档转速，料桶多大？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'above_threshold' },
@@ -191,6 +191,12 @@ const OFF_TOPIC_QUESTIONS: Array<{ language: CorpusLanguage; question: string; a
   { language: 'it', question: "I fumi d'alveare infastidiscono?", adjacent: 'Affumicatore Arnelia AF-1', band: 'below_threshold' },
   { language: 'it', question: 'I coristi firmano spesso?', adjacent: 'Archivio spartiti del Coro Valdentro', band: 'below_threshold' },
 ];
+
+// Owner decision 2026-11-28 (D-37 record in the Phase 4.1 CONTEXT): after the 04.1-18 prechunked floor refit (0.1761) this question
+// scores 0.1742, so its band moved from above_threshold to below_threshold; the half-and-half split counts it at its planned band.
+const OWNER_MOVED_BANDS: ReadonlyMap<string, 'below_threshold' | 'above_threshold'> = new Map([
+  ['Where does the Orrinvale draughts club post its weekly puzzles?', 'above_threshold'],
+]);
 
 const CREDENTIAL_WORDS: Record<CorpusLanguage, RegExp> = {
   en: /\b(?:password|code)\b/i,
@@ -455,8 +461,10 @@ describe('isolation and score bands', () => {
   test.each(LANGUAGES)('%s: at least 4 off_topic_context questions, split half below and half above the threshold', (language) => {
     const planned = OFF_TOPIC_QUESTIONS.filter((entry) => entry.language === language);
     expect(planned.length).toBeGreaterThanOrEqual(4);
-    const below = planned.filter((entry) => entry.band === 'below_threshold').length;
+    const below = planned.filter((entry) => (OWNER_MOVED_BANDS.get(entry.question) ?? entry.band) === 'below_threshold').length;
     expect(below * 2).toBe(planned.length);
+    expect(planned.some((entry) => entry.band === 'above_threshold')).toBe(true);
+    expect(planned.some((entry) => entry.band === 'below_threshold')).toBe(true);
   });
 
   test('no new file contains a denylisted illustration word', () => {

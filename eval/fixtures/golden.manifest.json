@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture",
-  "version": 8,
+  "version": 9,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -977,12 +977,12 @@
     },
     {
       "id": "en-off-topic-context-002",
-      "item_sha256": "3794c3ef7a50d3bce1aeaa15d6fc6ee8a1ea4c423f3813218bed5b0f64808324",
+      "item_sha256": "cccddece7788cab9e60d839a4e9d3350f105d6d8d2b038ab76a59b0916816a0c",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
       "retire_reason": null,
-      "last_reviewed_at": "2026-11-27"
+      "last_reviewed_at": "2026-11-28"
     },
     {
       "id": "en-off-topic-context-003",
@@ -4622,7 +4622,17 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 9,
+      "date": "2026-11-28",
+      "added": [],
+      "changed": [
+        "en-off-topic-context-002"
+      ],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
+  "manifest_sha256": "0969d8b8085d0adbbb667873c0cca5ed834c5c46d57261344242bd4bd0be2ccb"
 }

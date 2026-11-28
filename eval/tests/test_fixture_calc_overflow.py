@@ -404,12 +404,20 @@ def test_parity_the_pre_05_2_1_12_baselines_hold_the_pinned_item_sets():
         assert hashlib.sha256("\n".join(sorted(items)).encode("utf-8")).hexdigest() == digest, name
 
 
+def _undo_owner_band_edit(line):
+    if b'"id": "en-off-topic-context-002"' not in line:
+        return line
+    assert line.count(b'"score_band": "below_threshold"') == 1
+    return line.replace(b'"score_band": "below_threshold"', b'"score_band": "above_threshold"')
+
+
 def test_existing_golden_lines_are_unchanged_the_file_only_grows():
     import hashlib
 
     previous = _previous("fixture-baseline")
     count = PRE_ITEM_SETS["fixture-baseline"][0]
-    lines = GOLDEN_PATH.read_bytes().split(b"\n")
+    # The one owner-approved edit to an existing line (2026-11-28, D-37 record in the Phase 4.1 CONTEXT) is undone before hashing.
+    lines = [_undo_owner_band_edit(line) for line in GOLDEN_PATH.read_bytes().split(b"\n")]
     prefix = b"".join(line + b"\n" for line in lines[:count])
     assert hashlib.sha256(prefix).hexdigest() == previous["golden_sha256"]
     added = [json.loads(line) for line in lines[count:] if line.strip()]

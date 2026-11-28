@@ -7,6 +7,7 @@ import type { EmbeddingProfile } from '@/lib/rag/embeddings/active-profile';
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
 import { legacySearch, resetCalibrationWarningsForTests } from '@/lib/rag/legacy/enhanced-retrieval';
 import type { TemporalQueryContext } from '@/lib/rag/query/temporal-query-detector';
+import { mergeExactCandidates, type ExactIdRow } from '@/lib/rag/retrieval/exact-id';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import { runRankStages } from '@/lib/rag/v2/stages/rank';
@@ -101,6 +102,8 @@ interface Case {
   maxResults?: number;
   fallbackToLowerThreshold?: boolean;
   profile?: EmbeddingProfile | null;
+  /** Rows the exact-identifier lookup returned, in lookup order (legacy merges them; v2 holds them as the exact_id list). */
+  exact?: Row[];
   expected: 'answer' | 'refuse';
 }
 
@@ -118,10 +121,15 @@ async function legacyDecision(c: Case): Promise<'answer' | 'refuse'> {
     signal: new AbortController().signal,
     access: { mode: 'off' },
   });
+  const exactRows: ExactIdRow[] = (c.exact ?? []).map((row) => {
+    const chunk = rawChunk(row);
+    return { chunk_id: chunk.chunk_id, document_id: chunk.document_id, content: chunk.content, metadata: chunk.metadata, matched_field: 'lexical_text' };
+  });
+  const candidates = exactRows.length > 0 ? mergeExactCandidates(searched.results, exactRows, c.maxResults ?? 25) : searched.results;
   const filtered = filterCandidates({
     queryText: c.query,
-    candidates: searched.results,
-    documents: documents(c.rows),
+    candidates,
+    documents: documents([...c.rows, ...(c.exact ?? [])]),
     chunkMetadata: new Map(),
     referenced: null,
     isGPTModel: false,
@@ -142,17 +150,81 @@ function fusedFromRows(rows: Row[]): FusedHit[] {
       content: chunk.content,
       metadata: chunk.metadata ?? {},
       similarity: row.similarity,
-      document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: row.docText ?? 'neutral sample body' },
+      document: {
+        filename: row.filename ?? `${row.id}.txt`,
+        createdAt: null,
+        metadata: {},
+        contentPreview: (row.docText ?? 'neutral sample body').slice(0, 200),
+      },
     });
     return { hit: ranked, score: 1 / (60 + index + 1), ranks: { 'dense:0': index + 1 } };
   });
 }
 
+/** The fused list v2 holds with an exact_id leg: dense hits keep their dense rank, exact rows add an exact_id rank (similarity 1 when only the lookup found them). */
+function fusedWithExact(rows: Row[], exact: Row[]): FusedHit[] {
+  const fused = fusedFromRows(rows);
+  const byId = new Map(fused.map((row) => [row.hit.chunkId, row]));
+  exact.forEach((row, index) => {
+    const known = byId.get(row.id);
+    if (known) {
+      known.ranks = { ...known.ranks, exact_id: index + 1 };
+      return;
+    }
+    const chunk = rawChunk(row);
+    const added: FusedHit = {
+      hit: hit(row.id, {
+        rank: index + 1,
+        documentId: chunk.document_id,
+        content: chunk.content,
+        metadata: chunk.metadata ?? {},
+        similarity: 1,
+        document: { filename: row.filename ?? `${row.id}.txt`, createdAt: null, metadata: {}, contentPreview: (row.docText ?? 'neutral sample body').slice(0, 200) },
+      }),
+      score: 1 / (60 + index + 1),
+      ranks: { exact_id: index + 1 },
+    };
+    byId.set(row.id, added);
+    fused.push(added);
+  });
+  return fused;
+}
+
+/** The documents table legacy assembles from: the whole document text of every row (hybrid_search_chunks returns 200 characters of it). */
+function documentsAdmin(rows: Row[]) {
+  const docs = documents(rows);
+  const client = {
+    from(table: string) {
+      let ids: string[] = [];
+      const builder = {
+        select: () => builder,
+        in(_column: string, values: string[]) {
+          ids = values;
+          return builder;
+        },
+        abortSignal: () => builder,
+        then(onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) {
+          const data =
+            table === 'documents'
+              ? ids.flatMap((id) => {
+                  const row = docs.get(id);
+                  return row ? [{ ...row, created_at: null, metadata: null }] : [];
+                })
+              : ids.map((id) => ({ id, metadata: null }));
+          return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
+        },
+      };
+      return builder;
+    },
+  };
+  return () => client as never;
+}
+
 async function v2Decision(
-  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[] },
+  c: Pick<Case, 'query' | 'context' | 'maxResults' | 'fallbackToLowerThreshold' | 'profile'> & { hits: FusedHit[]; rows?: Row[] },
   env: Record<string, string> = LEGACY_RULE,
 ) {
-  installDeps({ ragEnv: () => env });
+  installDeps({ ragEnv: () => env, ...(c.rows ? { adminClient: documentsAdmin(c.rows) } : {}) });
   const signal = new AbortController().signal;
   const collector = createTraceCollector({ profile: 'chat', tenantKey: 's:default' });
   const extra = { queryContext: c.context ?? context() };
@@ -198,6 +270,7 @@ function profileWith(scoreCalibration: Record<string, number>): EmbeddingProfile
 }
 
 const QUERY = 'where is the gadget catalogue';
+const FILLER = 'neutral sample sentence about nothing in particular. '.repeat(6);
 
 const CASES: Case[] = [
   { name: 'pool member above the text floor', query: QUERY, rows: [{ id: 'a', similarity: 0.7 }], expected: 'answer' },
@@ -289,6 +362,36 @@ const CASES: Case[] = [
     expected: 'refuse',
   },
   {
+    name: 'term in the document text beyond the 200-character preview',
+    query: QUERY,
+    rows: [{ id: 'a', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` }],
+    expected: 'answer',
+  },
+  {
+    name: 'term beyond the preview of the second pool member',
+    query: QUERY,
+    rows: [
+      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
+      { id: 'b', similarity: 0.4, docText: `${FILLER}The catalogue lists every item.` },
+    ],
+    expected: 'answer',
+  },
+  {
+    name: 'term beyond the preview of a document below the pool threshold',
+    query: QUERY,
+    rows: [
+      { id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` },
+      { id: 'b', similarity: 0.3, docText: `${FILLER}The catalogue lists every item.` },
+    ],
+    expected: 'refuse',
+  },
+  {
+    name: 'long documents without the term',
+    query: QUERY,
+    rows: [{ id: 'a', similarity: 0.5, docText: `${FILLER}${FILLER}` }],
+    expected: 'refuse',
+  },
+  {
     name: 'empty legacy term from a long non-Latin word matches a pool member',
     query: '\u5c0f\u90e8\u4ef6\u76ee\u5f55\u5728\u54ea\u91cc',
     rows: [{ id: 'a', similarity: 0.4 }],
@@ -299,6 +402,35 @@ const CASES: Case[] = [
     query: '\u5c0f\u90e8\u4ef6\u76ee\u5f55\u5728\u54ea\u91cc',
     rows: [{ id: 'a', similarity: 0.3 }],
     expected: 'refuse',
+  },
+  {
+    name: 'exact_id row only, no dense pool member',
+    query: 'which notes mention part QX-4471',
+    rows: [],
+    exact: [{ id: 'x', similarity: 0.24 }],
+    expected: 'answer',
+  },
+  {
+    name: 'exact_id row that is also a low dense hit, no term',
+    query: 'which notes mention part QX-4471',
+    rows: [{ id: 'x', similarity: 0.24 }, { id: 'b', similarity: 0.5 }],
+    exact: [{ id: 'x', similarity: 0.24 }],
+    expected: 'answer',
+  },
+  {
+    name: 'exact_id rows beyond maxResults',
+    query: 'which notes mention part QX-4471',
+    maxResults: 2,
+    rows: [{ id: 'a', similarity: 0.6 }, { id: 'b', similarity: 0.55 }],
+    exact: [{ id: 'x', similarity: 0.2 }, { id: 'y', similarity: 0.2 }, { id: 'z', similarity: 0.2 }],
+    expected: 'answer',
+  },
+  {
+    name: 'no-answer question whose identifier matches a chunk',
+    query: 'what is the warranty term of part QX-4471',
+    rows: [{ id: 'a', similarity: 0.4 }],
+    exact: [{ id: 'x', similarity: 0.2 }],
+    expected: 'answer',
   },
 ];
 
@@ -318,7 +450,11 @@ describe('legacy parity', () => {
     it(`legacy parity: ${c.name}`, async () => {
       const legacy = await legacyDecision(c);
       expect(legacy, 'legacy side').toBe(c.expected);
-      const { out } = await v2Decision({ ...c, hits: fusedFromRows(c.rows) });
+      const { out } = await v2Decision({
+        ...c,
+        hits: c.exact ? fusedWithExact(c.rows, c.exact) : fusedFromRows(c.rows),
+        rows: [...c.rows, ...(c.exact ?? [])],
+      });
       const v2 = out.decision.decision === 'refuse' ? 'refuse' : 'answer';
       expect(v2, 'legacy_rule side').toBe(legacy);
     });
