@@ -272,6 +272,11 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['rag_withdrawn_chat_messages'],
   },
   {
+    reason:
+      'Purge picture-link hashes (0747, quick-63 G4): service_role only, called only inside rag_purge_lineage on the version ids it is purging; returns the SHA-256 hex of each metadata.image_url on those chunks and documents (text[] of hashes), never a URL, chunk, title or document text.',
+    functions: ['rag_purge_image_url_hashes'],
+  },
+  {
     reason: 'Account setup (multi-tenant): creates an organization and returns its row; the word documents appears only in a comment of its body.',
     functions: ['create_organization_safe'],
   },
