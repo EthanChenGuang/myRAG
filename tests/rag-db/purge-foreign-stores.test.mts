@@ -45,7 +45,10 @@ async function seedCluster(world: PurgeWorld, tenantKey: string, documentIds: st
      VALUES ($1, 'synthetic-profile', $2::uuid[], $3) RETURNING id`,
     [tenantKey, documentIds, documentIds.length],
   );
-  return String(result[0]?.id);
+  const id = String(result[0]?.id);
+  // A real cluster has chunk memberships too (document_chunks.dup_cluster_id); the 4.2 reserved hook (0864) counts and removes those.
+  await world.db.query('UPDATE document_chunks SET dup_cluster_id = $1 WHERE tenant_key = $2 AND document_id = ANY ($3::uuid[])', [id, tenantKey, documentIds]);
+  return id;
 }
 
 for (const mode of MODES) {
@@ -82,9 +85,16 @@ for (const mode of MODES) {
       assert.equal(await count(db, 'SELECT count(*) AS n FROM rag_table_rows WHERE document_id = ANY ($1::uuid[])', [target.versionIds]), 0);
       assert.equal(await count(db, 'SELECT count(*) AS n FROM chunk_translations WHERE document_id = ANY ($1::uuid[])', [other.versionIds]), other.chunkIds.length);
       assert.equal(await count(db, 'SELECT count(*) AS n FROM rag_table_rows WHERE document_id = ANY ($1::uuid[])', [other.versionIds]), 2);
-      const cluster = await rows(db, 'SELECT source_document_ids, dirty FROM rag_dup_clusters WHERE id = $1', [shared]);
-      assert.deepEqual(cluster[0]?.source_document_ids, [other.versionIds[1]]);
-      assert.equal(cluster[0]?.dirty, true, 'the cluster is marked for recompute');
+      // The shared cluster no longer names the purged versions: the 0853 hook leaves it dirty for recompute, the reserved 0864 hook
+      // recomputes it at once (a cluster left with one member dissolves). Either way no chunk of the purged lineage is a member.
+      const cluster = await rows(db, 'SELECT source_document_ids FROM rag_dup_clusters WHERE id = $1', [shared]);
+      for (const row of cluster) {
+        for (const id of target.versionIds) assert.ok(!(row.source_document_ids as string[]).includes(id), 'the cluster drops the purged version');
+      }
+      assert.equal(
+        await count(db, 'SELECT count(*) AS n FROM document_chunks WHERE dup_cluster_id = $1 AND document_id = ANY ($2::uuid[])', [shared, target.versionIds]),
+        0,
+      );
 
       const remaining = new Map((await verify(db, tenantKey, target.lineageId)).map((row) => [row.store, row.remaining]));
       for (const key of ['translations', 'translation_gaps', 'table_rows', 'duplicate_groups', 'supersession', 'rebuild', 'recaption']) {
@@ -115,7 +125,14 @@ for (const mode of MODES) {
         const seeded = await seedLineage(world, world.tenantA);
         await seedTranslations(world, seeded, world.tenantA.key);
         await seedTableRows(world, seeded, world.tenantA.key);
-        await world.db.query('SELECT public.rag_purge_foreign_stores($1, $2, $3::uuid[])', [tenantB.key, seeded.lineageId, seeded.versionIds]);
+        // The reserved 4.2 hooks (0864) refuse ids of another tenant with 22023; without them the guarded deletes match nothing.
+        let refusedCode: string | null = null;
+        try {
+          await world.db.query('SELECT public.rag_purge_foreign_stores($1, $2, $3::uuid[])', [tenantB.key, seeded.lineageId, seeded.versionIds]);
+        } catch (error) {
+          refusedCode = String((error as { code?: unknown }).code ?? 'unknown');
+        }
+        assert.ok(refusedCode === null || refusedCode === '22023', `no-op or 22023, got ${refusedCode}`);
         assert.equal(await count(world.db, 'SELECT count(*) AS n FROM chunk_translations WHERE document_id = ANY ($1::uuid[])', [seeded.versionIds]), seeded.chunkIds.length);
         assert.equal(await count(world.db, 'SELECT count(*) AS n FROM rag_table_rows WHERE document_id = ANY ($1::uuid[])', [seeded.versionIds]), 2);
       });

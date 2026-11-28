@@ -40,6 +40,7 @@ AS $$
       ('chunking_build_gaps', 'chunks', 'cascade', 'ON DELETE CASCADE from documents'),
       ('chunk_translation_embeddings', 'translations', 'cascade', 'ON DELETE CASCADE from chunk_translations'),
       ('rag_golden_evidence_index', 'golden_items', 'purge_step', 'rag_purge_hook_golden_items (0976) through rag_purge_foreign_stores'),
+      ('rag_judge_labels', 'golden_items', 'purge_step', 'answer-check labels of the purged evidence, cleared by rag_purge_hook_golden_items (0976)'),
       ('rag_connector_document_access', 'access_labels', 'cascade', 'ON DELETE CASCADE from documents (0925)'),
       ('rag_connector_document_principals', 'access_labels', 'cascade', 'ON DELETE CASCADE from documents (0920)'),
       ('rag_dup_chunk_bands', 'duplicate_groups', 'cascade', 'ON DELETE CASCADE from document_chunks (0857); the clusters are purged by rag_purge_hook_dup_clusters'),
