@@ -957,3 +957,4 @@ export type {
   ScopeGateStatusResult,
   StartScopeRebuildResult,
 } from './scope/admin';
+export { captionLegacyImage } from './ingest/legacy-image-caption';
