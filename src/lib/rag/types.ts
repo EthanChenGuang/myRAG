@@ -261,6 +261,10 @@ export interface RetrievalOverrides {
   backend?: BackendId;
   /** Eval only: the structured table leg's parameters (TableLookupParams). */
   tableLookup?: { min_cells?: number; limit?: number; weight?: number };
+  /** Eval only: the result-diversity parameters (DiversityParams). */
+  diversity?: { mmr_lambda?: number; mmr_window_factor?: number };
+  /** Eval only: the duplicate-cluster threshold (DupClusterParams). */
+  dupCluster?: { threshold?: number; by_profile?: Record<string, { threshold: number; source: 'fixture' | 'live' }> };
 }
 
 export type { QueryParamsOverrides } from './query/query-params';

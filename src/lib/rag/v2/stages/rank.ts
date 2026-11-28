@@ -32,6 +32,7 @@ import { reserveSubQuestionCoverage, subQuestionsOf } from '../subq-coverage';
 import { diversify, type AlsoIn, type DiversifyCounts } from '../diversify';
 import { effectiveRetrievalParams } from '../retrieval-params';
 import { effectiveTuningParams } from '../tuning-params';
+import { evalTuningOverrides } from '../overrides';
 import { guardNearMisses } from '../../retrieval/identifiers';
 import { extractChunkIdentifiers } from '../../identifiers/extract';
 import type { ContextRerankInput } from './context';
@@ -545,7 +546,12 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
   }
 
   const mode = config.v2.resultDiversity;
-  const tuning = effectiveTuningParams(profile, config, undefined, ctx.embeddingProfileId ? { embeddingProfileId: ctx.embeddingProfileId } : undefined);
+  const tuning = effectiveTuningParams(
+    profile,
+    config,
+    evalTuningOverrides(profile, stageOverrides?.retrievalOverrides),
+    ctx.embeddingProfileId ? { embeddingProfileId: ctx.embeddingProfileId } : undefined,
+  );
   const finalTopK = ctx.finalTopK ?? effectiveRetrievalParams(profile, config, null).final_top_k;
   const subQuestionOf = coverageActive ? (row: FusedHit) => [...subQuestionsOf(row, variants)] : undefined;
   const diversified = await runStage(

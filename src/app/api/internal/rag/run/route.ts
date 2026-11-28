@@ -100,6 +100,8 @@ import {
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
 
+import { toStageRetrievalOverrides } from '@/lib/rag/v2/overrides';
+
 export const runtime = 'nodejs';
 
 type RetrievalOverridesInput = NonNullable<RagRunRequest['options']>['retrieval_overrides'];
@@ -107,22 +109,7 @@ type RetrievalFiltersInput = NonNullable<RagRunRequest['options']>['retrieval_fi
 type RetrievalOverrides = NonNullable<StageOverrides['retrievalOverrides']>;
 
 function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): RetrievalOverrides | undefined {
-  if (!input) return undefined;
-  const out: RetrievalOverrides = {};
-  if (input.candidate_pool_size != null) out.candidatePoolSize = input.candidate_pool_size;
-  if (input.rerank_input_cap != null) out.rerankInputCap = input.rerank_input_cap;
-  if (input.final_top_k != null) out.finalTopK = input.final_top_k;
-  if (input.rrf_k != null) out.rrfK = input.rrf_k;
-  if (input.leg_weights != null) {
-    out.legWeights = { dense: input.leg_weights.dense, lexical: input.leg_weights.lexical, exactId: input.leg_weights.exact_id };
-  }
-  if (input.rerank_model != null) out.rerankModel = input.rerank_model;
-  if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
-    out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
-  }
-  if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
-  if (input.backend != null) out.backend = input.backend;
-  return Object.keys(out).length > 0 ? out : undefined;
+  return toStageRetrievalOverrides(input);
 }
 
 function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string, unknown> {
