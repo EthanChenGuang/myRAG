@@ -225,7 +225,7 @@ for (const mode of MODES) {
           [{ tokens: ['w9201', 'w9502'] }, { docType: 'contract_legal' }],
           [{ tokens: ['w9202', 'w9503', 'w9504'] }, { accessGroups: [GROUP] }],
         ] as const) {
-          const [id] = await insertDocument(db, userId, [{ ...extra, identifiers: 'identifiers' in extra ? [...extra.identifiers] : undefined, tokens: [...extra.tokens] }], opts);
+          const [id] = await insertDocument(db, userId, [{ ...extra, identifiers: 'identifiers' in extra ? [...extra.identifiers] : undefined, tokens: [...extra.tokens] }], 'accessGroups' in opts ? { accessGroups: [...opts.accessGroups] } : opts);
           seeded.push({ id: id as string, tenant, tokens: [...extra.tokens], cluster: null });
         }
         await rpc(db, 'public.rag_lexstats_enable($1)', [tenant]);
