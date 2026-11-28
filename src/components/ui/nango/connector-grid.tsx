@@ -50,8 +50,22 @@ export interface SyncCountPart {
   count: number;
 }
 
-export function syncCountParts(_stats: Partial<SyncStats> | null): SyncCountPart[] {
-  return [];
+const SYNC_COUNT_LABELS: Array<[SyncCountPart['key'], TranslationKeys]> = [
+  ['processed', 'connectorSyncProcessedLabel'],
+  ['deleted', 'connectorSyncDeletedLabel'],
+  ['skipped', 'connectorSyncSkippedLabel'],
+  ['withdrawn', 'connectorSyncWithdrawnLabel'],
+];
+
+/** The counts a sync result names, in display order; zero and missing counts are left out. */
+export function syncCountParts(stats: Partial<SyncStats> | null): SyncCountPart[] {
+  if (!stats) return [];
+  const parts: SyncCountPart[] = [];
+  for (const [key, labelKey] of SYNC_COUNT_LABELS) {
+    const count = stats[key];
+    if (typeof count === 'number' && Number.isFinite(count) && count > 0) parts.push({ key, labelKey, count });
+  }
+  return parts;
 }
 
 export function SyncFailClosedLine({ text }: { text: string }) {
@@ -410,28 +424,14 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
               <strong>{PROVIDER_CONFIG[lastSyncResult.provider].displayName}</strong>
               <span>{t('connectorSyncCompletePrefix')}</span>
               {(() => {
-                const parts: ReactNode[] = [];
-                if (lastSyncResult.stats.processed > 0) {
-                  parts.push(
-                    <span key="processed" className="font-medium">
-                      {formatCountLabel('connectorSyncProcessedLabel', lastSyncResult.stats.processed)}
-                    </span>
-                  );
-                }
-                if (lastSyncResult.stats.deleted > 0) {
-                  parts.push(
-                    <span key="deleted" className="font-medium">
-                      {formatCountLabel('connectorSyncDeletedLabel', lastSyncResult.stats.deleted)}
-                    </span>
-                  );
-                }
-                if (lastSyncResult.stats.skipped > 0) {
-                  parts.push(
-                    <span key="skipped" className="text-green-600/70 dark:text-green-500/70">
-                      {formatCountLabel('connectorSyncSkippedLabel', lastSyncResult.stats.skipped)}
-                    </span>
-                  );
-                }
+                const parts: ReactNode[] = syncCountParts(lastSyncResult.stats).map((part) => (
+                  <span
+                    key={part.key}
+                    className={part.key === 'skipped' || part.key === 'withdrawn' ? 'text-green-600/70 dark:text-green-500/70' : 'font-medium'}
+                  >
+                    {formatCountLabel(part.labelKey, part.count)}
+                  </span>
+                ));
                 if (parts.length === 0) {
                   return <span>{t('connectorSyncNoChanges')}</span>;
                 }

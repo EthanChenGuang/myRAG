@@ -371,6 +371,7 @@ export const en = {
   connectorSyncProcessedLabel: "{count} added/updated",
   connectorSyncDeletedLabel: "{count} removed",
   connectorSyncSkippedLabel: "{count} unchanged",
+  connectorSyncWithdrawnLabel: "{count} withdrawn, not synced again",
   connectorSyncNoChanges: "No files to sync",
   connectorSyncFailed: "Sync failed",
   connectorSyncFailedRetry: "Sync failed. Please try again.",

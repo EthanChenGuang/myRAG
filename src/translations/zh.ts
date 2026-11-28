@@ -335,6 +335,7 @@ export const zh = {
   connectorSyncProcessedLabel: "{count} 已添加/更新",
   connectorSyncDeletedLabel: "{count} 已移除",
   connectorSyncSkippedLabel: "{count} 未更改",
+  connectorSyncWithdrawnLabel: "{count} 已撤回，不再同步",
   connectorSyncNoChanges: "没有文件需要同步",
   connectorSyncFailed: "同步失败",
   connectorSyncFailedRetry: "同步失败。请再试一次。",
