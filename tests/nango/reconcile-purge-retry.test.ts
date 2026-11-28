@@ -63,7 +63,7 @@ describe('runSourceReconcile purge follow-ups (D-15, C-10)', () => {
     for (const level of ['log', 'warn', 'error', 'debug', 'info'] as const) vi.spyOn(console, level).mockImplementation(() => {});
   });
 
-  it('retries the pending purge objects and re-scrubs recent purges before the connections, and reports both counts', async () => {
+  it('re-scrubs recent purges and retries the pending purge objects before the connections, and reports both counts', async () => {
     const order: string[] = [];
     const retry = vi.fn<PurgeDeps['retry']>(async (input) => {
       order.push('retry');
@@ -82,7 +82,7 @@ describe('runSourceReconcile purge follow-ups (D-15, C-10)', () => {
     const memory = db();
     const result = await runSourceReconcile({ deadlineMs: 60_000, deps: { admin: memory.admin as never, listFiles, purge: { retry, rescrub } } });
 
-    expect(order).toEqual(['retry', 'rescrub', 'list']);
+    expect(order).toEqual(['rescrub', 'retry', 'list']);
     expect(result).toMatchObject({ processed: 1, purgeRetried: 2, purgeStillPending: 0, purgeRescrubbed: 1, purgeSkipped: 0 });
   });
 

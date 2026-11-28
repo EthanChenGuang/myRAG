@@ -9,7 +9,20 @@ import { POST, maxDuration } from '@/app/api/internal/rag/source-reconcile/route
 
 const SECRET = 'route-secret-for-unit-tests-000000';
 const HEADER = 'x-sidecar-secret';
-const COUNTS = { processed: 1, removed: 2, paused: 0, incomplete: 0, failed: 0, skipped: 0, overdue: 0 };
+const COUNTS = {
+  processed: 1,
+  removed: 2,
+  paused: 0,
+  incomplete: 0,
+  failed: 0,
+  skipped: 0,
+  overdue: 0,
+  purgeRetried: 1,
+  purgeStillPending: 0,
+  purgeRescrubbed: 2,
+  purgeSkipped: 0,
+  purgeFailed: 0,
+};
 
 function request(options: { secret?: string; body?: string } = {}): NextRequest {
   const headers = new Headers({ 'content-type': 'application/json' });

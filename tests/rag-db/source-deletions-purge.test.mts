@@ -102,6 +102,74 @@ describe('applySourceDeletions in purge mode (D-08, D-11)', () => {
     assert.equal(await count(world.db, 'SELECT count(*) AS n FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]), 0);
   });
 
+  test('only an admin purge leaves a tombstone (D-35): a source-sync purge lets a restored file come back', async () => {
+    objectStore.setObjectStoreForTests(fakeStore.createFakeObjectStore());
+    fakePublic.installFakePublicImageStore();
+    const purgeModule = await import('@/lib/rag/ingest/purge');
+    const rag = await import('@/lib/rag');
+    const owner = rag.nangoOwnerScope({ ownerUserId: personal.userId });
+    assert.ok(owner.ok);
+    const connection = await insertConnection('purge');
+
+    const synced = `file-${crypto.randomUUID().slice(0, 8)}`;
+    await seedLineage(world, personal, { nango: { connectionUuid: connection.id, connectionId: connection.connection_id, fileId: synced } });
+    const admin = createPgliteAdmin(world.db);
+    assert.equal((await deletions.applySourceDeletions(connection, [synced], 'change_feed', { admin: admin as never })).removed, 1);
+    assert.deepEqual(await purgeModule.isPurgeTombstoned(owner.scope, connection.connection_id, synced, { signal: new AbortController().signal }), { ok: true, tombstoned: false });
+
+    const purgedByAdmin = `file-${crypto.randomUUID().slice(0, 8)}`;
+    const seeded = await seedLineage(world, personal, { nango: { connectionUuid: connection.id, connectionId: connection.connection_id, fileId: purgedByAdmin } });
+    await world.db.query('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT DO NOTHING', [personal.userId]);
+    const current = (await rows(world.db, 'SELECT id FROM documents WHERE lineage_id = $1 AND is_current', [seeded.lineageId]))[0];
+    const byAdmin = await purgeModule.purgeDocumentAsAdmin({
+      documentId: String(current?.id),
+      actorUserId: personal.userId,
+      reasonCode: 'owner_request',
+      reasonNote: null,
+      signal: new AbortController().signal,
+    });
+    assert.ok(byAdmin.ok, `admin purge failed: ${byAdmin.ok ? '' : byAdmin.reason}`);
+    assert.deepEqual(await purgeModule.isPurgeTombstoned(owner.scope, connection.connection_id, purgedByAdmin, { signal: new AbortController().signal }), { ok: true, tombstoned: true });
+  });
+
+  test('the scheduled reconcile retries the pending objects of a source purge and scrubs a stale chat again (D-15, C-10)', async () => {
+    const objects = fakeStore.createFakeObjectStore();
+    objectStore.setObjectStoreForTests(objects);
+    fakePublic.installFakePublicImageStore();
+    const connection = await insertConnection('purge');
+    const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
+    const seeded = await seedLineage(world, personal, { nango: { connectionUuid: connection.id, connectionId: connection.connection_id, fileId } });
+    for (const key of seeded.objectKeys) await objects.put(key, new Uint8Array([1]), { contentType: 'text/markdown' });
+    const before = (await rows(world.db, 'SELECT messages FROM chats WHERE id = $1', [seeded.chatId]))[0]?.messages;
+    objects.failOn('remove');
+
+    const admin = createPgliteAdmin(world.db);
+    assert.equal((await deletions.applySourceDeletions(connection, [fileId], 'change_feed', { admin: admin as never })).removed, 1);
+    const pending = (await rows(world.db, 'SELECT pending_object_paths FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]))[0];
+    assert.ok((pending?.pending_object_paths as string[]).length > 0, 'the failed removal is pending');
+
+    // A stale tab writes the withdrawn quote back.
+    await world.db.query('UPDATE chats SET messages = $2::jsonb WHERE id = $1', [seeded.chatId, JSON.stringify(before)]);
+    assert.match(JSON.stringify((await rows(world.db, 'SELECT messages FROM chats WHERE id = $1', [seeded.chatId]))[0]?.messages), /Synthetic purge sentence/);
+
+    objects.heal();
+    const reconcile = await import('@/lib/nango/reconcile');
+    const result = await reconcile.runSourceReconcile({
+      deadlineMs: 60_000,
+      connectionId: crypto.randomUUID(),
+      deps: { admin: admin as never, listFiles: async () => ({ fileIds: [], complete: false }) },
+    });
+    assert.ok(result.purgeRetried >= 1, `purgeRetried ${result.purgeRetried}`);
+    assert.ok(result.purgeRescrubbed >= 1, `purgeRescrubbed ${result.purgeRescrubbed}`);
+    assert.equal(result.purgeFailed, 0);
+
+    const audit = (await rows(world.db, 'SELECT pending_object_paths, result FROM rag_purge_audit WHERE lineage_id = $1', [seeded.lineageId]))[0];
+    assert.deepEqual(audit?.pending_object_paths, []);
+    assert.equal(audit?.result, 'verified');
+    for (const key of seeded.objectKeys) assert.ok(!objects.keys().includes(key), `object ${key} is gone`);
+    assert.doesNotMatch(JSON.stringify((await rows(world.db, 'SELECT messages FROM chats WHERE id = $1', [seeded.chatId]))[0]?.messages), /Synthetic purge sentence/);
+  });
+
   test('switching a connection to purge mode purges nothing by itself', async () => {
     const connection = await insertConnection(null);
     const fileId = `file-${crypto.randomUUID().slice(0, 8)}`;
