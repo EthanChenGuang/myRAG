@@ -1209,3 +1209,18 @@ Signatures were NOT covered by this; they are asked for separately.
 - 07:43Z t43 PR #144 opened (5d771c8d; contains 07 line, 07-49, quick-511-sec, t42, main). train43-live.sql header at 3958941e. Subscribed. README PR #143 at 9fc1812d (owner: merge when green).
 - 07:44Z quick-44-t09 DONE (exec/quick-44-t09 51ac6b528, migration 1014: tenant guard on compact_tenant, compact_all skips a stray key; LEX-06 wording). OPERATOR: apply 1014 after 0905. The session is still running schema-migrations alone, so it is NOT archived yet. Train 44 queue: quick-63-gaps (1012/1013), quick-44-t09, quick-41-p52-band, quick-5221-mustkeep (+05.2.1-23), 06.2-43, 06.2-30, 04.4-20.
 - 07:48Z quick-63-gaps DONE (exec/quick-63-gaps f5df689aa; migrations 0747 + mode file, 1012, 1013; G1-G6, decision 13 docs) and archived. Queued for t44. OPERATOR: apply 0747, 1012, 1013, then re-run 0410.
+- 07:51Z Cleanup and parallel dispatch (owner request).
+  - Archived: README sessions, 06.2-43, quick-63-gaps.
+  - Kept running:
+    - 06.2-30
+    - 04.4-20 (full vitest before SUMMARY)
+    - p52-band
+    - mustkeep
+    - quick-44-t09 (schema-migrations running alone)
+    - t43 (PR #144)
+  - Dispatched:
+    - t44 builder: session_01X342smAooS1HV8nwgZKPf7
+    - ui-review 6.3/7/6.2: session_01X342shoV4pAMx1pPdXLd9e
+    - quick-deferred-batch: session_01X342sjagSEBp2diSEwUUfX
+    - quick-63-hardening: session_01X342sikgAoxqyxifa2wXrb
+  - The signatures session (session_01X342shUVJkfnBgHdbAAQhL) is BLOCKED and wants the owner to confirm in that session. Asked the owner.
