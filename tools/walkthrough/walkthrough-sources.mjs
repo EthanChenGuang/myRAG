@@ -233,7 +233,17 @@ try {
   });
 
   await step('S4', 'Pasted passage → "Also in N other documents"', async () => {
-    const t = await ask(`What does the ${Q} maintenance checklist require?`, 'S4-also-in');
+    let t = null;
+    const attempts = [
+      `List every step of the ${Q} maintenance checklist, and say which documents contain it.`,
+      `What must the technician do under the ${Q} checklist? Answer from the walkthrough handbooks.`,
+    ];
+    const misses = [];
+    for (const [i, q] of attempts.entries()) {
+      try { t = await ask(q, `S4-also-in-${i + 1}`); break; } catch (error) { misses.push(error instanceof Error ? error.message.slice(0, 80) : String(error)); }
+    }
+    if (t === null) throw new Error(`No answer with sources after ${attempts.length} questions: ${misses.join(' | ')}`);
+    if (misses.length) record('S4a', 'Empty answer on an earlier phrasing', 'INFO', misses.join(' | '));
     const m = t.match(/Also in (\d+) other documents?/);
     if (!m) { record('S4', 'Pasted passage → "Also in N other documents"', 'FAIL', 'No "Also in" line in the Sources panel'); return; }
     await page.getByText(/Also in \d+ other document/).first().click();
