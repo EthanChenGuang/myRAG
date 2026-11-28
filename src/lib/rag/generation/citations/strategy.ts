@@ -110,15 +110,16 @@ export function preRetrievalCitations(input: {
 }): boolean {
   if (input.capabilities?.citations !== true || input.ragMode === 'bypass') return false;
   if (input.config.citations) return true;
-  return claudeTurnEligibility({
-    modelId: input.modelId,
+  const modelIds = [input.modelId, ...(input.candidateModelIds ?? [])];
+  return modelIds.some((modelId) => claudeTurnEligibility({
+    modelId,
     capabilities: input.capabilities,
     ragMode: input.ragMode ?? 'strict',
     aliasCount: 1,
     facts: input.facts ?? NO_FACTS,
     config: input.config,
     modelSource: input.modelSource,
-  }).eligible;
+  }).eligible);
 }
 
 /** The only place that decides which citation strategy a turn uses. */

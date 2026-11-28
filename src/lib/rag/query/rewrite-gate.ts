@@ -297,6 +297,12 @@ function translateNeeded(lang: Lang, ctx: GateContext): boolean {
   return ctx.kbLang !== undefined && ctx.kbLang !== lang;
 }
 
+/** The R11 length test on its own (D-20 router): true when the query reaches the long-query length for its language. */
+export function isLongQuery(q: string, lang: Lang): boolean {
+  const units = lengthUnits(q, lang);
+  return lang === 'zh' ? units >= LONG_ZH_MIN_UNITS : units >= LONG_WORDS_MIN;
+}
+
 /**
  * LAT-03 rewrite gate (.planning/specs/query-rewrite-gate.md). Pure and synchronous: evaluates every
  * rule, returns all that fired and the transforms they map to. No LLM call, no I/O.

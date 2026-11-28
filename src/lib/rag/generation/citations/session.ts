@@ -156,8 +156,11 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     capabilities: input.capabilities,
     ragMode: input.ragMode,
     ...(input.facts ? { facts: input.facts } : {}),
+    ...(input.routingCandidates?.length ? { candidateModelIds: input.routingCandidates } : {}),
   });
   const labeler = capable ? createCitationLabeler() : undefined;
+  let modelId = input.modelId;
+  let attached = false;
   const perSentence = input.perSentence ?? readAnswerConfig().citationPerSentence;
 
   let strategy: CitationStrategyId | null = null;
@@ -280,16 +283,22 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     get fallbackReason() {
       return fallbackReason;
     },
-    setFinalModel(_modelId) {},
+    setFinalModel(next) {
+      const value = next.trim();
+      if (value === '' || value.toLowerCase() === 'auto') throw new Error('the final model must be a concrete model id');
+      if (attached) throw new Error('the final model is set before attach');
+      modelId = value;
+    },
     finalModel() {
-      return input.modelId;
+      return modelId;
     },
     attach(result) {
+      attached = true;
       if (!labeler) return;
       try {
         const map = buildAliasMap(result?.blocks, result?.usedDocuments);
         strategy = selectCitationStrategy({
-          modelId: input.modelId,
+          modelId,
           turn: {
             capabilities: { citations: true },
             ragMode: input.ragMode,
@@ -323,7 +332,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       if (strategy !== 'claude-citations' || !aliasMap || claude) {
         throw new Error('the direct Claude call needs an unstarted claude-citations turn');
       }
-      const anthropicId = anthropicIdFor(input.modelId);
+      const anthropicId = anthropicIdFor(modelId);
       const apiKey = input.config.anthropicApiKey;
       if (!anthropicId || !apiKey) throw new Error('the direct Claude call needs a mapped model and a key');
       const provider = createClaudeProvider({
