@@ -14,6 +14,7 @@ from rag_sidecar.contracts.languages import LANGUAGE_CODES, get_language_pack, t
 from rag_sidecar.contracts.report import (
     AnswerRuleMetric,
     AnswerRulesReport,
+    CalcRates,
     CalcReport,
     GroundednessLabelCounts,
     ItemResult,
@@ -1165,11 +1166,173 @@ def allowlisted_link_kept(trace: RagTrace, item: GoldenItem) -> float:
     return 1.0 if links and all(fold_literal(url) in answer for url in links) else 0.0
 
 
-def calc_metrics(traces: list[RagTrace], golden: list[GoldenItem]) -> CalcReport | None:
-    """D-77, D-78: the multi_step_calc metrics of a run that generated answers; None without such traces."""
+MULTI_STEP_CALC = "multi_step_calc"
+CONTEXT_OVERFLOW = "context_overflow"
+CALC_CORRECTED_NOTICE = "calc_corrected"
+DEFAULT_PIPELINE = "legacy"
+MIN_PARAPHRASE_MEMBERS = 2
+CALC_RATE_NAMES = (
+    "numeric_correctness",
+    "numeric_correctness_effective",
+    "paraphrase_consistency",
+    "steps_listed_rate",
+    "calc_used_rate",
+    "calc_not_verified_rate",
+    "calc_review_rate",
+)
+OVERFLOW_RATE_NAMES = ("overflow_error_rate", "history_before_documents_rate", "must_keep_rate", "budget_trace_rate")
+
+
+def _rate_metric(rows: list[tuple[GoldenItem, float]]) -> AnswerRuleMetric:
+    """Like _rule_metric, but an empty population reports n=0 instead of leaving the metric out."""
+    return _rule_metric(rows) or AnswerRuleMetric(overall=_mean([]))
+
+
+def _exact(text: str | None) -> Fraction | None:
+    """A trace decimal string as an exact value (D-77: numbers are compared as fractions, never as floats)."""
+    if text is None:
+        return None
+    try:
+        return Fraction(text)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _span_kept(trace: RagTrace, span: GoldSpan) -> bool:
+    return any(chunk_matches_span(chunk.document_name or "", chunk.content, span) for chunk in trace.kept)
+
+
+def evidence_in_context(trace: RagTrace, item: GoldenItem) -> bool:
+    """Every gold evidence span of the item is in the kept context of an answered trace."""
+    return not trace.refused and bool(item.gold_evidence) and all(_span_kept(trace, span) for span in item.gold_evidence)
+
+
+def calc_stated(trace: RagTrace) -> Fraction | None:
+    """D-77: the number the answer states, from calc_observed; None for a refused or unanswered item."""
+    if trace.refused or trace.calc_observed is None:
+        return None
+    return _exact(trace.calc_observed.stated)
+
+
+def calc_corrected_value(trace: RagTrace) -> Fraction | None:
+    """D-78: the value of the answer's calc_corrected notice (the last corrected check's recomputed value), or None."""
+    if not any(notice.kind == CALC_CORRECTED_NOTICE for notice in trace.notices or []):
+        return None
+    for check in reversed(trace.calc or []):
+        if check.status == "corrected":
+            return _exact(check.recomputed)
     return None
+
+
+def calc_effective(trace: RagTrace) -> Fraction | None:
+    """The corrected value when a calc_corrected notice is shown, else the stated number."""
+    corrected = calc_corrected_value(trace)
+    return corrected if corrected is not None else calc_stated(trace)
+
+
+def _within(value: Fraction | None, item: GoldenItem) -> bool:
+    calc = item.calc
+    if value is None or calc is None:
+        return False
+    return abs(value - Fraction(calc.expected_value)) <= Fraction(calc.tolerance)
+
+
+def _calc_rates(pairs: list[tuple[GoldenItem, RagTrace]]) -> CalcRates:
+    rows: dict[str, list[tuple[GoldenItem, float]]] = {name: [] for name in CALC_RATE_NAMES}
+    groups: dict[str, list[tuple[GoldenItem, Fraction | None]]] = {}
+    for item, trace in pairs:
+        observed = trace.calc_observed if not trace.refused else None
+        effective = calc_effective(trace)
+        rows["numeric_correctness"].append((item, 1.0 if _within(calc_stated(trace), item) else 0.0))
+        rows["numeric_correctness_effective"].append((item, 1.0 if _within(effective, item) else 0.0))
+        rows["steps_listed_rate"].append((item, 1.0 if observed is not None and observed.steps_listed else 0.0))
+        rows["calc_used_rate"].append((item, 1.0 if observed is not None and observed.origin is not None else 0.0))
+        not_verified = any(check.status == "not_verified" for check in trace.calc or [])
+        rows["calc_not_verified_rate"].append((item, 1.0 if not_verified else 0.0))
+        rows["calc_review_rate"].append((item, 1.0 if trace.review_reasons else 0.0))
+        assert item.calc is not None
+        groups.setdefault(item.calc.paraphrase_group, []).append((item, effective))
+    for members in groups.values():
+        if len(members) < MIN_PARAPHRASE_MEMBERS:
+            continue
+        values = [value for _, value in members]
+        consistent = all(value is not None for value in values) and len(set(values)) == 1
+        rows["paraphrase_consistency"].append((members[0][0], 1.0 if consistent else 0.0))
+    return CalcRates(items=len(pairs), **{name: _rate_metric(values) for name, values in rows.items()})
+
+
+def calc_metrics(traces: list[RagTrace], golden: list[GoldenItem]) -> CalcReport | None:
+    """D-77, D-78: the multi_step_calc metrics of a run that generated answers; None without such traces.
+
+    Read from the trace records (calc_observed, calc, notices, review_reasons); nothing is recomputed here. all_items scores
+    every traced item; evidence_in_context only items whose gold evidence is in the kept context. A paraphrase group counts
+    when at least two of its members are in the population.
+    """
+    items = _golden_by_id(golden)
+    pairs: list[tuple[GoldenItem, RagTrace]] = []
+    for trace in traces:
+        item = items.get(trace.item_id) if trace.item_id is not None else None
+        if item is not None and item.category == MULTI_STEP_CALC and item.calc is not None:
+            pairs.append((item, trace))
+    if not any(trace.calc_observed is not None or trace.calc is not None for _, trace in pairs):
+        return None
+    in_context = [(item, trace) for item, trace in pairs if evidence_in_context(trace, item)]
+    return CalcReport(
+        evidence_in_context_rate=_rate_metric([(item, 1.0 if evidence_in_context(trace, item) else 0.0) for item, trace in pairs]),
+        all_items=_calc_rates(pairs),
+        evidence_in_context=_calc_rates(in_context),
+    )
+
+
+def _history_turns(item: GoldenItem) -> int:
+    return sum(1 for turn in item.conversation if turn.role == "user")
+
+
+def _history_before_documents(trace: RagTrace, item: GoldenItem) -> bool:
+    """D-88: no document was dropped while a history turn was kept."""
+    budget = trace.prompt_budget
+    if budget is None:
+        return False
+    kept_turns = _history_turns(item) - budget.dropped_history_turns
+    return budget.dropped_documents == 0 or kept_turns <= 0
+
+
+def _must_keep(trace: RagTrace, item: GoldenItem) -> bool:
+    spec = item.overflow
+    return spec is not None and not trace.refused and all(_span_kept(trace, span) for span in spec.must_keep)
+
+
+def _overflow_error(trace: RagTrace) -> bool:
+    return trace.answer_error is not None or (trace.prompt_budget is not None and trace.prompt_budget.status == "exceeded")
+
+
+def _pipeline(trace: RagTrace) -> str:
+    return trace.effective_config.rag_env.get("RAG_PIPELINE") or DEFAULT_PIPELINE
 
 
 def overflow_metrics(traces: list[RagTrace], golden: list[GoldenItem]) -> OverflowReport | None:
-    """D-88: the context_overflow metrics of a run with the prompt budget on; None without prompt_budget traces."""
-    return None
+    """D-88: the context_overflow metrics of a run with the prompt budget on; None without prompt_budget traces.
+
+    Read from prompt_budget, answer_error and the kept context; the run's pipeline is RAG_PIPELINE (legacy when unset).
+    """
+    if not any(trace.prompt_budget is not None for trace in traces):
+        return None
+    items = _golden_by_id(golden)
+    rows: dict[str, list[tuple[GoldenItem, float]]] = {name: [] for name in OVERFLOW_RATE_NAMES}
+    pipeline: str | None = None
+    for trace in traces:
+        item = items.get(trace.item_id) if trace.item_id is not None else None
+        if item is None or item.category != CONTEXT_OVERFLOW or item.overflow is None:
+            continue
+        pipeline = pipeline or _pipeline(trace)
+        rows["overflow_error_rate"].append((item, 1.0 if _overflow_error(trace) else 0.0))
+        rows["history_before_documents_rate"].append((item, 1.0 if _history_before_documents(trace, item) else 0.0))
+        rows["must_keep_rate"].append((item, 1.0 if _must_keep(trace, item) else 0.0))
+        rows["budget_trace_rate"].append((item, 1.0 if trace.prompt_budget is not None else 0.0))
+    if pipeline is None:
+        return None
+    return OverflowReport(
+        pipeline=pipeline,
+        items=len(rows["must_keep_rate"]),
+        **{name: _rate_metric(values) for name, values in rows.items()},
+    )

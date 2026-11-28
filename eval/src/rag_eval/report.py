@@ -11,6 +11,7 @@ from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.judge import JudgeReport
 from rag_sidecar.contracts.latency import CacheState, GroupBudget, LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
+    AnswerRuleMetric,
     BudgetedLatency,
     BudgetStatus,
     EvalReport,
@@ -28,15 +29,19 @@ from rag_sidecar.contracts.report import (
 )
 
 from rag_eval.metrics import (
+    CALC_RATE_NAMES,
+    OVERFLOW_RATE_NAMES,
     POPULATION_EXCLUSIONS,
     TEMPLATED_CATEGORY,
     answer_rule_metrics,
     aggregate,
+    calc_metrics,
     citation_metrics,
     citation_run,
     groundedness_label_counts,
     injection_metrics,
     language_pair_key,
+    overflow_metrics,
     population_exclusions,
     report_gate_items,
     select_gate_population,
@@ -662,6 +667,12 @@ def build_report(
         answer_rules = answer_rule_metrics(traces, golden, rag_mode=manifest.rag_mode)
         if answer_rules is not None:
             answer_fields["answer_rules"] = answer_rules
+        calc = calc_metrics(traces, golden)
+        if calc is not None:
+            answer_fields["calc"] = calc
+        overflow = overflow_metrics(traces, golden)
+        if overflow is not None:
+            answer_fields["overflow"] = overflow
         if budgets is None and any(trace.query_plan is not None for trace in traces):
             budgets = load_latency_budgets()
         answer_fields["query_layer"] = build_query_layer_report(traces, results, budgets)
@@ -689,6 +700,7 @@ def build_report(
         stale_count=exclusions["stale_count"],
         stale_share=exclusions["stale_share"],
         rag_mode=manifest.rag_mode,
+        run_config_name=manifest.run_config.name if manifest.run_config is not None else None,
         golden_set_version=golden_manifest.version if golden_manifest is not None else None,
         golden_manifest_sha256=golden_manifest.manifest_sha256 if golden_manifest is not None else None,
         **aggregated,
@@ -1131,6 +1143,53 @@ def _answer_rules_section(report: EvalReport) -> list[str]:
     return lines
 
 
+CALC_NOTE = (
+    "D-77, D-78: multi_step_calc items, read from each trace's calc_observed, calc checks, notices and review reasons "
+    "(never recomputed here); numbers are compared as exact decimals within the item's tolerance. all_items scores every "
+    "item (a refused or unanswered item scores 0); evidence_in_context only items whose gold evidence reached the kept "
+    "context, the population the scripted-fake gates read. paraphrase_consistency counts paraphrase groups with at least "
+    "two members in the population. Report-only except the Phase 5.2.1 smoke gates (D-78)."
+)
+OVERFLOW_NOTE = (
+    "D-88: context_overflow items of a run with RAG_PROMPT_BUDGET on, from prompt_budget, answer_error and the kept "
+    "context. overflow_error_rate counts answer errors (window exceeded, question not last, prompt_budget_exceeded); "
+    "history_before_documents_rate an item where no document was dropped while a history turn was kept; must_keep_rate "
+    "every must_keep span in the kept context (a refused item keeps none); budget_trace_rate prompt_budget on the trace."
+)
+
+
+def _rule_rows(name: str, column: str, metric: AnswerRuleMetric) -> list[str]:
+    rows = [f"| {name} | {column} | overall | {_optional_cell(metric.overall)} |"]
+    rows.extend(f"| {name} | {column} | language:{key} | {_optional_cell(value)} |" for key, value in metric.by_language.items())
+    rows.extend(f"| {name} | {column} | category:{key} | {_optional_cell(value)} |" for key, value in metric.by_category.items())
+    return rows
+
+
+def _calc_section(report: EvalReport) -> list[str]:
+    block = report.calc
+    if block is None:
+        return []
+    lines = ["## Calculation (Phase 5.2.1)", "", CALC_NOTE, "", "| Metric | Population | Slice | Value |", "|---|---|---|---|"]
+    lines.extend(_rule_rows("evidence_in_context_rate", "all_items", block.evidence_in_context_rate))
+    for population in ("all_items", "evidence_in_context"):
+        rates = getattr(block, population)
+        for name in CALC_RATE_NAMES:
+            lines.extend(_rule_rows(name, population, getattr(rates, name)))
+    lines.append("")
+    return lines
+
+
+def _overflow_section(report: EvalReport) -> list[str]:
+    block = report.overflow
+    if block is None:
+        return []
+    lines = ["## Prompt budget overflow (Phase 5.2.1)", "", OVERFLOW_NOTE, "", "| Metric | Pipeline | Slice | Value |", "|---|---|---|---|"]
+    for name in OVERFLOW_RATE_NAMES:
+        lines.extend(_rule_rows(name, block.pipeline, getattr(block, name)))
+    lines.append("")
+    return lines
+
+
 TABLE_SPLIT_TITLE = "Table split"
 TABLE_SPLIT_NOTE = (
     "D-46, EVAL-18: row Recall@k counts an item when the chunk holding its gold row is within the top k; "
@@ -1497,6 +1556,8 @@ def _render_markdown(
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
     lines.extend(_answer_rules_section(report))
+    lines.extend(_calc_section(report))
+    lines.extend(_overflow_section(report))
     lines.extend(_table_split_section(report))
     lines.extend(_duplicate_flood_section(report))
     lines.extend(_identifier_section(report))
