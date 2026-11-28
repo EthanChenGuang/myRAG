@@ -1,18 +1,21 @@
 {
-  "dev": {
-    "answerable_count": 199,
-    "correct_refusal_rate": 0.19607843137254902,
-    "false_refusal_rate": 0.04020100502512563,
-    "false_refusal_rate_upper_bound": 0.07136517928983394,
-    "no_answer_count": 51
+  "modes": {
+    "ingest": {
+      "dev": {
+        "answerable_count": 346,
+        "correct_refusal_rate": 0.3287671232876712,
+        "false_refusal_rate": 0.049132947976878616,
+        "false_refusal_rate_upper_bound": 0.07278906306362327,
+        "no_answer_count": 73
+      },
+      "golden_sha256": "44bf966613aa25d7e4ac48d64d429770ed178800d5b96bc74c7724895c7e8bfd",
+      "score_calibration": {
+        "context_threshold": 0.1817936972082203
+      },
+      "status": "calibrated",
+      "target_false_refusal": 0.05
+    }
   },
-  "fixture_mode": "ingest",
-  "golden_sha256": "e57df6d12d834e95d1c2614840a93efabf308145542b030677aed0eb854a5647",
-  "schema_version": 1,
-  "score_calibration": {
-    "context_threshold": 0.15994637237219006
-  },
-  "source": "fixture",
-  "status": "calibrated",
-  "target_false_refusal": 0.05
+  "schema_version": 2,
+  "source": "fixture"
 }

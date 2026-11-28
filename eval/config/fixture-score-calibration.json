@@ -1,18 +1,21 @@
 {
-  "dev": {
-    "answerable_count": 150,
-    "correct_refusal_rate": 0.2631578947368421,
-    "false_refusal_rate": 0.02,
-    "false_refusal_rate_upper_bound": 0.05087706797852393,
-    "no_answer_count": 38
+  "modes": {
+    "prechunked": {
+      "dev": {
+        "answerable_count": 249,
+        "correct_refusal_rate": 0.27419354838709675,
+        "false_refusal_rate": 0.04819277108433735,
+        "false_refusal_rate_upper_bound": 0.07691433863987036,
+        "no_answer_count": 62
+      },
+      "golden_sha256": "543d8adf320c2ebf7c1b78c7e44da2adc71f297929bd9615b13d9b323f160945",
+      "score_calibration": {
+        "context_threshold": 0.16106998832201797
+      },
+      "status": "calibrated",
+      "target_false_refusal": 0.05
+    }
   },
-  "fixture_mode": "prechunked",
-  "golden_sha256": "0f2069169c7eff495ef79bfaf7cc85663e6fa24e4924c86884a6c56d1c88fa61",
-  "schema_version": 1,
-  "score_calibration": {
-    "context_threshold": 0.1410906862942342
-  },
-  "source": "fixture",
-  "status": "calibrated",
-  "target_false_refusal": 0.05
+  "schema_version": 2,
+  "source": "fixture"
 }
