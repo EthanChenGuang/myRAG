@@ -525,3 +525,16 @@ describe('AGENTS.md reflects the Phase 7 setup fold (07-31)', () => {
     expect(AGENTS).not.toContain('the later 07xx–10xx blocks are not folded yet');
   });
 });
+
+describe('AGENTS.md and the pipeline guide carry the quick-deferred-batch rules', () => {
+  const README = fs.readFileSync(path.resolve(__dirname, '../../README_RAG_PIPELINE.md'), 'utf8');
+
+  test('the 4.4 re-run rules name 1014 after 0902 or 0905', () => {
+    expect(AGENTS).toContain('after re-running 0902 or 0905, re-run 1014');
+  });
+
+  test('the language-quality cells are documented as API only, with no UI', () => {
+    expect(AGENTS).toContain('`/api/rag/admin/language-quality` is offered as an API only');
+    expect(README).toContain('offered as an API only: no Config UI panel or app page calls it');
+  });
+});
