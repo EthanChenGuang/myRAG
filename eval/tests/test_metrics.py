@@ -1566,12 +1566,23 @@ def test_overflow_a_long_history_item_that_dropped_a_document_while_keeping_a_tu
 
 def test_overflow_a_ranked_evidence_item_missing_one_must_keep_quote_fails_must_keep():
     item_id = "en-context-overflow-002"
-    spans = _must_keep(item_id)
-    assert P521_GOLDEN[item_id].overflow.kind == "ranked_evidence" and len(spans) == 2
+    base = P521_GOLDEN[item_id]
+    second = P521_GOLDEN["en-context-overflow-001"].overflow.must_keep[0]
+    two_spans = base.model_copy(
+        update={
+            "gold_evidence": [*base.gold_evidence, second],
+            "overflow": base.overflow.model_copy(update={"must_keep": [*base.overflow.must_keep, second]}),
+        }
+    )
+    golden = [two_spans if item.id == item_id else item for item in P521_GOLDEN.values()]
+    assert two_spans.overflow.kind == "ranked_evidence" and len(two_spans.overflow.must_keep) == 2
+    spans = [(span.document, span.quote) for span in two_spans.overflow.must_keep]
+    kept_both = [_overflow_trace(item_id, kept=spans, budget=_budget(dropped_documents=7))]
+    assert _value(_overflow(kept_both, golden).must_keep_rate) == (1.0, 1)
     missing = [_overflow_trace(item_id, kept=spans[:1], budget=_budget(dropped_documents=7))]
-    assert _value(_overflow(missing, list(P521_GOLDEN.values())).must_keep_rate) == (0.0, 1)
+    assert _value(_overflow(missing, golden).must_keep_rate) == (0.0, 1)
     refused = [_overflow_trace(item_id, budget=_budget(), refused=True)]
-    assert _value(_overflow(refused, list(P521_GOLDEN.values())).must_keep_rate) == (0.0, 1)
+    assert _value(_overflow(refused, golden).must_keep_rate) == (0.0, 1)
 
 
 def test_overflow_errors_and_missing_budget_traces_are_counted():

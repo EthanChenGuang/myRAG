@@ -392,7 +392,9 @@ def test_committed_manifests_start_at_version_one_all_active():
     # manifest (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary; its version 7
     # (train 38) added the 57 items of plan 05.2.1-12 and two more no-answer items in the templated vocabulary (en-06, it-06),
     # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Version 8 (train 39) added
-    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Every item is still active.
+    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Fixture version 7 and ingest
+    # version 9 (quick 5221-mustkeep, owner decision 1a, 2026-11-28) changed only the nine context_overflow items -001 to
+    # -003 per language. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -403,6 +405,9 @@ def test_committed_manifests_start_at_version_one_all_active():
         if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
     )
     phase521 = sorted(item.id for item in golden if item.category in ("multi_step_calc", "context_overflow"))
+    mustkeep_fix = sorted(
+        f"{language}-context-overflow-{number:03d}" for language in ("en", "it", "zh") for number in (1, 2, 3)
+    )
     assert len(phase42) == 36 and len(conversational) == 6 and len(phase53) == 25 and len(phase52) == 48
     assert len(phase521) == 57
     ingest = load_golden(INGEST_GOLDEN)
@@ -416,7 +421,7 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 8 if path == INGEST_MANIFEST else 6
+        expected = 9 if path == INGEST_MANIFEST else 7
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
         if path == INGEST_MANIFEST:
@@ -425,6 +430,7 @@ def test_committed_manifests_start_at_version_one_all_active():
             assert sorted(manifest.changelog[7].added) == train39_no_answer and not manifest.changelog[7].changed
         else:
             assert sorted(manifest.changelog[5].added) == phase521 and not manifest.changelog[5].changed
+        assert sorted(manifest.changelog[-1].changed) == mustkeep_fix and not manifest.changelog[-1].added
         assert sorted(manifest.changelog[1].added) == phase42
         assert not manifest.changelog[1].changed
         assert sorted(manifest.changelog[2].changed) == conversational
