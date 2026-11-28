@@ -37,6 +37,9 @@ This is a comprehensive guide for developers working with the Nango integration 
 - ✅ **Notion** - Dual-mode page picker (top-level + subpages)
 - ✅ **Dropbox** - Full folder/file selection and sync
 
+**Behind a switch (Phase 6.3):**
+- **SharePoint Online** and **OneDrive for Business** (Nango provider ids `sharepoint-online` and `one-drive`) - site, library and folder selection with Microsoft Graph delta sync, behind `NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false`. See [Webhooks, Microsoft connectors and reconcile scheduling](#webhooks-microsoft-connectors-and-reconcile-scheduling-phase-63).
+
 ---
 
 ## Quick Start
@@ -59,7 +62,7 @@ cp .env.local .env.local.backup
 cat >> .env.local << 'EOF'
 NEXT_PUBLIC_NANGO_ENABLED=true
 NANGO_SECRET_KEY=your_secret_key_here
-NANGO_WEBHOOK_SECRET=your_webhook_secret
+NANGO_WEBHOOK_SECRET=your_webhook_signing_key
 NANGO_HOST=https://api.nango.dev
 EOF
 ```
@@ -979,6 +982,33 @@ const results = await Promise.allSettled(
 
 ---
 
+## Webhooks, Microsoft connectors and reconcile scheduling (Phase 6.3)
+
+### Webhook signing key
+
+`POST /api/nango/webhook` verifies every delivery with an HMAC-SHA256 of the raw request body, keyed by `NANGO_WEBHOOK_SECRET`, against the `X-Nango-Hmac-Sha256` header, in constant time. Set `NANGO_WEBHOOK_SECRET` to the **webhook signing key** shown in the Nango dashboard (Environment settings, Webhooks), not to the secret API key. The legacy `X-Nango-Signature` header is no longer accepted: a delivery that carries only that header is refused. A `type: 'sync'` webhook applies the deletions Nango reports through the one deletion entry point (`applySourceDeletions`) without starting a full sync.
+
+### Registering SharePoint Online and OneDrive for Business
+
+1. In Microsoft Entra ID, register an app with the redirect URL Nango shows for the integration, and grant the delegated Microsoft Graph permission `Files.Read` (least privilege) or `Sites.Read.All` (to list every site). Complete permission lists for the access-group mapping (plan 06.3-26) need the connecting user to own the files, or an application permission (`Files.Read.All`) granted by a tenant admin.
+2. In the Nango dashboard, create two integrations with the provider ids `sharepoint-online` and `one-drive` and paste the app's client id and secret. If you name them differently, set `NANGO_SHAREPOINT_INTEGRATION_KEY` and `NANGO_ONEDRIVE_INTEGRATION_KEY` to those names.
+3. Set `NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=true` and rebuild (the flag is inlined at build time). In the Config UI Connectors tab, connect SharePoint, choose sites, libraries or folders, save, and press Sync.
+4. The first sync enumerates the selection and stores a Graph delta link per drive (`rag_source_delta_tokens`); later syncs read only the changes, and items with the `deleted` facet go to `applySourceDeletions`. Until 06.3-26 maps item permissions, every SharePoint and OneDrive copy is owner-only (owner and admins).
+
+### Reconcile scheduling
+
+The reconcile compares each connection's complete listing with the stored documents and removes what the source no longer has (the deletion mode of the connection decides how). Run it with `npm run rag:source-reconcile`, or call `POST /api/internal/rag/source-reconcile` with the `x-sidecar-secret` header (the route refuses every call while `RAG_SIDECAR_SECRET` is unset). A connection without a completed reconcile for longer than `RAG_SOURCE_RECONCILE_MAX_AGE_DAYS` raises a source alert, and a removal above `RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE` (at least 5 files) pauses until an admin confirms it within 24 hours.
+
+Nothing calls the route on its own. Schedule it at least once per `RAG_SOURCE_RECONCILE_INTERVAL_DAYS` from one of:
+
+- a scheduled job on the sidecar host (the sidecar environment already holds `RAG_SIDECAR_SECRET` and `RAG_APP_INTERNAL_URL`);
+- pg_cron with pg_net, posting to the route with the header;
+- any scheduler that can send a `POST` with the `x-sidecar-secret` header, or a host cron job running `npm run rag:source-reconcile`.
+
+Vercel Cron is not an option: it sends a `GET` with `Authorization: Bearer`, which this `POST` route does not accept, and `vercel.json` carries no scheduler entry.
+
+---
+
 ## Environment Variables Reference
 
 ```bash
@@ -989,7 +1019,18 @@ CONNECTORS_SHOW_ON_DASHBOARD=true             # Show connectors on Document Dash
 
 # Nango API Credentials
 NANGO_SECRET_KEY=sk_...                       # Backend (secret!) - only key needed
-NANGO_WEBHOOK_SECRET=secret                    # Webhook signature verification
+NANGO_WEBHOOK_SECRET=placeholder-signing-key  # The Nango webhook signing key; verified against X-Nango-Hmac-Sha256
+
+# SharePoint / OneDrive (Phase 6.3, off by default)
+NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false
+NANGO_SHAREPOINT_INTEGRATION_KEY=             # Empty: the provider id sharepoint-online
+NANGO_ONEDRIVE_INTEGRATION_KEY=               # Empty: the provider id one-drive
+
+# Source deletion sync (Phase 6.3)
+RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
+RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
+RAG_SOURCE_PURGE_DAILY_CAP=0                  # 0 is off: no cap
 
 # Nango Configuration
 NANGO_HOST=https://api.nango.dev               # Cloud endpoint

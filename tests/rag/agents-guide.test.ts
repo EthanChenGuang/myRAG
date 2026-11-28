@@ -383,3 +383,51 @@ describe('AGENTS.md reflects the Phase 4.3 document access groups', () => {
     expect(fs.existsSync(path.resolve(__dirname, '../../supabase/migrations/0920_access_groups_tables.sql'))).toBe(true);
   });
 });
+
+describe('AGENTS.md reflects Phase 6.3 (source deletion sync and purge)', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const start = section6.indexOf('### Source deletion sync and purge (Phase 6.3)');
+  const next = section6.indexOf('\n### ', start + 1);
+  const subsection = start === -1 ? '' : section6.slice(start, next === -1 ? undefined : next);
+  const ENV = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+
+  test.each([
+    '`RAG_SOURCE_RECHECK=false`',
+    '`RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7`',
+    '`RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3`',
+    '`RAG_SOURCE_PURGE_DAILY_CAP=0` (0 is off: no cap)',
+    '`npm run rag:source-reconcile`',
+    '`POST /api/internal/rag/source-reconcile` (refused unless `RAG_SIDECAR_SECRET` is set',
+    'not Vercel cron',
+    'confirms within 24 hours',
+    '`POST /api/rag/admin/documents/[id]/purge`',
+    '`rag_purge_verify`',
+    '`rag_purge_store_inventory()`',
+    'always on for Weaviate and Qdrant',
+    'a source-sync purge leaves none',
+    'After re-running 0727, re-run 0746 and then 0747',
+    'after re-running 0963, re-run 1013',
+    '`rag_monitor_alerts`',
+  ])('mentions %s', (fragment) => {
+    expect(subsection).toContain(fragment);
+  });
+
+  test('section 9 names the SharePoint and OneDrive switch and keys', () => {
+    const section9 = AGENTS.slice(AGENTS.indexOf('## 9. Cloud Connectors'), AGENTS.indexOf('## 10. MCP'));
+    for (const name of ['`NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED=false`', '`NANGO_SHAREPOINT_INTEGRATION_KEY`', '`NANGO_ONEDRIVE_INTEGRATION_KEY`']) {
+      expect(section9).toContain(name);
+    }
+  });
+
+  test('the 4.2 and 4.4 re-run rules go through 0932 before 0936 and end with 0938', () => {
+    expect(AGENTS).toContain('re-run 0932, 0936 and then 0938 (Phase 4.4) in that order: with 0938 applied, 0936 on its own stops with 55000.');
+    expect(AGENTS).toContain('Never re-run 0936 alone once 0938 is applied');
+    expect(AGENTS).not.toContain('after re-running 0932 or 0936, re-run what follows it in that order');
+  });
+
+  test('the documented defaults match src/lib/env.ts', () => {
+    expect(ENV).toContain("RAG_SOURCE_RECHECK: process.env.RAG_SOURCE_RECHECK || 'false'");
+    expect(ENV).toContain("RAG_SOURCE_PURGE_DAILY_CAP: process.env.RAG_SOURCE_PURGE_DAILY_CAP || '0'");
+    expect(ENV).toContain("RAG_SOURCE_RECONCILE_MAX_AGE_DAYS: process.env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS || '7'");
+  });
+});
