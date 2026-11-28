@@ -21,7 +21,7 @@ import {
   IMAGE_EXTENSIONS,
   type FilteredCandidates,
 } from './context/assemble';
-import { documentBudgetOf, packFiltered } from './context/pack';
+import { documentBudgetOf, packAndBuild } from './context/pack';
 import { fetchAssemblyRows, type AssemblyRows } from './context/fetch-rows';
 import { recordAnswerConflict, versionConflictAttributes } from './context/version-conflicts';
 import { readAnswerConfig } from './generation/answer-config';
@@ -1289,12 +1289,16 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector, 
           const state = filtered ?? filterCandidates(assemblyInput(loaded, applyRelevanceFilter));
           if (documentBudget === null) return buildContext(state, assemblyInput(loaded, applyRelevanceFilter));
           // D-83, D-95: packed before buildContext, whose labeller then aliases only the kept blocks.
-          const packed = packFiltered(state, candidates, loaded.documents, documentBudget, {
-            isGPTModel: input.options?.isGPTModel ?? false,
-            imageExtensions: IMAGE_EXTENSIONS,
-          });
+          const packed = packAndBuild(
+            state,
+            candidates,
+            loaded.documents,
+            documentBudget,
+            { isGPTModel: input.options?.isGPTModel ?? false, imageExtensions: IMAGE_EXTENSIONS },
+            (kept) => buildContext(kept.state, { ...assemblyInput(loaded, applyRelevanceFilter), candidates: kept.candidates }),
+          );
           packing = packed.summary;
-          return buildContext(packed.state, { ...assemblyInput(loaded, applyRelevanceFilter), candidates: packed.candidates });
+          return packed.output;
         },
         collector,
         {

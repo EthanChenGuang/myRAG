@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { estimateTokens, promptBudgetConfig } from '@/lib/rag/context/prompt-budget-config';
+import { estimateTokens, factorFor, promptBudgetConfig } from '@/lib/rag/context/prompt-budget-config';
 import { fixedText } from '@/lib/rag/lang/texts';
 import type { RunRetrievalInput } from '@/lib/rag/types';
 
@@ -37,6 +37,9 @@ const { POST } = await import('@/app/api/internal/voice-rag/route');
 
 const QUERY = 'What does the synthetic block say about the sample?';
 const CONFIG = promptBudgetConfig();
+const FACTOR = factorFor(null).factor;
+/** Packing counts raw counter tokens: the planned (factor-scaled) budget reaches retrieval divided by the factor. */
+const packing = (documents: number) => Math.floor(documents / FACTOR);
 
 function request(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost/api/internal/voice-rag', {
@@ -90,6 +93,15 @@ describe('voice-rag prompt budget (D-87)', () => {
     expect(state.inputs[1]!.trace).toBeUndefined();
   });
 
+  test('switch off parity: unset and an explicit false give the same retrieval input and a byte-identical body', async () => {
+    const unset = await (await POST(request({ modelContextLength: 4096, historyTokens: 500 }))).text();
+    process.env.RAG_PROMPT_BUDGET = 'false';
+    const off = await (await POST(request({ modelContextLength: 4096, historyTokens: 500 }))).text();
+    expect(off).toBe(unset);
+    expect(JSON.stringify(state.inputs[1]!.options)).toBe(JSON.stringify(state.inputs[0]!.options));
+    expect(state.inputs[1]!.options).toEqual({ maxResults: 5 });
+  });
+
   test('switch on with both fields: the planned voice budget reaches retrieval and the trace carries prompt_budget', async () => {
     process.env.RAG_PROMPT_BUDGET = 'true';
     state.dropped = 2;
@@ -98,7 +110,8 @@ describe('voice-rag prompt budget (D-87)', () => {
     const expected = documentBudgetFor(4096, 1000);
     expect(expected).toBeGreaterThan(0);
     expect(expected).toBeLessThan(CONFIG.voice_document_budget);
-    expect(lastOptions().documentTokenBudget).toBe(expected);
+    expect(lastOptions().documentTokenBudget).toBe(packing(expected));
+    expect(lastOptions().documentTokenBudget).toBeLessThan(expected);
     expect(budgetStage()).toMatchObject({
       status: 'ok',
       counts: { window: 4096, documents: expected, history: 1000, system: CONFIG.voice_system_reserve, reserve: CONFIG.voice_answer_reserve, dropped_documents: 2 },
@@ -110,14 +123,14 @@ describe('voice-rag prompt budget (D-87)', () => {
   test('switch on with a large window: the voice budget caps the documents', async () => {
     process.env.RAG_PROMPT_BUDGET = 'true';
     await POST(request({ modelContextLength: 128000, historyTokens: 2000 }));
-    expect(lastOptions().documentTokenBudget).toBe(CONFIG.voice_document_budget);
+    expect(lastOptions().documentTokenBudget).toBe(packing(CONFIG.voice_document_budget));
   });
 
   test('switch on without the fields: the fixed voice budget', async () => {
     process.env.RAG_PROMPT_BUDGET = 'true';
     const response = await POST(request({}));
     expect(response.status).toBe(200);
-    expect(lastOptions().documentTokenBudget).toBe(CONFIG.voice_document_budget);
+    expect(lastOptions().documentTokenBudget).toBe(packing(CONFIG.voice_document_budget));
   });
 
   test('switch on, a window too small for the question: 413 prompt_budget_exceeded in the question language, no retrieval', async () => {
