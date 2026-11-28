@@ -8,7 +8,7 @@
         "false_refusal_rate_upper_bound": 0.06135215684900814,
         "no_answer_count": 62
       },
-      "golden_sha256": "cde5be0214a5c33b7cfe578699c82307ebf966d08f7181867e470364eb9f66f9",
+      "golden_sha256": "628b63afc03e540b44ca46113be04dd162644730280e27df88f9c57423df2390",
       "score_calibration": {
         "context_threshold": 0.1817936972082203
       },
@@ -23,7 +23,7 @@
         "false_refusal_rate_upper_bound": 0.07081380292475899,
         "no_answer_count": 51
       },
-      "golden_sha256": "dc812d5fa8c6a64cfc604e4e6211baa0adf1edab73d1df5c4aaecffd7c7d8eb6",
+      "golden_sha256": "36bb6b1b706649bbc0b273f6cc4bc6ae57665c5ef637d647f0185fe2e5cdef09",
       "score_calibration": {
         "context_threshold": 0.17608269474830868
       },
