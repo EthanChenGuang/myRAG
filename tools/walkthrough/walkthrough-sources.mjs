@@ -128,15 +128,17 @@ const snap = async (label) => {
   await page.screenshot({ path: path.join(OUT, `${String(shot).padStart(2, '0')}-${label}.png`), fullPage: true }).catch(() => {});
 };
 let addVersionsAll = false;
+let forceModel = null;
 await page.route('**/api/chat', async (route) => {
   const req = route.request();
-  if ((addVersionsAll || provider === 'openai') && req.method() === 'POST') {
+  if ((addVersionsAll || forceModel || provider === 'openai') && req.method() === 'POST') {
     try {
       const body = req.postDataJSON();
       if (addVersionsAll) body.retrievalFilters = { versions: 'all' };
-      if (provider === 'openai') {
+      const model = forceModel || (provider === 'openai' ? 'openai/gpt-4o-mini' : null);
+      if (model) {
         body.data = body.data || {};
-        body.data.settings = { ...(body.data.settings || {}), model: 'openai/gpt-4o-mini' };
+        body.data.settings = { ...(body.data.settings || {}), model };
       }
       return route.continue({ postData: JSON.stringify(body), headers: { ...req.headers(), 'content-type': 'application/json' } });
     } catch {}
@@ -172,7 +174,7 @@ async function ask(question, label) {
   await input.press('Enter');
   const opener = page.locator('[data-citation-chip], [data-sources-toggle="true"]').first();
   try {
-    await opener.waitFor({ timeout: 120000 });
+    await opener.waitFor({ timeout: 90000 });
   } catch {
     await snap(label + '-no-sources');
     const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
@@ -234,16 +236,24 @@ try {
 
   await step('S4', 'Pasted passage → "Also in N other documents"', async () => {
     let t = null;
+    const q = `What does the ${Q} maintenance checklist require?`;
     const attempts = [
-      `List every step of the ${Q} maintenance checklist, and say which documents contain it.`,
-      `What must the technician do under the ${Q} checklist? Answer from the walkthrough handbooks.`,
+      { model: null, label: 'default model (claude-sonnet-4.5)' },
+      { model: 'openai/gpt-4o-mini', label: 'openai/gpt-4o-mini via OpenRouter' },
     ];
     const misses = [];
-    for (const [i, q] of attempts.entries()) {
-      try { t = await ask(q, `S4-also-in-${i + 1}`); break; } catch (error) { misses.push(error instanceof Error ? error.message.slice(0, 80) : String(error)); }
+    let servedBy = null;
+    for (const [i, a] of attempts.entries()) {
+      forceModel = a.model;
+      try { t = await ask(q, `S4-also-in-${i + 1}`); servedBy = a.label; break; }
+      catch (error) {
+        const body = (await page.locator('body').innerText().catch(() => '')).replace(/\s+/g, ' ');
+        const notice = (body.match(/⚠️[^.]{0,160}\./) || [])[0] || 'no notice shown';
+        misses.push(`${a.label}: ${notice}`);
+      } finally { forceModel = null; }
     }
-    if (t === null) throw new Error(`No answer with sources after ${attempts.length} questions: ${misses.join(' | ')}`);
-    if (misses.length) record('S4a', 'Empty answer on an earlier phrasing', 'INFO', misses.join(' | '));
+    if (misses.length) record('S4a', 'Empty reply handling', 'INFO', misses.join(' | '));
+    if (t === null) throw new Error('No answer with sources on any model');
     const m = t.match(/Also in (\d+) other documents?/);
     if (!m) { record('S4', 'Pasted passage → "Also in N other documents"', 'FAIL', 'No "Also in" line in the Sources panel'); return; }
     await page.getByText(/Also in \d+ other document/).first().click();
@@ -252,7 +262,7 @@ try {
     const names = (await list.innerText().catch(() => '')).replace(/\s+/g, ' ');
     await snap('S4-also-in-open');
     const ok = names.includes(`${RUN}-handbook`);
-    record('S4', 'Pasted passage → "Also in N other documents"', ok ? 'PASS' : 'FAIL', `Also in ${m[1]}; list: ${names.slice(0, 160)}`);
+    record('S4', 'Pasted passage → "Also in N other documents"', ok ? 'PASS' : 'FAIL', `Also in ${m[1]} (answered by ${servedBy}); list: ${names.slice(0, 160)}`);
   });
 } finally {
   for (const id of [...new Set(uploaded)]) {
