@@ -1206,3 +1206,4 @@ Signatures were NOT covered by this; they are asked for separately.
 - 07:23Z quick-511-sec DONE (e9b4a2cf) -> t43. Planner archived (7c15d84e; the second decision batch is recorded). Dispatched plan-check + exec 06.2-43 and plan-check (20-22) + exec 04.4-20. Removed the 06.2-30 hold (it now depends on 06.2-43). Retired-plan marking sent to t43.
 - 07:31Z MERGED #142 (t42, all green) -> main cbc51d53. Archived the t42 builder. t43 opens its PR without waiting for quick-63-gaps, which goes to train 44.
 - 07:35Z 06.2-43 DONE (exec/06.2-43 e8ddc297; D-20 rev 1, kept-based hit at 3 call sites; paired all_zero) and archived; queued for t44. Dispatched 06.2-30 on 06.2-43.
+- 07:43Z t43 PR #144 opened (5d771c8d; contains 07 line, 07-49, quick-511-sec, t42, main). train43-live.sql header at 3958941e. Subscribed. README PR #143 at 9fc1812d (owner: merge when green).
