@@ -1,6 +1,6 @@
 /**
  * An identifier-shaped token: letters, digits and - _ . / with at least one digit
- * (invoice numbers, tax ids, model numbers). The lookbehind limits the lookahead to the start of a run,
+ * (code-like tokens such as AB-1234 or 2025/0017). The lookbehind limits the lookahead to the start of a run,
  * and the tail keeps trailing punctuation out, so matching stays linear on hostile text.
  */
 export const IDENTIFIER_PATTERN = /(?<![A-Z0-9._/-])(?=[A-Z0-9._/-]*\d)[A-Z0-9](?:[A-Z0-9._/-]*[A-Z0-9])?/giu;
