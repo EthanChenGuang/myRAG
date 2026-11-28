@@ -814,12 +814,12 @@ class ScopeGatePanel {
     this.refreshButton = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button' } }, [this.icon('arrow-clockwise'), this.el('span', { text: this.t('action.refresh') })]);
     this.refreshButton.addEventListener('click', () => this.refresh());
     this.toolbar = this.el('div', { className: 'flex flex-wrap items-center justify-end gap-2' }, [this.updatedEl, this.refreshButton]);
-    this.blocks = this.el('div', { className: 'min-w-0' });
+    this.blocks = this.el('div', { className: 'min-w-0 [overflow-wrap:break-word]' });
     if (this.content) this.content.replaceChildren(this.toolbar, this.blocks);
     this.textarea = this.el('textarea', {
       className: 'textarea textarea-bordered textarea-sm w-full',
       id: ui.ragUiNextId('rag-scope-gate-example'),
-      attrs: { rows: '2', autocomplete: 'off', dir: 'auto', translate: 'no', spellcheck: 'false', placeholder: this.t('examples.placeholder') },
+      attrs: { name: 'scope-gate-example', rows: '2', autocomplete: 'off', dir: 'auto', translate: 'no', spellcheck: 'false', placeholder: this.t('examples.placeholder') },
     });
     this.helpId = ui.ragUiNextId('rag-scope-gate-example-help');
     this.errorId = ui.ragUiNextId('rag-scope-gate-example-error');
@@ -834,7 +834,7 @@ class ScopeGatePanel {
       if (this.fieldErrorKey) this.setFieldError(null);
     });
     this.helpEl = this.el('p', { className: 'text-xs text-base-content/70 mt-1', id: this.helpId });
-    this.errorEl = this.el('p', { className: 'text-sm text-error mt-1 break-words empty:hidden', id: this.errorId });
+    this.errorEl = this.el('p', { className: 'text-sm text-error mt-1 break-words empty:hidden', id: this.errorId, attrs: { 'aria-live': 'polite' } });
     this.addButton = this.el('button', { className: 'btn btn-primary btn-sm shrink-0', attrs: { type: 'button' } }, [this.icon('plus-lg'), this.el('span', { text: this.t('action.add') })]);
     this.addButton.addEventListener('click', () => this.addExample());
     this.form = this.el('div', { className: 'bg-base-100 rounded-lg p-4 mb-4' }, [
@@ -1036,7 +1036,7 @@ class ScopeGatePanel {
   }
 
   badge(spec) {
-    return this.el('span', { className: 'badge badge-sm h-auto min-h-5 gap-1 shrink-0 ' + SCOPE_GATE_BADGE_CLASS[spec.tone] }, [this.icon(spec.icon), this.el('span', { text: this.t(spec.word) })]);
+    return this.el('span', { className: 'badge badge-sm gap-1 shrink-0 whitespace-nowrap ' + SCOPE_GATE_BADGE_CLASS[spec.tone] }, [this.icon(spec.icon), this.el('span', { text: this.t(spec.word) })]);
   }
 
   copyButton(command) {
@@ -1144,7 +1144,7 @@ class ScopeGatePanel {
       const tbody = this.el('tbody');
       for (const row of view.rows) {
         const updated = row.updatedAt
-          ? this.el('td', {}, [this.time(row.updatedAt)])
+          ? this.el('td', { className: 'whitespace-nowrap' }, [this.time(row.updatedAt)])
           : this.el('td', {}, [this.el('span', { text: '—', attrs: { 'aria-hidden': 'true' } }), this.el('span', { className: 'sr-only', text: this.t('data.never') })]);
         tbody.appendChild(
           this.el('tr', { attrs: { 'data-scope-gate-kind': row.kind } }, [
@@ -1208,7 +1208,7 @@ class ScopeGatePanel {
               ? this.el('span', { className: 'font-mono text-xs break-all', text: row.addedBy.value, attrs: { translate: 'no' } })
               : this.el('span', { text: '—' });
         const del = this.el('button', {
-          className: 'btn btn-outline btn-error md:btn-sm',
+          className: 'btn btn-outline btn-error md:btn-sm whitespace-nowrap',
           text: this.t('action.delete'),
           attrs: { type: 'button', 'data-scope-gate-delete': String(index), 'aria-label': this.t('action.deleteAria', { text: Array.from(row.text).slice(0, SCOPE_GATE_DELETE_ARIA_CHARS).join('') }) },
         });
@@ -1216,7 +1216,7 @@ class ScopeGatePanel {
         tbody.appendChild(
           this.el('tr', { attrs: { 'data-scope-gate-example': row.id } }, [
             textCell,
-            this.el('td', { className: 'hidden md:table-cell align-top' }, row.createdAt ? [this.time(row.createdAt)] : [this.el('span', { text: '—' })]),
+            this.el('td', { className: 'hidden md:table-cell align-top whitespace-nowrap' }, row.createdAt ? [this.time(row.createdAt)] : [this.el('span', { text: '—' })]),
             this.el('td', { className: 'hidden lg:table-cell align-top' }, [addedBy]),
             this.el('td', { className: 'align-top' }, [del]),
           ]),
@@ -1263,7 +1263,7 @@ class ScopeGatePanel {
             : this.el('span', { className: 'font-mono text-xs break-all', text: row.status.code, attrs: { translate: 'no' } }),
           row.fixture ? this.badge(SCOPE_GATE_BADGES.evalOnly) : null,
         ]);
-        const falseCell = this.el('td', { className: 'text-right tabular-nums align-top' }, [
+        const falseCell = this.el('td', { className: 'text-right tabular-nums align-top whitespace-nowrap' }, [
           this.el('p', { text: row.falseRate === null ? '—' : row.falseRate }),
           row.falseUpper === null ? null : this.el('p', { className: 'text-xs text-base-content/70', text: this.t('cell.upper', { value: row.falseUpper }) }),
           n(row.falseN),
@@ -1277,7 +1277,7 @@ class ScopeGatePanel {
             this.el('td', { className: 'hidden md:table-cell text-right tabular-nums align-top', text: row.margin === null ? '—' : row.margin }),
             falseCell,
             this.el('td', { className: 'hidden lg:table-cell text-right tabular-nums align-top' }, [this.el('p', { text: row.correctRate === null ? '—' : row.correctRate }), n(row.correctN)]),
-            this.el('td', { className: 'hidden lg:table-cell align-top' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
+            this.el('td', { className: 'hidden lg:table-cell align-top whitespace-nowrap' }, row.recordedAt ? [this.time(row.recordedAt)] : [this.el('span', { text: '—' })]),
           ]),
         );
       }
