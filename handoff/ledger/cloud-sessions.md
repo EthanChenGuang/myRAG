@@ -938,3 +938,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - R-1 is answered for the active profile. 06.2-26 is unblocked once 06.2-41 is done.
   - NOTE: 26 must read the openai-3-small-1536/ subdir, and a profile switch requires re-measuring (06.2-33).
   - Archived.
+- 00:13Z quick-42-w1-reregister DONE exec/quick-42-w1-reregister a3948646c -> train 41. The pre-registration (98d6ea325) came before the run (661ac8c5d). The diversity v2 criteria pass; the gate FAILs only on the pre-existing category:scanned drop (metric-independent; debug-42-scanned is on it). Under v1, collapse would also fail zh-dup-flood-002. 04.2 stays human_needed. Archived.
