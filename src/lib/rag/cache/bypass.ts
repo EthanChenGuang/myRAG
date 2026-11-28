@@ -1,7 +1,7 @@
 import { extractProtectedTokens } from '../query/protected';
 import lexicon from '../query/rewrite-gate.lexicon.json';
 import { matchRelativeTime, type GateResult } from '../query/rewrite-gate';
-import type { VersionScope } from '../backend/types';
+import type { RetrievalFilterInput, VersionScope } from '../backend/types';
 import type { Profile, RagMode, RetrievalOptions, RetrievalSkipReason, RetrievalStatus } from '../types';
 import type { GroundednessLabel } from './types';
 
@@ -13,6 +13,7 @@ export type CheckBypassReason =
   | 'document_refs'
   | 'retrieval_options'
   | 'version_scope'
+  | 'retrieval_filters'
   | 'tools'
   | 'protected_tokens'
   | 'relative_time'
@@ -52,6 +53,8 @@ export interface TurnFacts {
   defaultMaxResults: number;
   /** D-14, D-47: the effective version scope; anything but current (or absent) is neither checked nor stored. */
   versionScope?: VersionScope;
+  /** W-1: the request's own retrieval filters; any set filter is neither checked nor stored (versionScope has its own rule). */
+  retrievalFilters?: RetrievalFilterInput;
   /** Phase 6.2 D-26: set by the pipeline after the check when retrieval was skipped; an out_of_scope turn is never stored. */
   skipReason?: RetrievalSkipReason;
 }
@@ -107,6 +110,23 @@ export function retrievalOptionsAreDefault(options: CacheRetrievalOptions | unde
   return true;
 }
 
+function filterValueSet(value: unknown): boolean {
+  if (value === undefined || value === null || value === false) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.values(value as Record<string, unknown>).some(filterValueSet);
+  if (typeof value === 'string') return value.length > 0;
+  return true;
+}
+
+/**
+ * W-1: a filtered answer or refusal must never be replayed to an unfiltered question, nor the reverse. Every field except versionScope
+ * (the version_scope rule) counts, including fields added later, so an unknown filter fails closed to a bypass.
+ */
+export function hasRequestFilters(filters: RetrievalFilterInput | undefined): boolean {
+  if (!filters) return false;
+  return Object.entries(filters).some(([field, value]) => field !== 'versionScope' && filterValueSet(value));
+}
+
 function profileAllowed(facts: TurnFacts): boolean {
   if (facts.profile === 'chat' || facts.profile === 'embed') return true;
   return facts.profile === 'eval' && facts.evalCacheOverride === true;
@@ -133,6 +153,7 @@ function checkRules(facts: TurnFacts): CheckBypassReason | null {
   if (!(facts.documentRefCount === 0)) return 'document_refs';
   if (!retrievalOptionsAreDefault(facts.retrievalOptions, facts.defaultMaxResults)) return 'retrieval_options';
   if (facts.versionScope !== undefined && facts.versionScope !== 'current') return 'version_scope';
+  if (hasRequestFilters(facts.retrievalFilters)) return 'retrieval_filters';
   if (facts.webSearch || facts.mcpTools) return 'tools';
   if (hasProtectedTokens(facts)) return 'protected_tokens';
   if (hasRelativeTime(facts)) return 'relative_time';

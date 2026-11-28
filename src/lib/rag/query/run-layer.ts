@@ -430,6 +430,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   };
   const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope, input.channel).scope;
   if (versionScope !== 'current') facts.versionScope = versionScope;
+  if (input.retrievalFilters) facts.retrievalFilters = input.retrievalFilters;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     // D-42 e: the eval report reads bypass_<reason> from the stage counts.
