@@ -20,6 +20,7 @@ from rag_eval.sweep.retrieval import SweepResult
 REPO = Path(__file__).resolve().parents[2]
 THRESHOLDS = REPO / "eval" / "config" / "refusal-thresholds.json"
 FLOOR = REPO / "eval" / "config" / "fixture-score-calibration.json"
+INGEST_FLOOR = REPO / "eval" / "config" / "fixture-score-calibration.ingest.json"
 CALIBRATION = REPO / "eval" / "config" / "refusal-calibration.json"
 NOISE = REPO / "eval" / "config" / "noise.json"
 PARAMS = REPO / "eval" / "config" / "retrieval-params.json"
@@ -145,9 +146,10 @@ def test_each_language_has_a_calibrated_same_language_fixture_cell():
 
 
 def test_fixture_floor_is_a_calibrated_fixture_record_with_only_a_context_threshold():
-    floors = read_floor_file(FLOOR)
-    assert floors.source == "fixture" and sorted(floors.modes) == ["ingest", "prechunked"]
-    for mode, floor in floors.modes.items():
+    for mode, path in (("prechunked", FLOOR), ("ingest", INGEST_FLOOR)):
+        floors = read_floor_file(path)
+        assert floors.source == "fixture" and sorted(floors.modes) == [mode]
+        floor = floors.modes[mode]
         assert floor.status == "calibrated", mode
         assert list(floor.score_calibration) == ["context_threshold"], mode
         assert 0 < floor.score_calibration["context_threshold"] < 0.65, mode

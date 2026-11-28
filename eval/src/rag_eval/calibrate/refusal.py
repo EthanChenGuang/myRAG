@@ -676,7 +676,7 @@ class FixtureFloorEntry(BaseModel):
 
 
 class FixtureScoreCalibrationFile(BaseModel):
-    """eval/config/fixture-score-calibration.json: one floor entry per fixture mode (schema 2). Eval-only; production never reads it."""
+    """A fixture floor file (schema 2): eval/config/fixture-score-calibration.json holds the prechunked entry, .ingest.json the ingest one. Eval-only; production never reads it."""
 
     model_config = ConfigDict(extra="forbid")
 
