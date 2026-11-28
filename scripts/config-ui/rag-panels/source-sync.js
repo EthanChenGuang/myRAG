@@ -836,7 +836,9 @@ class SourceSyncPanel {
     const tr = document.createElement('tr');
     const th = sourceSyncEl('th', 'font-normal align-top min-w-0 max-w-xs');
     th.setAttribute('scope', 'row');
-    th.appendChild(sourceSyncEl('div', 'text-sm break-words', view.connection));
+    const name = sourceSyncEl('div', 'text-sm break-words', view.connection);
+    name.setAttribute('translate', 'no');
+    th.appendChild(name);
     if (view.owner) th.appendChild(sourceSyncEl('div', 'text-xs text-base-content/70 break-words', view.owner));
     if (view.workspaceKey) {
       const key = sourceSyncEl('div', 'font-mono text-xs break-all', view.workspaceKey);
@@ -964,7 +966,7 @@ class SourceSyncPanel {
   buildDialog(titleText, bodyNodes, cancelText, confirmText) {
     const dialog = sourceSyncEl('dialog', 'modal');
     dialog.setAttribute('lang', this.locale);
-    const box = sourceSyncEl('div', 'modal-box');
+    const box = sourceSyncEl('div', 'modal-box overscroll-contain');
     const titleId = 'rag-source-sync-dialog-' + Math.random().toString(36).slice(2);
     const title = sourceSyncEl('h3', 'text-base font-semibold mb-2 break-words', titleText);
     title.id = titleId;
