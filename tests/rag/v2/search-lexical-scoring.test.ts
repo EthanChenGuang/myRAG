@@ -314,6 +314,23 @@ describe('v2 startup lexical scoring line', () => {
     expect(warn.mock.calls.some((call) => String(call[0]).includes('RAG_LEXICAL_SCORING'))).toBe(false);
     expect(tables).toEqual([]);
   });
+
+  it('RAG_RERANK_LOCAL_STATS=tenant: one warning, no read (04.4-20, D-55)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { admin, tables } = countingAdmin(3);
+    await startup({ ...BASE, RAG_RERANK_LOCAL_STATS: 'tenant' }, admin);
+    const lines = warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('RAG_RERANK_LOCAL_STATS'));
+    expect(lines).toEqual([
+      '[RAG Config] RAG_RERANK_LOCAL_STATS=tenant: tenants without ready lexical statistics are reranked with pool statistics until npm run rag:lexstats -- enable builds them',
+    ]);
+    expect(tables).toEqual([]);
+  });
+
+  it('RAG_RERANK_LOCAL_STATS unset or pool: no line', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await startup({ ...BASE, RAG_RERANK_LOCAL_STATS: 'pool' }, countingAdmin(3).admin);
+    expect(warn.mock.calls.some((call) => String(call[0]).includes('RAG_RERANK_LOCAL_STATS'))).toBe(false);
+  });
 });
 
 describe('the app environment reaches the lexical scoring config', () => {

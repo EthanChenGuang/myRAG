@@ -10,7 +10,7 @@ import { RetrievalParamsSchema, type RetrievalOverrides, type RetrievalParams } 
 import rawCommitted from '../../../eval/config/retrieval-params.json';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
-import { computeRetrievalConfigHash, lexicalScoringHashBlock, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { computeRetrievalConfigHash, lexicalScoringHashBlock, rerankLocalStatsHashBlock, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
 import { readSecurityConfig } from '@/lib/rag/security/config';
 import { requestRetrievalConfigHash } from '@/lib/rag/v2/result';
 import { effectiveTuningParams, tuningHashComponent } from '@/lib/rag/v2/tuning-params';
@@ -793,6 +793,32 @@ describe('requestRetrievalConfigHash lexical scoring block (04.4-01, D-08)', () 
         b: 0.75,
         df_mode: 'cluster',
       });
+    });
+  });
+
+  describe('RAG_RERANK_LOCAL_STATS (04.4-20, D-54)', () => {
+    const env = { RAG_PIPELINE: 'v2', RAG_CONTEXT_TOKEN_BUDGET: '7500', RAG_CONTEXT_COMPRESSION: 'true', RAG_RERANK_TIER_CHAT: 'quality', RAG_RERANK_TIER_VOICE: 'fast', RAG_LEXICAL_SEARCH: 'true' };
+
+    it('pool, unset or an invalid value keeps the pinned hashes', async () => {
+      for (const mode of [undefined, '', 'pool', 'corpus']) {
+        resetRagConfigForTests();
+        const withMode = mode === undefined ? env : { ...env, RAG_RERANK_LOCAL_STATS: mode };
+        expect(await requestRetrievalConfigHash(requestFor(withMode))).toBe(PINNED_REQUEST_OFF_HASH);
+        resetRagConfigForTests();
+        expect(await requestRetrievalConfigHash(requestFor({ ...withMode, RAG_LEXICAL_SCORING: 'bm25' }))).toBe(PINNED_REQUEST_BM25_RAW_HASH);
+      }
+      expect(rerankLocalStatsHashBlock(loadRagConfig({ ...env, RAG_RERANK_LOCAL_STATS: 'pool' }))).toEqual({});
+    });
+
+    it('tenant under legacy resolves to pool and adds nothing to the hash', () => {
+      expect(rerankLocalStatsHashBlock(loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_RERANK_LOCAL_STATS: 'tenant' }))).toEqual({});
+    });
+
+    it('effective tenant changes the hash and adds rerank_local_stats', async () => {
+      resetRagConfigForTests();
+      const tenant = await requestRetrievalConfigHash(requestFor({ ...env, RAG_RERANK_LOCAL_STATS: 'tenant' }));
+      expect(tenant).not.toBe(PINNED_REQUEST_OFF_HASH);
+      expect(rerankLocalStatsHashBlock(loadRagConfig({ ...env, RAG_RERANK_LOCAL_STATS: 'tenant' }))).toEqual({ rerank_local_stats: 'tenant' });
     });
   });
 });

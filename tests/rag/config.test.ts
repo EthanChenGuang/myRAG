@@ -50,6 +50,7 @@ const PHASE42_V2_FIELDS = [
   'attributeFilter',
   'lexicalQuantity',
   'lexicalScoring',
+  'rerankLocalStats',
 ];
 
 function withoutPhase42(v2: object): Record<string, unknown> {
@@ -1599,6 +1600,45 @@ describe('Phase 4.4 BM25 document frequency mode (04.4-16, D-44, D-45)', () => {
   test('the variable is part of the memo key', () => {
     const base = loadRagConfig({ ...BM25, RAG_DUP_CLUSTERS: 'true' });
     expect(loadRagConfig({ ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' })).not.toBe(base);
+  });
+});
+
+describe('RAG_RERANK_LOCAL_STATS (04.4-20, D-54, D-55)', () => {
+  const V2 = { RAG_PIPELINE: 'v2' };
+  const statsWarnings = () => configWarnings().filter((line) => line.includes('RAG_RERANK_LOCAL_STATS'));
+
+  test('unset, empty or pool is pool without a warning', () => {
+    expect(loadRagConfig({}).v2.rerankLocalStats).toBe('pool');
+    expect(loadRagConfig(V2).v2.rerankLocalStats).toBe('pool');
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: '' }).v2.rerankLocalStats).toBe('pool');
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'pool' }).v2.rerankLocalStats).toBe('pool');
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('tenant under RAG_PIPELINE=v2 is effective', () => {
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'tenant' }).v2.rerankLocalStats).toBe('tenant');
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'TENANT' }).v2.rerankLocalStats).toBe('tenant');
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('tenant under legacy warns once and is pool', () => {
+    expect(loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_RERANK_LOCAL_STATS: 'tenant' }).v2.rerankLocalStats).toBe('pool');
+    expect(loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_RERANK_LOCAL_STATS: 'tenant', RAG_CONTEXT_TOKEN_BUDGET: '5000' }).v2.rerankLocalStats).toBe('pool');
+    expect(statsWarnings()).toHaveLength(1);
+    expect(statsWarnings()[0]).toContain('RAG_PIPELINE');
+  });
+
+  test('an invalid value warns once and is pool', () => {
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'corpus' }).v2.rerankLocalStats).toBe('pool');
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'corpus', RAG_CONTEXT_TOKEN_BUDGET: '5000' }).v2.rerankLocalStats).toBe('pool');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_RERANK_LOCAL_STATS');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig(V2);
+    expect(loadRagConfig({ ...V2, RAG_RERANK_LOCAL_STATS: 'tenant' })).not.toBe(base);
   });
 });
 

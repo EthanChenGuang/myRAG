@@ -294,6 +294,8 @@ export interface RetrievalConfigHashInput {
   attributeFilter?: RetrievalConfigHashAttributeFilter | null;
   /** D-08: present only while BM25 is the effective lexical scoring (lexicalScoringHashBlock). */
   lexicalScoring?: RetrievalConfigHashLexicalScoring | null;
+  /** 04.4-20 D-54: present only while the effective RAG_RERANK_LOCAL_STATS is tenant (rerankLocalStatsHashBlock). */
+  rerank_local_stats?: 'tenant';
   /** D-14: present only while RAG_TRANSLATION_GLOSSARY is effective for the request (glossaryHashBlock). */
   glossary?: RetrievalConfigHashGlossary | null;
 }
@@ -313,6 +315,11 @@ export function lexicalScoringHashBlock(config: Pick<RagConfig, 'v2'>): Retrieva
   return scoring.dfMode === 'cluster'
     ? { mode: 'bm25', k1: scoring.k1, b: scoring.b, df_mode: 'cluster' }
     : { mode: 'bm25', k1: scoring.k1, b: scoring.b };
+}
+
+/** D-54 (the D-08 rule): empty while the effective mode is pool, so every pre-plan hash keeps its value. */
+export function rerankLocalStatsHashBlock(config: Pick<RagConfig, 'v2'>): { rerank_local_stats?: 'tenant' } {
+  return config.v2.rerankLocalStats === 'tenant' ? { rerank_local_stats: 'tenant' } : {};
 }
 
 function sortKeys(value: unknown): unknown {
@@ -398,6 +405,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.terminology ? { terminology: input.terminology } : {}),
     ...(input.attributeFilter ? { attribute_filter: input.attributeFilter } : {}),
     ...(input.lexicalScoring ? { lexical_scoring: input.lexicalScoring } : {}),
+    ...(input.rerank_local_stats ? { rerank_local_stats: input.rerank_local_stats } : {}),
     ...(input.glossary ? { glossary: input.glossary } : {}),
   };
 }

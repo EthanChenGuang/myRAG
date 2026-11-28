@@ -275,6 +275,15 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
     );
   }
 
+  // D-55: informational only; until plan 04.4-21 no reranker reads the switch, and afterwards tenants without ready statistics keep pool statistics.
+  if (config.v2.rerankLocalStats === 'tenant') {
+    logOnce(
+      'rerank_local_stats_tenant',
+      'warn',
+      'RAG_RERANK_LOCAL_STATS=tenant: tenants without ready lexical statistics are reranked with pool statistics until npm run rag:lexstats -- enable builds them',
+    );
+  }
+
   verdict = {
     status: reasons.length === 0 ? 'ok' : 'degraded',
     icuAvailable,

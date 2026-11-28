@@ -167,6 +167,7 @@
   "RAG_RERANKER": "none",
   "RAG_RERANKING": "true",
   "RAG_RERANKING_STRATEGY": "hybrid",
+  "RAG_RERANK_LOCAL_STATS": "pool",
   "RAG_RERANK_TIER_CHAT": "quality",
   "RAG_RERANK_TIER_VOICE": "fast",
   "RAG_RERANK_VOYAGE_MODEL_BY_LANG": "",

@@ -26,6 +26,7 @@ import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
   lexicalScoringHashBlock,
+  rerankLocalStatsHashBlock,
   securityHashComponent,
   answerRulesHashComponent,
   calcBudgetHashComponent,
@@ -191,6 +192,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(terminology ? { terminology } : {}),
     ...(attributeFilter ? { attributeFilter } : {}),
     lexicalScoring: lexicalScoringHashBlock(config),
+    ...rerankLocalStatsHashBlock(config),
     glossary: glossaryHashBlock(ctx.glossary ?? { enabled: false }),
   });
 }
