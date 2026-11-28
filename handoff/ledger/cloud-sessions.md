@@ -1005,3 +1005,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - 3 open threats are 06-46 live items (owner).
   - OWNER signatures pending: AR-06-01..05.
   - Archived.
+- 01:06Z 06.3-14 DONE d0d6a445 (tests only; 07-37 already wired it) -> t41. Archived.
