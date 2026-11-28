@@ -21,7 +21,7 @@ export interface ReembedCostReport {
   note: string | null;
 }
 
-const PROVIDERS: readonly string[] = ['openai', 'voyage', 'qwen3', 'ft_slot_a', 'ft_slot_b'];
+const PROVIDERS: readonly string[] = ['openai', 'voyage', 'qwen3', 'bge-m3', 'ft_slot_a', 'ft_slot_b'];
 const SLOT_PROVIDERS: readonly string[] = ['ft_slot_a', 'ft_slot_b'];
 
 export const SLOT_NOTE =
@@ -32,7 +32,7 @@ export const ESTIMATE_NOTE =
 
 /**
  * Prices tokens per tenant with the catalog price of the run's model (embeddings/prices.ts); the provider's
- * default model when none is given. OpenAI counts are exact; Voyage and Qwen3 counts come from another
+ * default model when none is given. OpenAI counts are exact; Voyage, Qwen3 and BGE-M3 counts come from another
  * tokenizer, so the report says they are estimates.
  */
 export function estimateReembedCost(provider: string, totals: Record<string, TenantTokenTotals>, model?: string): ReembedCostReport {
