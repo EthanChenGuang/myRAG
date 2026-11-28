@@ -1166,3 +1166,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     - 4.4: session_01X342siScUe5821Y1A8MRqu (on t42)
     - 7: session_01X342sjikryTA7Cv2W9WYTA (on 07-31)
 - 06:16Z verify 4.4 DONE (verify/04.4-t42) and archived. gaps_found. Gap 3 (t41 merge) was already done in t42. Gap 2 (gate re-run) is under way in t42. Gap 4 (AGENTS.md re-run rules) goes in the docs batch. Owner items are in MORNING.
+- 06:20Z verify 6.3 DONE (verify/06.3 0c428e69) and archived. gaps_found. Dispatched quick-63-gaps for G1-G5 plus the AGENTS 4.4 re-run rule (base t42 7c4d2ed5).
