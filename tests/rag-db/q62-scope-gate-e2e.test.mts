@@ -78,8 +78,8 @@ describe('Phase 6.2 scope gate through the eval route (D-26, D-27, D-29)', () =>
   let answerableScore = 0;
   let offDomainScore = 0;
 
-  test('with the committed empty calibration both questions retrieve and the score is traced', async () => {
-    calibration.resetScopeGateCalibrationForTests();
+  test('with an empty calibration both questions retrieve and the score is traced', async () => {
+    calibration.setScopeGateCalibrationForTests({ schema_version: 1, recorded_at: '2026-11-27T00:00:00Z', source: 'fixture', cells: [] });
     const answerable = await postEval(ANSWERABLE);
     const offDomain = await postEval(OFF_DOMAIN);
     for (const trace of [answerable, offDomain]) {

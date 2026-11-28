@@ -37,8 +37,12 @@ EXIT_CRASH = 70
 
 FIXTURE_DIR = REPO_ROOT / "eval" / "fixtures"
 FIXTURE_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
-# Isolated fixture tenants whose documents the fixture set also quotes (06.2-34: scoped, glossary, off-domain items).
-FIXTURE_ISOLATED_CORPUS_DIRS = (REPO_ROOT / "eval" / "fixtures" / "q62-corpus",)
+# Isolated fixture tenants whose documents the fixture set also quotes (06.2-34: scoped, glossary, off-domain items;
+# 06.2-41: the dominant-language tenant).
+FIXTURE_ISOLATED_CORPUS_DIRS = (
+    REPO_ROOT / "eval" / "fixtures" / "q62-corpus",
+    REPO_ROOT / "eval" / "fixtures" / "q62-dominant-corpus",
+)
 FIXTURE_SET_ID = "fixture"
 QUALITY_GATES_PATH = REPO_ROOT / "eval" / "config" / "quality-gates.json"
 DEFAULT_RE_REVIEW_DAYS = 90

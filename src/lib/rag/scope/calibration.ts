@@ -26,9 +26,9 @@ export function parseScopeGateCalibration(data: unknown): ScopeGateCalibration |
 }
 
 let override: { data: unknown } | null = null;
-let cached: Map<string, ScopeCell> | null = null;
+let cached: { source: ScopeGateCalibration['source']; cells: Map<string, ScopeCell> } | null = null;
 
-function cells(): Map<string, ScopeCell> {
+function cells(): { source: ScopeGateCalibration['source']; cells: Map<string, ScopeCell> } {
   if (cached) return cached;
   const parsed = parseScopeGateCalibration(override ? override.data : rawCalibration);
   const map = new Map<string, ScopeCell>();
@@ -40,18 +40,29 @@ function cells(): Map<string, ScopeCell> {
       map.set(`${cell.embedding_profile_id}|${cell.rag_mode}`, { threshold: cell.threshold, margin: cell.margin });
     }
   }
-  cached = map;
-  return map;
+  cached = { source: parsed?.source ?? 'fixture', cells: map };
+  return cached;
 }
 
 /**
  * D-27, P-36: the calibrated threshold and margin for an embedding profile and RAG mode, read from the committed
  * eval/config/scope-gate.json (written only by `python -m rag_eval.calibrate scope`). Null for a missing or uncalibrated cell, an
- * invalid file and the bypass mode, so the gate stays score-only.
+ * invalid file and the bypass mode, so the gate stays score-only. 06.2-26 (T-06.2-103): a `fixture` calibration decides eval requests
+ * only, so fixture evidence never refuses a chat, embed or voice question.
  */
-export function scopeGateCalibrationFor(profileId: string, ragMode: RagMode): ScopeCell | null {
+export function scopeGateCalibrationFor(profileId: string, ragMode: RagMode, options: { evalRun?: boolean } = {}): ScopeCell | null {
   if (ragMode === 'bypass') return null;
-  return cells().get(`${profileId}|${ragMode}`) ?? null;
+  const loaded = cells();
+  if (loaded.source === 'fixture' && options.evalRun !== true) return null;
+  return loaded.cells.get(`${profileId}|${ragMode}`) ?? null;
+}
+
+/**
+ * 06.2-38: the committed calibration as the admin route shows it (D-27, read-only): null for an invalid file, else its source, recording
+ * time and every cell in file order. The calibration target percentage is not part of the file and is never added here.
+ */
+export function scopeGateCalibrationView(): ScopeGateCalibration | null {
+  return parseScopeGateCalibration(override ? override.data : rawCalibration);
 }
 
 /** Tests only: replaces the committed file's content until reset. */

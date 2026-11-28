@@ -64,11 +64,11 @@ function snapshot(vector: number[], partial: Partial<CentroidSnapshot> = {}): Ce
 const NEAR = [0.1, 0.2, 0.3];
 const FAR = [1, -1, 0];
 
-function calibrate(threshold: number, margin: number, mode: RagMode = 'strict') {
+function calibrate(threshold: number, margin: number, mode: RagMode = 'strict', source: 'fixture' | 'live' = 'live') {
   setScopeGateCalibrationForTests({
     schema_version: 1,
     recorded_at: '2026-11-27T00:00:00Z',
-    source: 'fixture',
+    source,
     cells: [
       {
         embedding_profile_id: PROFILE_ID,
@@ -238,6 +238,17 @@ describe('scope_gate stage in the v2 pipeline (D-26)', () => {
     expect(result.scopeGate).toMatchObject({ label: 'unsure', reason: 'uncalibrated' });
     expect(typeof result.scopeGate!.score).toBe('number');
     expect(stages.find((row) => row.name === 'scope_gate')).toMatchObject({ status: 'ok', detail: 'unsure' });
+  });
+
+  it('06.2-26: a fixture calibration decides eval requests only; chat stays unsure and retrieves', async () => {
+    calibrate(0.5, 0.05, 'strict', 'fixture');
+    snapshotMock.mockReturnValue(snapshot(FAR));
+    const chat = await run(LAYER_ON);
+    expect(chat.result.scopeGate).toMatchObject({ label: 'unsure', reason: 'uncalibrated' });
+    expect(chat.seen.searches).toBeGreaterThan(0);
+    const evalRun = await run(LAYER_ON, { profile: 'eval' });
+    expect(evalRun.result.scopeGate).toMatchObject({ label: 'out_of_scope', reason: 'below_threshold' });
+    expect(evalRun.seen.searches).toBe(0);
   });
 
   it('unsure inside the margin and in_scope both search', async () => {
