@@ -609,12 +609,32 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--gates", type=Path, help="eval/config/quality-gates.json: also run the absolute gate (D-06)")
     parser.add_argument("--gates-mode", choices=["enforce", "report"], help="report prints the absolute checks only (default enforce)")
+    parser.add_argument(
+        "--gates-report-only",
+        help="comma-separated ceilings (false_answer_rate, false_refusal_rate) that stay report-only while every other absolute check gates",
+    )
     parser.add_argument("--tier", choices=["smoke", "nightly"], default="smoke", help="floor tier of the absolute gate")
     parser.add_argument("--manifest", type=Path, help="golden-set manifest of the report, for the set-version rule (D-47)")
     args = parser.parse_args(argv)
     if args.gates_mode is not None and args.gates is None:
         print("error: --gates-mode needs --gates", file=sys.stderr)
         return EXIT_MISMATCH
+    report_only: tuple[str, ...] = ()
+    if args.gates_report_only is not None:
+        if args.gates is None:
+            print("error: --gates-report-only needs --gates", file=sys.stderr)
+            return EXIT_MISMATCH
+        if args.gates_mode == "report":
+            print("error: --gates-report-only applies in enforce mode; --gates-mode report already reports every check", file=sys.stderr)
+            return EXIT_MISMATCH
+        from rag_eval.absolute_gate import validate_report_only_checks
+
+        report_only = tuple(name.strip() for name in args.gates_report_only.split(","))
+        try:
+            validate_report_only_checks(report_only)
+        except ValueError as exc:
+            print(f"error: --gates-report-only: {exc}", file=sys.stderr)
+            return EXIT_MISMATCH
 
     try:
         report = EvalReport.model_validate_json(_read(resolve_cli_path(args.report)))
@@ -630,7 +650,7 @@ def _main(argv: list[str] | None = None) -> int:
     if gates is not None:
         from rag_eval import absolute_gate
 
-        absolute = absolute_gate.evaluate(report, gates, tier=args.tier, mode=args.gates_mode or "enforce")
+        absolute = absolute_gate.evaluate(report, gates, tier=args.tier, mode=args.gates_mode or "enforce", report_only_checks=report_only)
         result = result.model_copy(update={"absolute": absolute})
     out_dir = resolve_cli_path(args.out)
     _write_text(out_dir / "gate.json", result.model_dump_json(indent=2) + "\n")

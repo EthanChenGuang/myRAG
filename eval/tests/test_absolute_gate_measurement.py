@@ -42,11 +42,31 @@ def prechunked_false_answer_problems(record: dict) -> list[str]:
     return problems
 
 
+FAILED_CODES = {"false_answer_rate": "false_answer_rate_exceeded", "false_refusal_rate": "false_refusal_rate_exceeded"}
+# Gap 3 (quick-53): the prechunked tiers gate every check except false refusal, which stays report-only until owner H-10.
+PRECHUNKED_REPORT_ONLY = {"eval/out/smoke": ["false_refusal_rate"], "eval/out/smoke-legacy": ["false_refusal_rate"], "eval/out/smoke-sec": ["false_refusal_rate"]}
+INGEST_OUTS = ("eval/out/smoke-ingest", "eval/out/smoke-legacy-ingest")
+
+
 def mode_problems(record: dict) -> list[str]:
-    """Each stage after tier: enforce iff its would-be exit code is 0; a report tier names a failing check or a reason."""
+    """Each stage after tier: enforce iff its would-be exit code is 0 once its report-only checks are set aside; a report tier
+    names a failing check or a reason."""
     problems: list[str] = []
     for entry in _after(record):
         name, mode = entry["name"], entry.get("mode")
+        listed = entry.get("report_only_checks")
+        if listed is not None:
+            allowed = {FAILED_CODES.get(check) for check in listed}
+            others = [code for code in entry.get("failed") or [] if code not in allowed]
+            if not listed or any(check not in FAILED_CODES for check in listed):
+                problems.append(f"{name}: report_only_checks {listed!r} must name ceilings")
+            elif mode == "enforce" and (others or entry.get("enforced_exit_code") != 0):
+                problems.append(f"{name}: enforce with report-only {listed} but failing {others}")
+            elif mode == "report" and not others:
+                problems.append(f"{name}: report although only its report-only checks fail")
+            elif mode not in ("enforce", "report"):
+                problems.append(f"{name}: mode {mode!r}")
+            continue
         if mode == "enforce":
             if entry.get("exit_code") != 0 or entry.get("failed"):
                 problems.append(f"{name}: enforce with exit code {entry.get('exit_code')} and failed {entry.get('failed')}")
@@ -116,4 +136,27 @@ def test_a_hand_set_mode_that_contradicts_the_measurement_is_caught(record):
     mutated = copy.deepcopy(record)
     tier = _prechunked(mutated)
     tier["mode"] = "report" if tier["mode"] == "enforce" else "enforce"
+    assert mode_problems(mutated)
+
+
+def test_the_prechunked_tiers_enforce_every_check_except_false_refusal(record):
+    """Gap 3 (05.3-VERIFICATION): false_answer_rate gates the prechunked tiers now; false_refusal_rate waits for owner H-10."""
+    after = {entry.get("out"): entry for entry in _after(record)}
+    for out, listed in PRECHUNKED_REPORT_ONLY.items():
+        entry = after.get(out)
+        assert entry is not None, out
+        assert entry.get("report_only_checks") == listed, out
+        assert entry.get("mode") == "enforce" and entry.get("enforced_exit_code") == 0, out
+    for out in INGEST_OUTS:
+        entry = after[out]
+        assert "report_only_checks" not in entry and entry["mode"] == "enforce", out
+
+
+def test_a_report_only_tier_failing_another_check_is_caught(record):
+    mutated = copy.deepcopy(record)
+    tier = _prechunked(mutated)
+    tier["report_only_checks"] = ["false_refusal_rate"]
+    tier["mode"] = "enforce"
+    tier["enforced_exit_code"] = 0
+    tier["failed"] = ["false_refusal_rate_exceeded", "false_answer_rate_exceeded"]
     assert mode_problems(mutated)

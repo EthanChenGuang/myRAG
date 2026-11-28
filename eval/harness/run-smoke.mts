@@ -68,6 +68,7 @@ async function main(): Promise<number> {
       'allow-live-cache': { type: 'boolean', default: false },
       gates: { type: 'string' },
       'gates-mode': { type: 'string' },
+      'gates-report-only': { type: 'string' },
       'golden-manifest': { type: 'string' },
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
@@ -108,6 +109,9 @@ async function main(): Promise<number> {
     console.error('[Eval Harness] --gates-mode must be enforce or report');
     return 2;
   }
+  // Gap 3 (quick-53): ceilings that stay report-only while every other absolute check gates; rag_eval.gate validates the names.
+  const gatesReportOnlyFlag = values['gates-report-only'];
+  const gatesReportOnly = gatesReportOnlyFlag !== undefined ? gatesReportOnlyFlag.split(',').map((name) => name.trim()) : undefined;
   const goldenManifestFlag = values['golden-manifest']?.trim();
   if (goldenManifestFlag !== undefined && goldenManifestFlag === '') {
     console.error('[Eval Harness] --golden-manifest must not be empty');
@@ -345,14 +349,20 @@ async function main(): Promise<number> {
 
   if (!gate) return 0;
 
-  const gatesResolution = resolveGatesMode(gatesMode, {
-    fixtureMode,
-    live: Boolean(baseUrl),
-    customInputs: gatesFlag !== undefined || values.golden !== undefined,
-  });
+  const gatesResolution = resolveGatesMode(
+    gatesMode,
+    {
+      fixtureMode,
+      live: Boolean(baseUrl),
+      customInputs: gatesFlag !== undefined || values.golden !== undefined,
+    },
+    MEASUREMENT_PATH,
+    gatesReportOnly,
+  );
   if (gatesResolution.source === 'measured_tier') {
+    const reportOnly = gatesResolution.reportOnly.length > 0 ? ` with report-only ${gatesResolution.reportOnly.join(',')}` : '';
     console.log(
-      `[Eval Harness] absolute gate mode ${gatesResolution.mode}: the mode ${path.relative(REPO_ROOT, MEASUREMENT_PATH)} records for tier ${gatesResolution.tier} (pr-smoke runs it so); --gates-mode enforce|report overrides`,
+      `[Eval Harness] absolute gate mode ${gatesResolution.mode}${reportOnly}: the mode ${path.relative(REPO_ROOT, MEASUREMENT_PATH)} records for tier ${gatesResolution.tier} (pr-smoke runs it so); --gates-mode enforce|report overrides`,
     );
   }
 
@@ -369,6 +379,7 @@ async function main(): Promise<number> {
     '--gates',
     gatesFile,
     ...(gatesResolution.mode !== undefined ? ['--gates-mode', gatesResolution.mode] : []),
+    ...(gatesResolution.reportOnly.length > 0 ? ['--gates-report-only', gatesResolution.reportOnly.join(',')] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);
   return gateCode;

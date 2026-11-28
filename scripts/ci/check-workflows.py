@@ -88,6 +88,28 @@ MONITOR_JOB = "monitor"
 JUDGE_CALIBRATION_SKIP_NOTICE = "::notice::judge keys or generator model not configured, skipping judge calibration"
 WEEKLY_LIFECYCLE = ("rag_eval.drift", "rag_eval.golden_set stale-scan", "rag_eval.golden_set re-review")
 MONITOR_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping monitor"
+# Gap 1 (05.3-VERIFICATION): the settings the scheduled daily monitor reads, each from a repository secret or variable.
+MONITOR_STEP_ENV = {
+    "RAG_MONITOR": "vars",
+    "RAG_RETRIEVAL_LOG": "vars",
+    "LANGFUSE_ENABLED": "vars",
+    "LANGFUSE_BASE_URL": "vars",
+    "LANGFUSE_PUBLIC_KEY": "secrets",
+    "LANGFUSE_SECRET_KEY": "secrets",
+}
+WEEKLY_SAMPLE_JOB = "weekly-sample"
+WEEKLY_SAMPLE_RUN = "npm run rag:monitor -- sample"
+WEEKLY_SAMPLE_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping the weekly sample"
+# Gap 2: the weekly representative sample (EVAL-27) and the cluster refit EVAL-28 drift reads.
+WEEKLY_SAMPLE_STEP_ENV = {
+    "NEXT_PUBLIC_SUPABASE_URL": "secrets",
+    "SUPABASE_SERVICE_ROLE_KEY": "secrets",
+    "RAG_REPRESENTATIVE_SAMPLE": "vars",
+    "RAG_RETRIEVAL_LOG": "vars",
+    "RAG_DOMAIN_EXPERT_REVIEW": "vars",
+    "OPENAI_API_KEY": "secrets",
+    "OPENROUTER_API_KEY": "secrets",
+}
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
 P52_SMOKE_STEP = "npm run test-rag -- --phase52 --out eval/out/smoke-p52"
@@ -1000,12 +1022,70 @@ def check_monitor_job(data: dict, errors: list[str]) -> None:
         for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
             if secret not in runner_env:
                 errors.append(f"{name}: the monitor step must receive {secret} through step env")
+        _check_step_env_sources(f"{name}: the monitor step", runner_env, MONITOR_STEP_ENV, errors)
     if "npm ci --ignore-scripts" not in step_text(job):
         errors.append(f"{name} must install with npm ci --ignore-scripts")
     for step in steps:
         if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
             errors.append(f"{name} must not upload an artifact")
     _check_no_leaks(name, steps, errors, private=False)
+
+
+def _check_step_env_sources(label: str, step_env: dict, required: dict[str, str], errors: list[str]) -> None:
+    """Each required name reaches the step as exactly ${{ <secrets|vars>.<NAME> }}, never as a hard-coded value."""
+    for env_name, source in required.items():
+        if env_name not in step_env:
+            errors.append(f"{label} must receive {env_name} through step env")
+            continue
+        expected = f"${{{{{source}.{env_name}}}}}"
+        if str(step_env[env_name]).replace(" ", "") != expected:
+            errors.append(f"{label} must take {env_name} as ${{{{ {source}.{env_name} }}}}")
+
+
+def check_weekly_sample_job(data: dict, errors: list[str]) -> None:
+    """Gap 2: the weekly representative sample runs on the weekly schedule, gated like the monitor job, report-only."""
+    name = f"nightly: {WEEKLY_SAMPLE_JOB}"
+    flag = "HAS_MONITOR_SECRETS"
+    jobs = data.get("jobs") or {}
+    job = jobs.get(WEEKLY_SAMPLE_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{WEEKLY_SAMPLE_JOB}' missing")
+        return
+    condition = str(job.get("if", ""))
+    if f"github.event.schedule == '{WEEKLY_CRON}'" not in condition or f"github.event.schedule != '{WEEKLY_CRON}'" in condition:
+        errors.append(f"{name} must run only on the weekly schedule '{WEEKLY_CRON}' or workflow_dispatch")
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        if f"secrets.{secret} != ''" not in flag_expr:
+            errors.append(f"{name}: job env {flag} must require secrets.{secret}")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or WEEKLY_SAMPLE_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"{name}: only the skip-notice step may run without the {flag} == 'true' condition")
+    runner = next((s for s in steps if WEEKLY_SAMPLE_RUN in str(s.get("run", ""))), None)
+    if runner is None:
+        errors.append(f"{name} must run '{WEEKLY_SAMPLE_RUN}'")
+    else:
+        if runner.get("continue-on-error") is not True:
+            errors.append(f"{name}: the sample step is report-only and must set continue-on-error: true")
+        _check_step_env_sources(f"{name}: the sample step", runner.get("env") or {}, WEEKLY_SAMPLE_STEP_ENV, errors)
+    if "npm ci --ignore-scripts" not in step_text(job):
+        errors.append(f"{name} must install with npm ci --ignore-scripts")
+    for step in steps:
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact")
+    _check_no_leaks(name, steps, errors, private=False)
+    report = jobs.get(WEEKLY_JOB) or {}
+    needs = report.get("needs")
+    needs = [needs] if isinstance(needs, str) else list(needs or [])
+    if WEEKLY_SAMPLE_JOB not in needs:
+        errors.append(f"nightly: {WEEKLY_JOB} needs must list {WEEKLY_SAMPLE_JOB}, so drift reads the refreshed clusters")
+    if not str(report.get("if", "")).replace(" ", "").startswith("always()&&"):
+        errors.append(f"nightly: {WEEKLY_JOB} must start its if with always() && so a skipped or failed sample never skips the report")
 
 
 JUDGE_CALIBRATION_FLAG = "HAS_JUDGE_KEYS"
@@ -1094,6 +1174,7 @@ def check_nightly(errors: list[str]) -> None:
     check_weekly_report(data, errors)
     check_tenant_nightly(data, errors)
     check_monitor_job(data, errors)
+    check_weekly_sample_job(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
@@ -1163,11 +1244,19 @@ def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
 
 RELEASE_GATE_CONTEXT = "rag-release-gate"
 RELEASE_GATE_JOB = "gate"
-RELEASE_GATE_JOB_PERMISSIONS = {"contents": "read", "statuses": "write", "checks": "read"}
+# T-05.3-391: the gate job runs the gated sha's code with read permissions only (checks: read for the pr_smoke part).
+RELEASE_GATE_JOB_PERMISSIONS = {"contents": "read", "checks": "read"}
+RELEASE_STATUS_JOBS = {
+    "status-pending": {"contents": "read", "statuses": "write"},
+    "status-final": {"contents": "read", "statuses": "write", "actions": "read"},
+}
 RELEASE_GATE_RUN = "python -m rag_eval.release_gate run"
 RELEASE_GATE_OVERRIDE = "python -m rag_eval.release_gate override"
 RELEASE_GATE_POSTER = "node scripts/ci/post-release-status.mjs"
 RELEASE_GATE_SHA_PATTERN = "^[0-9a-f]{40}$"
+RELEASE_GATE_ANCESTOR = 'git merge-base --is-ancestor "$GATE_SHA" origin/main'
+RELEASE_GATE_DOWNLOAD = 'gh run download "$GITHUB_RUN_ID" -n rag-release-gate'
+RELEASE_GATE_TARGET_URL = "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
 
 def _step_index(steps: list[dict], needle: str) -> int | None:
@@ -1200,19 +1289,57 @@ def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set
     if not isinstance(concurrency, dict) or concurrency.get("cancel-in-progress") is not False or "sha" not in str(concurrency.get("group", "")):
         errors.append(f"{name}: concurrency must be grouped per sha with cancel-in-progress false")
 
+    run_name = str(data.get("run-name", "")).replace(" ", "")
+    if run_name != f"{RELEASE_GATE_CONTEXT}${{{{inputs.sha||github.sha}}}}":
+        errors.append(
+            f"{name}: run-name must be '{RELEASE_GATE_CONTEXT} ${{{{ inputs.sha || github.sha }}}}' (promote-production.mjs binds a status to its run by it)"
+        )
+
     jobs = data.get("jobs") or {}
+    allowed_writers = sorted(RELEASE_STATUS_JOBS)
     for jname, job in jobs.items():
-        if jname == RELEASE_GATE_CONTEXT or str((job or {}).get("name", "")) == RELEASE_GATE_CONTEXT:
+        job = job or {}
+        if jname == RELEASE_GATE_CONTEXT or str(job.get("name", "")) == RELEASE_GATE_CONTEXT:
             errors.append(f"{name}: no job may be named {RELEASE_GATE_CONTEXT} (a check run would shadow the commit status)")
-        perms = (job or {}).get("permissions")
-        if jname != RELEASE_GATE_JOB and isinstance(perms, dict) and any(v == "write" for v in perms.values()):
-            errors.append(f"{name}: only job '{RELEASE_GATE_JOB}' may hold a write permission")
+        perms = job.get("permissions")
+        if jname not in RELEASE_STATUS_JOBS and isinstance(perms, dict) and any(v == "write" for v in perms.values()):
+            errors.append(f"{name}: only the status jobs ({', '.join(allowed_writers)}) may hold a write permission, not job '{jname}'")
+        for step in all_steps(job):
+            run = str(step.get("run", ""))
+            if "${{" in run:
+                errors.append(f"{name}: inputs, secrets and contexts reach run scripts only through env, found '${{{{' in a run step")
+            if "secrets." in run or "inputs." in run:
+                errors.append(f"{name}: inputs and secrets must be passed through step env, not interpolated into run")
+            if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+                errors.append(f"{name}: a step appears to echo a secret")
+            if str(step.get("uses", "")).startswith("actions/checkout@") and (step.get("with") or {}).get("persist-credentials") is not False:
+                errors.append(f"{name}: job '{jname}': checkout must set persist-credentials: false")
+    if known_refs is not None:
+        for ref in uses_refs(data):
+            if ref not in known_refs:
+                errors.append(f"{name}: uses '{ref}' is not a pinned action already used by pr-smoke or nightly")
+
+    for jname, expected in RELEASE_STATUS_JOBS.items():
+        sjob = jobs.get(jname)
+        if sjob is None:
+            errors.append(f"{name}: job '{jname}' missing")
+            continue
+        if sjob.get("permissions") != expected:
+            errors.append(f"{name}: job '{jname}' permissions must be exactly {expected}, got {sjob.get('permissions')!r}")
+        if "secrets." in yaml_text(sjob):
+            errors.append(f"{name}: job '{jname}' must not read a secret")
+        for step in all_steps(sjob):
+            if str(step.get("uses", "")).startswith("actions/checkout@") and "ref" in (step.get("with") or {}):
+                errors.append(f"{name}: job '{jname}': checkout must not set a ref; it runs this workflow's own github.sha")
+
     job = jobs.get(RELEASE_GATE_JOB)
     if job is None:
         errors.append(f"{name}: job '{RELEASE_GATE_JOB}' missing")
         return
     if job.get("permissions") != RELEASE_GATE_JOB_PERMISSIONS:
         errors.append(f"{name}: job '{RELEASE_GATE_JOB}' permissions must be exactly {RELEASE_GATE_JOB_PERMISSIONS}, got {job.get('permissions')!r}")
+    if "status-pending" not in _needs(job):
+        errors.append(f"{name}: gate must need status-pending, so the pending status is posted before the gate runs")
     env = job.get("env") or {}
     if "inputs.sha" not in str(env.get("GATE_SHA", "")) or "github.sha" not in str(env.get("GATE_SHA", "")):
         errors.append(f"{name}: job env GATE_SHA must come from inputs.sha or github.sha")
@@ -1222,53 +1349,31 @@ def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set
             errors.append(f"{name}: job env HAS_JUDGE_KEYS must require secrets.{secret}")
 
     steps = all_steps(job)
-    for step in steps:
-        run = str(step.get("run", ""))
-        if "${{" in run:
-            errors.append(f"{name}: inputs, secrets and contexts reach run scripts only through env, found '${{{{' in a run step")
-        if "secrets." in run or "inputs." in run:
-            errors.append(f"{name}: inputs and secrets must be passed through step env, not interpolated into run")
-        if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
-            errors.append(f"{name}: a step appears to echo a secret")
-    if known_refs is not None:
-        for ref in uses_refs(data):
-            if ref not in known_refs:
-                errors.append(f"{name}: uses '{ref}' is not a pinned action already used by pr-smoke or nightly")
-
     validate = next((i for i, s in enumerate(steps) if RELEASE_GATE_SHA_PATTERN in str(s.get("run", "")) and "GATE_SHA" in str(s.get("run", ""))), None)
     if validate != 0:
         errors.append(f"{name}: the first step must check GATE_SHA against {RELEASE_GATE_SHA_PATTERN}")
-    pending = next(
-        (
-            i
-            for i, s in enumerate(steps)
-            if "state=pending" in str(s.get("run", "")) and RELEASE_GATE_CONTEXT in str(s.get("run", "")) and "/statuses/" in str(s.get("run", ""))
-        ),
-        None,
-    )
+    for step in steps:
+        run = str(step.get("run", ""))
+        if "/statuses/" in run or RELEASE_GATE_POSTER in run:
+            errors.append(f"{name}: job '{RELEASE_GATE_JOB}' must not post a commit status; only the status jobs do")
     gate = _step_index(steps, RELEASE_GATE_RUN)
     override = _step_index(steps, RELEASE_GATE_OVERRIDE)
-    poster = _step_index(steps, RELEASE_GATE_POSTER)
     checkout = next((i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("actions/checkout@")), None)
+    _check_ancestor(name, RELEASE_GATE_JOB, steps, checkout, errors)
     if gate is None:
         errors.append(f"{name}: no step runs '{RELEASE_GATE_RUN}'")
     if override is None:
         errors.append(f"{name}: no step runs '{RELEASE_GATE_OVERRIDE}'")
-    if pending is None or any(i is not None and pending > i for i in (gate, override)):
-        errors.append(f"{name}: a pending {RELEASE_GATE_CONTEXT} status must be posted before the gate and override steps")
     if checkout is None or str((steps[checkout].get("with") or {}).get("ref", "")).replace(" ", "") != "${{env.GATE_SHA}}":
         errors.append(f"{name}: checkout must check out ref ${{{{ env.GATE_SHA }}}}")
-    elif any(i is not None and checkout > i for i in (gate, override)):
-        errors.append(f"{name}: checkout must come before the gate and override steps")
-    if poster is None:
-        errors.append(f"{name}: no step runs '{RELEASE_GATE_POSTER}'")
     else:
-        if not str(steps[poster].get("if", "")).replace(" ", "").startswith("always()"):
-            errors.append(f"{name}: the status posting step must run with if: always()")
-        if any(i is not None and poster < i for i in (gate, override)):
-            errors.append(f"{name}: the status posting step must come after the gate and override steps")
-        if "GH_TOKEN" not in (steps[poster].get("env") or {}):
-            errors.append(f"{name}: the status posting step must receive GH_TOKEN through step env")
+        if any(i is not None and checkout > i for i in (gate, override)):
+            errors.append(f"{name}: checkout must come before the gate and override steps")
+        if (steps[checkout].get("with") or {}).get("fetch-depth") != 0:
+            errors.append(f"{name}: the gate checkout must set fetch-depth: 0 so origin/main is there for the ancestor check")
+    uploads = [s for s in steps if str(s.get("uses", "")).startswith("actions/upload-artifact@")]
+    if not any(str((s.get("with") or {}).get("name", "")) == RELEASE_GATE_CONTEXT and str(s.get("if", "")).replace(" ", "").startswith("always()") for s in uploads):
+        errors.append(f"{name}: job '{RELEASE_GATE_JOB}' must upload the {RELEASE_GATE_CONTEXT} artifact with if: always()")
     if gate is not None:
         gate_env = steps[gate].get("env") or {}
         for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
@@ -1289,8 +1394,85 @@ def check_release_gate(data: dict, text: str, errors: list[str], known_refs: set
         if "override_reason != ''" not in str(ostep.get("if", "")):
             errors.append(f"{name}: the override step must run only with an override reason")
 
+    pending_job = jobs.get("status-pending")
+    if pending_job is not None:
+        psteps = all_steps(pending_job)
+        if next((i for i, s in enumerate(psteps) if RELEASE_GATE_SHA_PATTERN in str(s.get("run", ""))), None) != 0:
+            errors.append(f"{name}: the first step of status-pending must check GATE_SHA against {RELEASE_GATE_SHA_PATTERN}")
+        pcheckout = next((i for i, s in enumerate(psteps) if str(s.get("uses", "")).startswith("actions/checkout@")), None)
+        ancestor = _check_ancestor(name, "status-pending", psteps, pcheckout, errors)
+        pending = next(
+            (
+                i
+                for i, s in enumerate(psteps)
+                if "state=pending" in str(s.get("run", "")) and RELEASE_GATE_CONTEXT in str(s.get("run", "")) and "/statuses/" in str(s.get("run", ""))
+            ),
+            None,
+        )
+        if pending is None:
+            errors.append(f"{name}: status-pending must post a pending {RELEASE_GATE_CONTEXT} status")
+        else:
+            if RELEASE_GATE_TARGET_URL not in str(psteps[pending].get("run", "")):
+                errors.append(f"{name}: the pending status must carry {RELEASE_GATE_TARGET_URL}")
+            if ancestor is not None and pending < ancestor:
+                errors.append(f"{name}: status-pending must post only after the ancestor check")
 
-PROMOTE_JOB_PERMISSIONS = {"contents": "read", "statuses": "read"}
+    final_job = jobs.get("status-final")
+    if final_job is not None:
+        needs = _needs(final_job)
+        if RELEASE_GATE_JOB not in needs or "status-pending" not in needs:
+            errors.append(f"{name}: status-final must need gate and status-pending")
+        if str(final_job.get("if", "")).replace(" ", "") != "always()&&needs.status-pending.result=='success'":
+            errors.append(f"{name}: status-final must run with if: always() && needs.status-pending.result == 'success'")
+        fsteps = all_steps(final_job)
+        for step in fsteps:
+            run = str(step.get("run", ""))
+            if re.search(r"\bnpm\s+(ci|install)\b|\bnpx\b|\buv\b|\bpython3?\b|rag_eval", run) or str(step.get("uses", "")).startswith("astral-sh/setup-uv@"):
+                errors.append(f"{name}: job 'status-final' must run no repository install or gate code; it reads only the result artifact")
+        download = _step_index(fsteps, RELEASE_GATE_DOWNLOAD)
+        poster = _step_index(fsteps, RELEASE_GATE_POSTER)
+        if download is None:
+            errors.append(f"{name}: job 'status-final' must download the result with '{RELEASE_GATE_DOWNLOAD}'")
+        if poster is None:
+            errors.append(f"{name}: no step runs '{RELEASE_GATE_POSTER}'")
+        else:
+            if not str(fsteps[poster].get("if", "")).replace(" ", "").startswith("always()"):
+                errors.append(f"{name}: the status posting step must run with if: always()")
+            if download is not None and poster < download:
+                errors.append(f"{name}: the status posting step must come after the result download")
+            if "GH_TOKEN" not in (fsteps[poster].get("env") or {}):
+                errors.append(f"{name}: the status posting step must receive GH_TOKEN through step env")
+
+
+def _needs(job: dict) -> list[str]:
+    needs = job.get("needs")
+    return [needs] if isinstance(needs, str) else [str(n) for n in (needs or [])]
+
+
+def yaml_text(value: object) -> str:
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _check_ancestor(name: str, jname: str, steps: list[dict], checkout: int | None, errors: list[str]) -> int | None:
+    """T-05.3-391: the job refuses a GATE_SHA that is not on main right after its checkout, before any repository code."""
+    ancestor = _step_index(steps, RELEASE_GATE_ANCESTOR)
+    if ancestor is None:
+        errors.append(f"{name}: job '{jname}' must refuse a GATE_SHA that is not an ancestor of origin/main ('{RELEASE_GATE_ANCESTOR}')")
+        return None
+    for i, step in enumerate(steps):
+        if i == ancestor or i == checkout:
+            continue
+        run = str(step.get("run", ""))
+        is_validation = RELEASE_GATE_SHA_PATTERN in run and "GATE_SHA" in run
+        if i < ancestor and not is_validation:
+            errors.append(f"{name}: job '{jname}': the ancestor check must come before any step that runs repository code")
+            break
+    if checkout is None or ancestor < checkout:
+        errors.append(f"{name}: job '{jname}': the ancestor check must come right after the checkout")
+    return ancestor
+
+
+PROMOTE_JOB_PERMISSIONS = {"contents": "read", "statuses": "read", "actions": "read"}
 PROMOTE_RUN = 'node scripts/ci/promote-production.mjs --sha "$PROMOTE_SHA"'
 
 
@@ -1372,11 +1554,32 @@ def latest_tier_modes(measurement_path: Path = MEASUREMENT) -> dict[str, str]:
     return {str(entry["out"]): str(entry.get("mode") or "") for _, entry in latest.values() if entry.get("out")}
 
 
+def report_only_checks_by_out(measurement_path: Path = MEASUREMENT) -> dict[str, list[str]]:
+    """Gap 3 (quick-53): the report-only ceilings of each measured tier's latest stage, keyed by its --out directory."""
+    data = json.loads(measurement_path.read_text(encoding="utf-8"))
+    latest: dict[str, tuple[int, dict]] = {}
+    for entry in data.get("tiers") or []:
+        name = str(entry.get("name"))
+        rank = STAGE_ORDER.get(str(entry.get("stage")), -1)
+        if name not in latest or rank > latest[name][0]:
+            latest[name] = (rank, entry)
+    return {
+        str(entry["out"]): [str(check) for check in entry["report_only_checks"]]
+        for _, entry in latest.values()
+        if entry.get("out") and entry.get("report_only_checks")
+    }
+
+
 def report_only_outs(measurement_path: Path = MEASUREMENT) -> set[str]:
     return {out for out, mode in latest_tier_modes(measurement_path).items() if mode == "report"}
 
 
-def check_smoke_gate_flags(job_name: str, job: dict, report_outs: set[str], errors: list[str]) -> None:
+REPORT_ONLY_FLAG_RE = re.compile(r"--gates-report-only\s+(\S+)")
+
+
+def check_smoke_gate_flags(
+    job_name: str, job: dict, report_outs: set[str], errors: list[str], report_only: dict[str, list[str]] | None = None
+) -> None:
     for step in all_steps(job):
         for match in SMOKE_COMMAND_RE.finditer(str(step.get("run", ""))):
             args = match.group("args")
@@ -1392,6 +1595,18 @@ def check_smoke_gate_flags(job_name: str, job: dict, report_outs: set[str], erro
             if re.search(r"--gates-mode\s+report\b", args) and out not in report_outs:
                 errors.append(
                     f"pr-smoke: the {job_name} step writing {out} runs --gates-mode report, but {MEASUREMENT.relative_to(ROOT)} does not mark it report"
+                )
+            listed = (report_only or {}).get(out)
+            passed_match = REPORT_ONLY_FLAG_RE.search(args)
+            passed = passed_match.group(1).split(",") if passed_match else None
+            if listed is not None and passed != listed:
+                errors.append(
+                    f"pr-smoke: the {job_name} step writing {out} must pass --gates-report-only {','.join(listed)}, "
+                    f"the report-only checks {MEASUREMENT.relative_to(ROOT)} records for it"
+                )
+            elif listed is None and passed is not None:
+                errors.append(
+                    f"pr-smoke: the {job_name} step writing {out} passes --gates-report-only, but {MEASUREMENT.relative_to(ROOT)} records no report-only checks for it"
                 )
 
 
@@ -1462,6 +1677,7 @@ def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str
     """D-06, O-1, O-2: every CI tier carries the absolute gates; a tier runs report-only solely because the measurement says so."""
     try:
         report_outs = report_only_outs(measurement_path)
+        report_only = report_only_checks_by_out(measurement_path)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         errors.append(f"absolute gates: cannot read {measurement_path}: {exc}")
         return
@@ -1469,7 +1685,7 @@ def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str
         jobs = pr.get("jobs") or {}
         for name in ("eval-smoke", "gate-negative-control"):
             if name in jobs:
-                check_smoke_gate_flags(name, jobs[name], report_outs, errors)
+                check_smoke_gate_flags(name, jobs[name], report_outs, errors, report_only)
         check_prompt_control(jobs.get("gate-negative-control"), errors)
         check_manifest_verify(jobs.get("python"), errors)
     if nightly is not None:

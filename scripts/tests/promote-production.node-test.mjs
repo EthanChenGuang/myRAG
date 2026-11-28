@@ -17,8 +17,37 @@ const BOT = { login: 'github-actions[bot]', type: 'Bot' };
 const ADMIN = { login: 'octo-admin', type: 'User' };
 const WRITER = { login: 'octo-writer', type: 'User' };
 
+const RUN_ID = 4242;
+const RUN_URL = `https://github.com/${REPO}/actions/runs/${RUN_ID}`;
+
 function status(state, creator = BOT, extra = {}) {
-  return { context: STATUS_CONTEXT, state, description: state === 'success' ? 'passed' : `${state}: x`, creator, ...extra };
+  const target = creator === BOT ? { target_url: RUN_URL } : {};
+  return { context: STATUS_CONTEXT, state, description: state === 'success' ? 'passed' : `${state}: x`, creator, ...target, ...extra };
+}
+
+/** A completed, successful rag-release-gate run on the default branch that gated SHA (T-05.3-391). */
+function gateRun(extra = {}) {
+  return {
+    id: RUN_ID,
+    path: '.github/workflows/rag-release-gate.yml',
+    head_branch: 'main',
+    head_sha: SHA,
+    event: 'push',
+    status: 'completed',
+    conclusion: 'success',
+    display_title: `rag-release-gate ${SHA}`,
+    repository: { full_name: REPO },
+    ...extra,
+  };
+}
+
+function provenance(run = gateRun(), defaultBranch = 'main') {
+  return {
+    repo: REPO,
+    sha: SHA,
+    runOf: async (id) => (run && Number(id) === run.id ? run : null),
+    defaultBranchOf: async () => defaultBranch,
+  };
 }
 
 function deployment(extra = {}) {
@@ -30,7 +59,7 @@ function json(code, body) {
 }
 
 /** One stub for both APIs; it records every call with method and host. */
-function stub({ statuses = [status('success')], permissions = {}, deployments = [deployment()], promoteStatus = 201 } = {}) {
+function stub({ statuses = [status('success')], permissions = {}, deployments = [deployment()], promoteStatus = 201, runs = [gateRun()], defaultBranch = 'main' } = {}) {
   const calls = [];
   const fetch = async (url, init = {}) => {
     const u = new URL(String(url));
@@ -39,6 +68,12 @@ function stub({ statuses = [status('success')], permissions = {}, deployments = 
     if (u.host === 'api.github.com') {
       assert.equal(method, 'GET', 'GitHub is only read');
       if (u.pathname === `/repos/${REPO}/commits/${SHA}/statuses`) return json(200, Number(u.searchParams.get('page') ?? '1') === 1 ? statuses : []);
+      if (u.pathname === `/repos/${REPO}`) return json(200, { full_name: REPO, default_branch: defaultBranch });
+      const runMatch = u.pathname.match(/^\/repos\/[^/]+\/[^/]+\/actions\/runs\/(\d+)$/);
+      if (runMatch) {
+        const found = runs.find((r) => r.id === Number(runMatch[1]));
+        return found ? json(200, found) : json(404, { message: 'Not Found' });
+      }
       const m = u.pathname.match(/^\/repos\/[^/]+\/[^/]+\/collaborators\/([^/]+)\/permission$/);
       if (m) {
         const login = decodeURIComponent(m[1]);
@@ -70,15 +105,70 @@ async function run(opts, argv = ['--sha', SHA], env = ENV) {
 
 test('acceptedStatus: newest status of the context counts; bot success accepted, writer refused, admin accepted', async () => {
   const none = async () => null;
-  assert.equal((await acceptedStatus([status('success')], none)).accepted, true);
-  assert.equal((await acceptedStatus([], none)).accepted, false);
-  assert.equal((await acceptedStatus([{ ...status('success'), context: 'other' }], none)).accepted, false);
-  assert.equal((await acceptedStatus([status('failure'), status('success')], none)).accepted, false);
-  assert.equal((await acceptedStatus([status('success', WRITER)], async () => 'write')).accepted, false);
-  assert.equal((await acceptedStatus([status('success', ADMIN)], async () => 'admin')).accepted, true);
-  assert.equal((await acceptedStatus([status('success', { login: 'github-actions[bot]', type: 'User' })], none)).accepted, false);
-  assert.equal((await acceptedStatus([status('success', { login: 'other-app[bot]', type: 'Bot' })], async () => 'admin')).accepted, false);
-  assert.equal((await acceptedStatus([status('pending'), status('success')], none)).accepted, false);
+  const ctx = provenance();
+  assert.equal((await acceptedStatus([status('success')], none, ctx)).accepted, true);
+  assert.equal((await acceptedStatus([], none, ctx)).accepted, false);
+  assert.equal((await acceptedStatus([{ ...status('success'), context: 'other' }], none, ctx)).accepted, false);
+  assert.equal((await acceptedStatus([status('failure'), status('success')], none, ctx)).accepted, false);
+  assert.equal((await acceptedStatus([status('success', WRITER)], async () => 'write', ctx)).accepted, false);
+  assert.equal((await acceptedStatus([status('success', ADMIN)], async () => 'admin', ctx)).accepted, true);
+  assert.equal((await acceptedStatus([status('success', { login: 'github-actions[bot]', type: 'User' })], none, ctx)).accepted, false);
+  assert.equal((await acceptedStatus([status('success', { login: 'other-app[bot]', type: 'Bot' })], async () => 'admin', ctx)).accepted, false);
+  assert.equal((await acceptedStatus([status('pending'), status('success')], none, ctx)).accepted, false);
+});
+
+test('acceptedStatus (T-05.3-391): a bot success without a run URL, or with a URL that is not this repository run, is refused', async () => {
+  const none = async () => null;
+  for (const target of [undefined, null, '', 'https://example.invalid/', `https://github.com/other-owner/other-repo/actions/runs/${RUN_ID}`,
+    `${RUN_URL}/job/1`, `http://github.com/${REPO}/actions/runs/${RUN_ID}`, `https://github.com/${REPO}/actions/runs/abc`]) {
+    const decision = await acceptedStatus([status('success', BOT, { target_url: target })], none, provenance());
+    assert.equal(decision.accepted, false, String(target));
+    assert.match(decision.reason, /run/, String(target));
+  }
+});
+
+test('acceptedStatus (T-05.3-391): the bot status run must be the release gate workflow, on the default branch, push or dispatch, completed with success', async () => {
+  const none = async () => null;
+  const bad = {
+    'another workflow': gateRun({ path: '.github/workflows/spoof.yml' }),
+    'a feature branch': gateRun({ head_branch: 'feature' }),
+    'a pull_request event': gateRun({ event: 'pull_request' }),
+    'a schedule event': gateRun({ event: 'schedule' }),
+    'still running': gateRun({ status: 'in_progress', conclusion: null }),
+    'failed': gateRun({ conclusion: 'failure' }),
+    'cancelled': gateRun({ conclusion: 'cancelled' }),
+    'another repository': gateRun({ repository: { full_name: 'other-owner/other-repo' } }),
+    'another gated sha': gateRun({ event: 'workflow_dispatch', head_sha: 'e'.repeat(40), display_title: `rag-release-gate ${'d'.repeat(40)}` }),
+    'a push of another sha': gateRun({ head_sha: 'd'.repeat(40) }),
+  };
+  for (const [label, run] of Object.entries(bad)) {
+    const decision = await acceptedStatus([status('success')], none, provenance(run));
+    assert.equal(decision.accepted, false, label);
+  }
+  assert.equal((await acceptedStatus([status('success')], none, provenance(gateRun(), 'trunk'))).accepted, false, 'default branch differs');
+  assert.equal((await acceptedStatus([status('success')], none, provenance(null))).accepted, false, 'run not readable');
+  const throwing = { ...provenance(), runOf: async () => { throw new Error('boom'); } };
+  assert.equal((await acceptedStatus([status('success')], none, throwing)).accepted, false, 'run lookup throws');
+  const dispatched = gateRun({ event: 'workflow_dispatch', head_sha: 'e'.repeat(40) });
+  assert.equal((await acceptedStatus([status('success')], none, provenance(dispatched))).accepted, true, 'dispatch of this sha from main');
+  assert.equal((await acceptedStatus([status('success')], none, provenance(gateRun({ path: '.github/workflows/rag-release-gate.yml@main' })))).accepted, true, 'path with the default ref');
+});
+
+test('main (T-05.3-391): a spoofed bot success from another workflow run stops before any Vercel call', async () => {
+  const r = await run({ runs: [gateRun({ path: '.github/workflows/spoof.yml' })] });
+  assert.equal(r.code, EXIT_STOPPED, r.out.lines.join('\n'));
+  assert.equal(r.vercelCalls().length, 0);
+  const missing = await run({ statuses: [status('success', BOT, { target_url: undefined })] });
+  assert.equal(missing.code, EXIT_STOPPED);
+  assert.equal(missing.vercelCalls().length, 0);
+});
+
+test('main reads the run and the default branch with GET only', async () => {
+  const r = await run();
+  assert.equal(r.code, EXIT_OK, r.out.lines.join('\n'));
+  const gh = r.calls.filter((c) => c.host === 'api.github.com');
+  assert.ok(gh.some((c) => c.path === `/repos/${REPO}/actions/runs/${RUN_ID}`), 'run read');
+  assert.ok(gh.some((c) => c.path === `/repos/${REPO}`), 'default branch read');
 });
 
 test('bot success and a READY staged deployment: one GET deployments and one POST promote, exit 0', async () => {

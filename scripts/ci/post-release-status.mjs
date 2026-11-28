@@ -15,6 +15,18 @@ const CODE_RE = /^[a-z0-9_]+$/;
 const OUTCOMES = new Set(['passed', 'failed', 'skipped']);
 const PART_RESULTS = new Set(['passed', 'failed', 'skipped', 'not_applicable']);
 const DEFAULT_API = 'https://api.github.com';
+const DEFAULT_SERVER = 'https://github.com';
+const RUN_ID_RE = /^[1-9][0-9]{0,19}$/;
+const SERVER_RE = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/;
+
+/** T-05.3-391: the URL of this workflow run, which promote-production.mjs resolves to check where a bot status came from. */
+export function runUrl(env) {
+  const server = String(env.GITHUB_SERVER_URL || DEFAULT_SERVER).replace(/\/+$/, '');
+  const repo = String(env.GITHUB_REPOSITORY ?? '');
+  const runId = String(env.GITHUB_RUN_ID ?? '');
+  if (!SERVER_RE.test(server) || !REPO_RE.test(repo) || repo.includes('..') || !RUN_ID_RE.test(runId)) return null;
+  return `${server}/${repo}/actions/runs/${runId}`;
+}
 
 function clip(text) {
   return text.length <= DESCRIPTION_MAX ? text : `${text.slice(0, DESCRIPTION_MAX - 3)}...`;
@@ -67,7 +79,7 @@ export function statusFromResult(result, expectedSha) {
 }
 
 /** Posts one commit status; returns the HTTP status code. The token goes only into the Authorization header. */
-export async function postStatus({ repo, sha, state, description, token, fetch: fetchImpl = globalThis.fetch, api = DEFAULT_API }) {
+export async function postStatus({ repo, sha, state, description, token, targetUrl, fetch: fetchImpl = globalThis.fetch, api = DEFAULT_API }) {
   const url = `${String(api).replace(/\/+$/, '')}/repos/${repo}/statuses/${sha}`;
   const response = await fetchImpl(url, {
     method: 'POST',
@@ -77,7 +89,7 @@ export async function postStatus({ repo, sha, state, description, token, fetch: 
       'X-GitHub-Api-Version': '2022-11-28',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ state, context: STATUS_CONTEXT, description }),
+    body: JSON.stringify({ state, context: STATUS_CONTEXT, description, target_url: targetUrl }),
   });
   return response.status;
 }
@@ -110,10 +122,15 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     error('[Release Gate] GH_TOKEN is not set; no status posted');
     return EXIT_FAILED;
   }
+  const targetUrl = runUrl(env);
+  if (targetUrl === null) {
+    error('[Release Gate] GITHUB_SERVER_URL and GITHUB_RUN_ID must name this workflow run; no status posted');
+    return EXIT_FAILED;
+  }
   const { state, description } = statusFromResult(readResult(argv[0], readFile), sha);
   let status;
   try {
-    status = await postStatus({ repo, sha, state, description, token, fetch: deps.fetch, api: env.GITHUB_API_URL || DEFAULT_API });
+    status = await postStatus({ repo, sha, state, description, token, targetUrl, fetch: deps.fetch, api: env.GITHUB_API_URL || DEFAULT_API });
   } catch (exc) {
     error(`[Release Gate] status post failed: ${exc && exc.name ? exc.name : 'Error'}`);
     return EXIT_FAILED;

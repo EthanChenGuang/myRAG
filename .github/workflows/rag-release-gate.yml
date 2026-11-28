@@ -1,4 +1,5 @@
 name: rag-release-gate
+run-name: rag-release-gate ${{ inputs.sha || github.sha }}
 
 on:
   workflow_dispatch:
@@ -28,12 +29,47 @@ env:
   RAGAS_DO_NOT_TRACK: 'true'
 
 jobs:
+  # T-05.3-391: the commit statuses are posted only by the two status jobs. They run this workflow's own code (github.sha,
+  # which promote-production.mjs requires to be on the default branch), never code of the gated sha, and read only the result
+  # artifact. The gate job runs the gated sha's code with read permissions only, after refusing a sha that is not on main.
+  status-pending:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      statuses: write
+    env:
+      GATE_SHA: ${{ inputs.sha || github.sha }}
+    steps:
+      - name: Validate the commit sha
+        run: |
+          if ! printf '%s' "$GATE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::sha must be a full 40-character lowercase commit sha"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse a sha that is not on main
+        run: |
+          if ! git merge-base --is-ancestor "$GATE_SHA" origin/main; then
+            echo "::error::the sha is not an ancestor of main; nothing is gated and no status is posted"
+            exit 1
+          fi
+      - name: Post pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA"
+          -f state=pending -f context=rag-release-gate -f description="release gate running"
+          -f target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
   gate:
+    needs: [status-pending]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
-      statuses: write
       checks: read
     env:
       GATE_SHA: ${{ inputs.sha || github.sha }}
@@ -48,15 +84,17 @@ jobs:
             echo "::error::sha must be a full 40-character lowercase commit sha"
             exit 1
           fi
-      - name: Post pending
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA"
-          -f state=pending -f context=rag-release-gate -f description="release gate running"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.GATE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse a sha that is not on main (before any repository code runs)
+        run: |
+          if ! git merge-base --is-ancestor "$GATE_SHA" origin/main; then
+            echo "::error::the sha is not an ancestor of main; the release gate does not run its code"
+            exit 1
+          fi
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
@@ -99,18 +137,6 @@ jobs:
         run: >-
           uv run --directory eval python -m rag_eval.release_gate run
           --sha "$GATE_SHA" --out eval/out/release
-      - name: Post the release gate status
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -f scripts/ci/post-release-status.mjs ]; then
-            node scripts/ci/post-release-status.mjs "$RESULT_FILE"
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA" \
-              -f state=failure -f context=rag-release-gate -f description="error: no result"
-            exit 1
-          fi
       - name: Record the override in the app (GitHub stays the authoritative record)
         if: always() && steps.override.outcome == 'success' && env.HAS_APP_RECORD == 'true'
         env:
@@ -127,3 +153,31 @@ jobs:
           name: rag-release-gate
           path: eval/out/release
           if-no-files-found: warn
+  status-final:
+    needs: [status-pending, gate]
+    if: always() && needs.status-pending.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      statuses: write
+      actions: read
+    env:
+      GATE_SHA: ${{ inputs.sha || github.sha }}
+      RESULT_FILE: eval/out/release/release-gate.json
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Download the release gate result of this run (a missing result posts failure)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" -n rag-release-gate -D eval/out/release || echo "::warning::no release gate result in this run"
+      - name: Post the release gate status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/post-release-status.mjs "$RESULT_FILE"

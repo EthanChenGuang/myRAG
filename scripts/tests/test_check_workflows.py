@@ -872,6 +872,12 @@ def monitor_fixture() -> dict:
                         "env": {
                             "NEXT_PUBLIC_SUPABASE_URL": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}",
                             "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+                            "RAG_MONITOR": "${{ vars.RAG_MONITOR }}",
+                            "RAG_RETRIEVAL_LOG": "${{ vars.RAG_RETRIEVAL_LOG }}",
+                            "LANGFUSE_ENABLED": "${{ vars.LANGFUSE_ENABLED }}",
+                            "LANGFUSE_BASE_URL": "${{ vars.LANGFUSE_BASE_URL }}",
+                            "LANGFUSE_PUBLIC_KEY": "${{ secrets.LANGFUSE_PUBLIC_KEY }}",
+                            "LANGFUSE_SECRET_KEY": "${{ secrets.LANGFUSE_SECRET_KEY }}",
                         },
                         "run": "npm run rag:monitor",
                     },
@@ -935,6 +941,130 @@ class MonitorJobTest(unittest.TestCase):
 
     def test_an_upload_artifact_step_is_reported(self):
         data = monitor_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_the_retrieval_log_and_langfuse_settings_reach_the_monitor_step(self):
+        """Gap 1 (05.3-VERIFICATION): without RAG_RETRIEVAL_LOG the scheduled run returns log_off and evaluates nothing."""
+        for name in check_workflows.MONITOR_STEP_ENV:
+            data = monitor_fixture()
+            del self.steps(data)[3]["env"][name]
+            self.assertTrue(any(f"{name} through step env" in e for e in self.errors_for(data)), name)
+
+    def test_a_hard_coded_monitor_setting_is_reported(self):
+        for name, source in check_workflows.MONITOR_STEP_ENV.items():
+            data = monitor_fixture()
+            self.steps(data)[3]["env"][name] = "masked_query"
+            self.assertTrue(any(f"${{{{ {source}.{name} }}}}" in e for e in self.errors_for(data)), name)
+
+    def test_secrets_and_vars_are_not_swapped(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["env"]["LANGFUSE_SECRET_KEY"] = "${{ vars.LANGFUSE_SECRET_KEY }}"
+        self.assertTrue(any("${{ secrets.LANGFUSE_SECRET_KEY }}" in e for e in self.errors_for(data)))
+
+
+SAMPLE_JOB = "weekly-sample"
+
+
+def weekly_sample_fixture() -> dict:
+    sample_env = {name: f"${{{{ {source}.{name} }}}}" for name, source in check_workflows.WEEKLY_SAMPLE_STEP_ENV.items()}
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            SAMPLE_JOB: {
+                "if": f"github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch'",
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_MONITOR_SECRETS": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}"
+                },
+                "steps": [
+                    {
+                        "name": "Skip notice",
+                        "if": "env.HAS_MONITOR_SECRETS != 'true'",
+                        "run": f'echo "{check_workflows.WEEKLY_SAMPLE_SKIP_NOTICE}"',
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": MONITOR_GATE},
+                    {"name": "Install Node dependencies", "if": MONITOR_GATE, "run": "npm ci --ignore-scripts"},
+                    {
+                        "name": "Weekly representative sample",
+                        "if": MONITOR_GATE,
+                        "continue-on-error": True,
+                        "env": sample_env,
+                        "run": "npm run rag:monitor -- sample",
+                    },
+                ],
+            },
+            "weekly-report": {
+                "needs": [SAMPLE_JOB],
+                "if": f"always() && (github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch')",
+                "runs-on": "ubuntu-latest",
+                "steps": [{"run": "true"}],
+            },
+        },
+    }
+
+
+class WeeklySampleJobTest(unittest.TestCase):
+    """Gap 2 (05.3-VERIFICATION): the weekly representative sample and cluster refit run on a schedule, report-only."""
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_weekly_sample_job(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"][SAMPLE_JOB]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(weekly_sample_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_weekly_sample_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = weekly_sample_fixture()
+        del data["jobs"][SAMPLE_JOB]
+        self.assertTrue(any(f"'{SAMPLE_JOB}' missing" in e for e in self.errors_for(data)))
+
+    def test_it_runs_on_the_weekly_schedule_only(self):
+        data = weekly_sample_fixture()
+        data["jobs"][SAMPLE_JOB]["if"] = f"github.event.schedule != '{WEEKLY_CRON}'"
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_the_sample_must_run(self):
+        data = weekly_sample_fixture()
+        self.steps(data)[3]["run"] = "npm run rag:monitor"
+        self.assertTrue(any("rag:monitor -- sample" in e for e in self.errors_for(data)))
+
+    def test_the_sample_is_report_only(self):
+        data = weekly_sample_fixture()
+        del self.steps(data)[3]["continue-on-error"]
+        self.assertTrue(any("continue-on-error: true" in e for e in self.errors_for(data)))
+
+    def test_the_sample_settings_reach_the_step_from_secrets_and_vars(self):
+        for name, source in check_workflows.WEEKLY_SAMPLE_STEP_ENV.items():
+            data = weekly_sample_fixture()
+            del self.steps(data)[3]["env"][name]
+            self.assertTrue(any(f"{name} through step env" in e for e in self.errors_for(data)), name)
+            data = weekly_sample_fixture()
+            self.steps(data)[3]["env"][name] = "true"
+            self.assertTrue(any(f"${{{{ {source}.{name} }}}}" in e for e in self.errors_for(data)), name)
+
+    def test_an_ungated_step_is_reported(self):
+        data = weekly_sample_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_MONITOR_SECRETS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_the_weekly_report_waits_for_the_sample(self):
+        data = weekly_sample_fixture()
+        del data["jobs"]["weekly-report"]["needs"]
+        self.assertTrue(any("needs" in e for e in self.errors_for(data)))
+        data = weekly_sample_fixture()
+        data["jobs"]["weekly-report"]["if"] = f"github.event.schedule == '{WEEKLY_CRON}' || github.event_name == 'workflow_dispatch'"
+        self.assertTrue(any("always()" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = weekly_sample_fixture()
         self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
         self.assertTrue(any("upload" in e for e in self.errors_for(data)))
 
@@ -1180,8 +1310,44 @@ class AbsoluteGatesTest(unittest.TestCase):
 
     def test_report_only_tiers_come_from_the_measurement_record(self):
         tiers = check_workflows.report_only_outs(check_workflows.MEASUREMENT)
-        self.assertIn("eval/out/smoke", tiers)
+        self.assertIn("eval/out/negative", tiers)
         self.assertNotIn("eval/out/smoke-ingest", tiers)
+
+    # Gap 3 (quick-53): the prechunked tiers enforce every check except the report-only ceilings the record lists.
+    def test_report_only_checks_come_from_the_measurement_record(self):
+        listed = check_workflows.report_only_checks_by_out(check_workflows.MEASUREMENT)
+        expected = ["false_refusal_rate"]
+        self.assertEqual(
+            listed, {"eval/out/smoke": expected, "eval/out/smoke-legacy": expected, "eval/out/smoke-sec": expected}
+        )
+        self.assertNotIn("eval/out/smoke", check_workflows.report_only_outs(check_workflows.MEASUREMENT))
+
+    def test_a_prechunked_step_without_its_report_only_list_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "eval-smoke", "npm run test-rag -- --out eval/out/smoke ")
+        step["run"] = step["run"].replace(" --gates-report-only false_refusal_rate", "")
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke " in f"{e} " and "--gates-report-only false_refusal_rate" in e for e in errors), errors)
+
+    def test_a_different_report_only_list_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "eval-smoke", "--out eval/out/smoke-sec")
+        step["run"] = step["run"].replace("--gates-report-only false_refusal_rate", "--gates-report-only false_refusal_rate,false_answer_rate")
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-sec" in e and "--gates-report-only" in e for e in errors), errors)
+
+    def test_a_report_only_list_on_a_fully_enforced_tier_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "--fixture-mode ingest --out eval/out/smoke-ingest")["run"] += " --gates-report-only false_refusal_rate"
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-ingest" in e and "--gates-report-only" in e for e in errors), errors)
+
+    def test_report_mode_on_a_prechunked_tier_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "eval-smoke", "--out eval/out/smoke-legacy ")
+        step["run"] = step["run"].replace("--out eval/out/smoke-legacy --gates-report-only false_refusal_rate", "--out eval/out/smoke-legacy --gates-mode report")
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-legacy" in e and "report" in e for e in errors), errors)
 
     def test_an_ungated_smoke_step_is_reported(self):
         pr, nightly = self.workflows()
@@ -1316,7 +1482,16 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
         return data["jobs"]["gate"]["steps"]
 
     def step(self, data: dict, needle: str) -> dict:
-        return next(s for s in self.steps(data) if needle in str(s.get("run", "")))
+        for job in data["jobs"].values():
+            for s in job.get("steps") or []:
+                if needle in str(s.get("run", "")):
+                    return s
+        raise AssertionError(f"no step runs {needle!r}")
+
+    def job_steps(self, data: dict, name: str) -> list[dict]:
+        job = data["jobs"].get(name)
+        self.assertIsNotNone(job, f"job {name!r} missing")
+        return job["steps"]
 
     def assert_error(self, data: dict, fragment: str, text: str | None = None) -> None:
         errors = self.errors_for(data, text)
@@ -1386,16 +1561,13 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
 
     def test_no_pending_post_before_the_gate_fails(self):
         data = self.workflow()
-        steps = self.steps(data)
+        steps = self.job_steps(data, "status-pending")
         pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
         steps.remove(pending)
-        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        self.assert_error(data, "status-pending must post a pending rag-release-gate status")
         data = self.workflow()
-        steps = self.steps(data)
-        pending = next(s for s in steps if "state=pending" in str(s.get("run", "")))
-        steps.remove(pending)
-        steps.insert(len(steps) - 1, pending)
-        self.assert_error(data, "pending rag-release-gate status must be posted before")
+        data["jobs"]["gate"].pop("needs", None)
+        self.assert_error(data, "gate must need status-pending")
 
     def test_posting_step_without_always_fails(self):
         data = self.workflow()
@@ -1404,6 +1576,93 @@ class ReleaseGateWorkflowTest(unittest.TestCase):
         data = self.workflow()
         self.step(data, "post-release-status.mjs")["if"] = "success()"
         self.assert_error(data, "if: always()")
+
+    # T-05.3-391 (05.3-SECURITY.md fix 1-4)
+    def test_the_gate_job_holds_no_write_permission(self):
+        data = self.workflow()
+        data["jobs"]["gate"]["permissions"]["statuses"] = "write"
+        self.assert_error(data, "permissions must be exactly")
+        self.assert_error(data, "only the status jobs")
+
+    def test_the_gate_job_posts_no_status(self):
+        data = self.workflow()
+        self.steps(data).append({"name": "post", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": 'gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GATE_SHA" -f state=success'})
+        self.assert_error(data, "job 'gate' must not post a commit status")
+        data = self.workflow()
+        self.steps(data).append({"if": "always()", "env": {"GH_TOKEN": "${{ github.token }}"}, "run": "node scripts/ci/post-release-status.mjs out.json"})
+        self.assert_error(data, "job 'gate' must not post a commit status")
+
+    def test_the_ancestor_check_runs_before_any_repository_code(self):
+        for job in ("gate", "status-pending"):
+            data = self.workflow()
+            steps = self.job_steps(data, job)
+            ancestor = next(s for s in steps if check_workflows.RELEASE_GATE_ANCESTOR in str(s.get("run", "")))
+            steps.remove(ancestor)
+            self.assert_error(data, f"job '{job}' must refuse a GATE_SHA that is not an ancestor of origin/main")
+        data = self.workflow()
+        steps = self.steps(data)
+        ancestor = next(s for s in steps if check_workflows.RELEASE_GATE_ANCESTOR in str(s.get("run", "")))
+        steps.remove(ancestor)
+        steps.append(ancestor)
+        self.assert_error(data, "before any step that runs repository code")
+
+    def test_checkouts_do_not_persist_credentials(self):
+        for job in ("gate", "status-pending", "status-final"):
+            data = self.workflow()
+            checkout = next(s for s in self.job_steps(data, job) if str(s.get("uses", "")).startswith("actions/checkout@"))
+            checkout.setdefault("with", {})["persist-credentials"] = True
+            self.assert_error(data, f"job '{job}': checkout must set persist-credentials: false")
+
+    def test_the_gate_checkout_fetches_main_for_the_ancestor_check(self):
+        data = self.workflow()
+        checkout = next(s for s in self.steps(data) if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["with"].pop("fetch-depth", None)
+        self.assert_error(data, "fetch-depth: 0")
+
+    def test_the_final_status_job_reads_only_the_result_artifact(self):
+        data = self.workflow()
+        self.job_steps(data, "status-final").insert(1, {"run": "npm ci --ignore-scripts"})
+        self.assert_error(data, "job 'status-final' must run no repository install or gate code")
+        data = self.workflow()
+        steps = self.job_steps(data, "status-final")
+        download = next(s for s in steps if check_workflows.RELEASE_GATE_DOWNLOAD in str(s.get("run", "")))
+        steps.remove(download)
+        self.assert_error(data, f"job 'status-final' must download the result with '{check_workflows.RELEASE_GATE_DOWNLOAD}'")
+
+    def test_the_final_status_job_checks_out_its_own_sha(self):
+        data = self.workflow()
+        checkout = next(s for s in self.job_steps(data, "status-final") if str(s.get("uses", "")).startswith("actions/checkout@"))
+        checkout["with"]["ref"] = "${{ env.GATE_SHA }}"
+        self.assert_error(data, "job 'status-final': checkout must not set a ref")
+
+    def test_the_final_status_job_waits_for_the_gate_and_always_runs(self):
+        data = self.workflow()
+        data["jobs"]["status-final"]["needs"] = ["status-pending"]
+        self.assert_error(data, "status-final must need gate")
+        data = self.workflow()
+        data["jobs"]["status-final"]["if"] = "success()"
+        self.assert_error(data, "status-final must run with if: always() && needs.status-pending.result == 'success'")
+
+    def test_a_write_permission_outside_the_status_jobs_fails(self):
+        data = self.workflow()
+        data["jobs"]["extra"] = {"runs-on": "ubuntu-latest", "permissions": {"statuses": "write"}, "steps": [{"run": "true"}]}
+        self.assert_error(data, "only the status jobs")
+
+    def test_the_status_jobs_have_exact_permissions(self):
+        data = self.workflow()
+        data["jobs"]["status-final"]["permissions"]["contents"] = "write"
+        self.assert_error(data, "job 'status-final' permissions must be exactly")
+
+    def test_the_pending_status_carries_the_run_url(self):
+        data = self.workflow()
+        pending = self.step(data, "state=pending")
+        pending["run"] = pending["run"].replace(check_workflows.RELEASE_GATE_TARGET_URL, "")
+        self.assert_error(data, "target_url")
+
+    def test_the_run_name_names_the_gated_sha(self):
+        data = self.workflow()
+        data.pop("run-name", None)
+        self.assert_error(data, "run-name")
 
     def test_unpinned_or_unknown_action_fails(self):
         data = self.workflow()
@@ -1590,6 +1849,13 @@ class PromoteProductionWorkflowTest(unittest.TestCase):
         errors: list[str] = []
         check_workflows.check_promote_production(self.workflow(), text, errors, self.known_refs())
         self.assertEqual(errors, [])
+
+    def test_the_promote_job_reads_the_gate_run(self):
+        """T-05.3-391: promote-production.mjs resolves the bot status run, so the job needs actions: read and nothing more."""
+        self.assertEqual(check_workflows.PROMOTE_JOB_PERMISSIONS, {"contents": "read", "statuses": "read", "actions": "read"})
+        data = self.workflow()
+        self.job(data)["permissions"].pop("actions", None)
+        self.assert_error(data, "permissions must be exactly")
 
     def test_a_push_trigger_fails(self):
         data = self.workflow()
