@@ -110,11 +110,11 @@
     }
   ],
   "detector": "heuristic",
-  "generated_at": "2026-11-28T08:54:29Z",
+  "generated_at": "2026-11-28T11:38:01Z",
   "inputs": [
     {
       "path": "eval/fixtures/golden.jsonl",
-      "sha256": "6b9e270761c7b8071fd6d7ff3c0e480ce6163ad6376a454e54cd693d63c5d337"
+      "sha256": "04a242609f896eb8b901503391519bdd1fdc36f95ad920cdba86c71eaf0b5341"
     },
     {
       "path": "eval/fixtures/domain/golden.jsonl",
