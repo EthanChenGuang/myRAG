@@ -195,3 +195,31 @@ Whenever you learn something reusable — a new failure mode, a rule the owner s
 - add or adjust templates in `reference/prompt-templates.md`;
 - keep it project-agnostic: no project names, ids, hosts or secrets;
 - commit it with a one-line reason and note "skill updated: <what>" in the ledger.
+
+## 11. Handoff and takeover (account or session change)
+
+A new account can't see the old sessions. Only git survives, so keep the handoff on the ops branch current at all times, not just at the end.
+
+**Keep these files on the ops branch (`handoff/`):**
+- `RESUME-PROMPT.md`: the exact first message the new orchestrator gets. It covers the role, the files to read, the current to-dos, how to restart paused work, and how to start the owner desk.
+- `standing-rules.md`: every owner rule and standing authority, with dates.
+- `continue-here.md` and `sessions-status.md`: what is running, on which branch, and its state (done / WIP / checkpoint / HOLD).
+- `ledger/`: the event ledger.
+- `tools/`: the READY detector.
+- `briefs/executor-brief.md` and `briefs/train-builder-brief.md`.
+
+Refresh RESUME-PROMPT and sessions-status whenever the picture changes a lot: a train merges, a new rule arrives, or a rate-limit pause starts.
+
+**Takeover steps for the new orchestrator:**
+1. Install this skill: user-level `~/.claude/skills/` or the repo's `.claude/skills/`.
+2. Open a cloud session on the repo with the strongest model, and send RESUME-PROMPT.md as the first message.
+3. Read the handoff files. Copy the ledger to the scratchpad and push every update back.
+4. Rebuild state from git, not from memory:
+   - `git fetch` all branches;
+   - SUMMARY present = done; WIP or continue-here present = paused; CHECKPOINT present = owner item;
+   - run the READY detector;
+   - check open PRs and CI.
+5. Resume each paused branch with a new session (`/gsd-resume-work` on `exec/<plan>`).
+6. Restart the owner desk, then the merge-train builders.
+7. Report to the owner: what was found, what restarted, and what needs them.
+8. Never assume the old account's approvals carry over to anything new. Only rules written in `standing-rules.md`, plus the owner's own words in the new session, count.
