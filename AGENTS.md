@@ -17,6 +17,7 @@ This document is the working guide for anyone, human or AI assistant (Claude, Co
 | Frontend | Next.js 16.0.10 App Router (React Compiler enabled), React 19.2.1, TypeScript, Tailwind CSS, Framer Motion, Zustand |
 | Backend | Next.js API routes, Supabase (PostgreSQL + pgvector HNSW, storage, auth, realtime) |
 | AI Stack | Vercel AI SDK 6.0.3 (OpenRouter, OpenAI, Anthropic, DeepSeek, Gemini, MCP integrations) |
+| Vector backends | pgvector (default and fallback); optional Weaviate and Qdrant fed from Supabase by the vector sync outbox (`RAG_RETRIEVAL_BACKEND`) |
 | Voice | LiveKit + AssemblyAI STT + Resemble.ai TTS + Silero VAD |
 | Integrations | WhatsApp (Baileys), Stripe & Polar payments, Nango (Google Drive/Notion/Dropbox), Meshy/Luma/Runway |
 
@@ -69,6 +70,12 @@ myrag/
 - Watch console logs for `[Document Search]` to analyse retrieval behaviour.
 - Latency budgets (p50/p95, text chat and voice) live in `eval/config/latency-budgets.json`; eval reports show per-stage latency against them; report-only until live measurements ratify them.
 - All knowledge-base retrieval goes through `@/lib/rag` (resolve a `TenantScope` with `resolveTenantScope` / `resolveEmbedScope` / `resolveVoiceScope`, then `runRetrieval`); `scripts/ci/check-rag-boundary.mjs` fails on embedding, retrieval-RPC or reranker use elsewhere. Tenant checks have no off switch. Retrieval searches on the service-role client, so `SUPABASE_SERVICE_ROLE_KEY` must be set. Multi-tenant embed needs `RAG_EMBED_TENANT`; voice needs `RAG_VOICE_TOKEN_SECRET` (32+ chars).
+- Retrieval backend: `RAG_RETRIEVAL_BACKEND=pgvector` (default; `weaviate | qdrant`) for chat and embed, `RAG_RETRIEVAL_BACKEND_VOICE=pgvector` for voice; external backends run only under `RAG_PIPELINE=v2`. A tenant whose external index is not ready (collection missing, sync lag above `RAG_VECTOR_SYNC_MAX_LAG_SECONDS`), or a backend that errors or is slow, is answered from pgvector and the trace is marked degraded. External vector stores always filter by tenant, and every hit is re-validated against Supabase before use.
+
+### RAG pipeline
+- The pipeline lives in `src/lib/rag/` (ingest, query layer, v2 stages, backends, sync, generation); the Python sidecar is `rag-sidecar/` and the eval harness `eval/`. The operator and developer guide is [README_RAG_PIPELINE.md](README_RAG_PIPELINE.md): sidecar, generated provider and switch tables, vector sync, backends, evaluation workflow and data flow.
+- pgvector stays the default backend; external vector stores always filter by tenant, and every hit they return is re-validated against Supabase. Weaviate and Qdrant are copies: a trigger-fed outbox and a drain worker sync them from Supabase (`npm run rag:vector-sync`, `npm run rag:reconcile`, scheduler recipe `supabase/optional/vector-sync-schedule.sql`); log lines carry the `[Vector Sync]` prefix with counts and ids only.
+- Release defaults change only through the pre-registered regression (`python -m rag_eval.regression plan|run|decide`, test-split ledger `eval/decisions/test-split-ledger.jsonl`) and a live record; the review queue, promotion and `rag_eval.failure_report` are in the Phase 5.1.1 lines below.
 
 ### Image RAG
 - Images uploaded via Config UI are captioned by GPT-4o Vision and embedded.
@@ -385,7 +392,11 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 | `uv run --directory eval python -m rag_eval.golden_set` | Golden set lifecycle, version and manifest hash |
 | `uv run --directory eval python -m rag_eval.drift` | Weekly query drift against the test set |
 | `uv run --directory eval python -m rag_eval.representativeness` | Test-set coverage of the query clusters |
-| `scripts/init-env.js` | Default environment template |
+| `npm run rag:vector-sync` | Vector sync to Weaviate and Qdrant: `drain`, `backfill --target`, `targets enable\|disable`, `requeue-dead --target`, `status` |
+| `npm run rag:reconcile` | Compare the external vector stores with Supabase and repair drift |
+| `uv run --directory eval python -m rag_eval.regression` | Release regression: `plan` (pre-registered first), `run`, `decide`; test-split uses go to the ledger |
+| `uv run --directory eval python -m rag_eval.failure_report` | Failure report from the review queue (counts, ids and hashes only) |
+| `scripts/init-env.js` | Default environment template (managed RAG variables under `# RAG: <group>` banners) |
 
 ---
 
@@ -393,5 +404,6 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - **[README_VOICE_INTEGRATION.md](README_VOICE_INTEGRATION.md)** – Voice architecture, mobile support, troubleshooting
 - **[README_NANGO_INTEGRATION.md](README_NANGO_INTEGRATION.md)** – Cloud connectors setup
 - **[README_DEPLOYMENT_MODES.md](README_DEPLOYMENT_MODES.md)** – Single vs Multi-tenant
+- **[README_RAG_PIPELINE.md](README_RAG_PIPELINE.md)** – RAG pipeline: sidecar, providers and switches, vector sync, backends, evaluation workflow, data flow ([docs/vendor-data-flow.md](docs/vendor-data-flow.md))
 
 Keep this guide current—when architecture or workflows change, update this file so every agent stays aligned.
