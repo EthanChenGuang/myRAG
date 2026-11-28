@@ -168,3 +168,8 @@
   - Two new empty tables with RLS on and 0 policies. 9 scope triggers.
   - glossary_term_lost is in the CHECK. enforced=false.
 - No data rows were written.
+
+## 2026-11-28 ~09:36 UTC: PROD (ppvywaxrycaxrtrrditl) read-only storage check for queue item 30
+- storage.buckets has no `chat-attachments` bucket on prod.
+- storage.objects has 0 objects under `chat-attachments/extracted-images/`.
+- Nothing to delete on prod. No write.
