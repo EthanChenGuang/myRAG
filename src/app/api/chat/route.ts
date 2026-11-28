@@ -3,6 +3,7 @@ import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { getMaxTokensForModel } from '@/lib/chat/model-output-limit';
+import { defaultModelId, parseModelList, resolveStoredAutoModel } from '@/lib/chat/auto-model';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -30,6 +31,13 @@ import {
   shouldOfferCalcTool,
   turnCanUseTools,
   createEnhancedRAGPrompt,
+  answerStructureFor,
+  answerStructureStage,
+  decomposedAnswerFor,
+  type DecomposedAnswerInput,
+  isOutOfScopeResult,
+  scopeGateNoticeFor,
+  type ScopeNotice,
   answerLanguageOptions,
   appendAnswerLanguage,
   errorStatusOf,
@@ -67,8 +75,11 @@ import {
   scheduleCacheStore,
   streamCachedAnswer,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
+  AttributeFilterError,
+  checkExplicitAttributeFilter,
   readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
@@ -76,6 +87,7 @@ import {
   accessGroupsEnabled,
   createCitationRecheck,
   accessSetsFor,
+  cachedSourceDocumentIds,
   scheduleSecurityEvent,
   bodyNamesAccessGroups,
   resolveAccessScope,
@@ -1457,6 +1469,7 @@ export async function POST(req: Request) {
 
     // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
     let retrievalFilters: RetrievalFilterInput | undefined;
+    let callerVersionsCurrent = false;
     if (isV2Pipeline()) {
       const filtersParsed = parseRetrievalFilters(requestBody?.retrievalFilters);
       if (!filtersParsed.ok) {
@@ -1466,6 +1479,7 @@ export async function POST(req: Request) {
         );
       }
       retrievalFilters = filtersParsed.filters;
+      callerVersionsCurrent = requestsCurrentVersions(requestBody?.retrievalFilters);
     }
 
     // D-11: the client's IANA zone, read only by the query layer; an unknown zone resolves to UTC there
@@ -1538,6 +1552,17 @@ export async function POST(req: Request) {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
       } catch (error) {
         if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
+
+    // 03.3 G4: an explicit attributes key the verified tenant does not define answers a structured 400, never an empty retrieval
+    // (no scope: runRetrieval fails closed on its own)
+    if (retrievalFilters?.attributes && scope) {
+      try {
+        await checkExplicitAttributeFilter(scope, retrievalFilters.attributes, { signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof AttributeFilterError)) throw error;
         return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
       }
     }
@@ -2246,7 +2271,9 @@ IMPORTANT:
     ];
 
     // Extract model selection and web search setting
-    const model = data?.settings?.model || 'openai/gpt-4o-mini';
+    const model =
+      resolveStoredAutoModel(data?.settings?.model, defaultModelId(parseModelList(env.NEXT_PUBLIC_OPENROUTER_MODELS), 'openai/gpt-4o-mini'), 'chat') ||
+      'openai/gpt-4o-mini';
     const webSearchEnabled = data?.settings?.webSearch === true;
 
     // Detect if we're using a GPT model for model-specific instructions
@@ -2511,7 +2538,7 @@ Context:
         return promptBudgetExceededResponse(budgetLanguage);
       }
     }
-    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.documentBudget } : {};
+    const documentTokenBudgetOption = promptBudgetPlan ? { documentTokenBudget: promptBudgetPlan.packingBudget } : {};
 
     // Initialize variables for RAG
     let context = '';
@@ -2593,6 +2620,7 @@ Context:
           signal: req.signal,
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
+          ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
           ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
           ...queryLayerInputs,
           ...(cacheContext ? { cacheContext } : {}),
@@ -2766,9 +2794,13 @@ Context:
     } // End of RAG processing (skipped when disableRAG is true)
 
     // D-22, P-22: the turn's standalone query rides on the assistant message only when retrieval produced a query plan
+    // Phase 6.2 D-26, P-05: set for a balanced or flexible turn the scope gate labelled out_of_scope
+    let scopeNotice: ScopeNotice | null = null;
     const ragTurnField = (): { rag?: NonNullable<ReturnType<typeof ragTurnMetadataFromPlan>> } => {
       const rag = ragTurnMetadataFromPlan(retrievalResult?.queryPlan);
-      return rag ? { rag } : {};
+      if (!rag) return {};
+      // T-06.2-66: the label only; scores stay on the server trace
+      return { rag: scopeNotice ? { ...rag, scopeGate: 'out_of_scope' as const } : rag };
     };
 
     // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
@@ -2780,6 +2812,8 @@ Context:
       finishRagTrace();
       // W6: a hit writes its own Phase 5 answer record when a fresh answer would; refusals never carry one
       const hitAnswerId = cached.is_refusal ? null : answerId;
+      // T-04.3-143: the cached sources count as this turn's kept sources; their label sets go on the hit's answer record
+      const hitAccessSets = accessSetsFor(retrievalResult?.accessLabels, cachedSourceDocumentIds(cacheHit));
       const answerFields = hitAnswerId ? { answerId: hitAnswerId } : {};
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
@@ -2811,6 +2845,7 @@ Context:
             premise: { blocks: [], webSearchTexts: [] },
             requestLanguage: userLanguage,
             groundedness: cached.groundedness,
+            ...(hitAccessSets && hitAccessSets.length > 0 ? { accessSets: hitAccessSets } : {}),
           });
         },
       });
@@ -2921,6 +2956,18 @@ Context:
       return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
+    // Phase 6.2 D-26: strict mode answered above (or offers webSearch); balanced and flexible answer without knowledge-base
+    // context and start with the localized notice
+    if (
+      !retrievalFailed &&
+      !effectiveDisableRAG &&
+      !smallTalkTurn &&
+      (ragMode === 'balanced' || ragMode === 'flexible') &&
+      isOutOfScopeResult(retrievalResult)
+    ) {
+      scopeNotice = scopeGateNoticeFor(retrievalResult?.queryPlan?.language ?? answerTurn.answerLanguage);
+    }
+
     const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
     // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
     let calcMode: 'tool' | 'trailing_block' | null = null;
@@ -2975,6 +3022,7 @@ Context:
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
     let claudeSystemText: string | null = null;
+    let decomposedAnswer: DecomposedAnswerInput | undefined;
     // D-80: the composed answer-rule block of this turn, counted as its own part by the post-build check
     let budgetBuiltRules = '';
 
@@ -3010,6 +3058,11 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       const answerLanguage = answerLanguageOptions(retrievalResult);
+      // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; undefined leaves the prompt unchanged
+      decomposedAnswer = knowledgeContextAttached
+        ? decomposedAnswerFor(retrievalResult, { citationsActive: citationSession.strategy !== null })
+        : undefined;
+      const promptOptions = decomposedAnswer ? { ...(answerLanguage ?? {}), decomposedAnswer } : answerLanguage;
       // Phase 5.2 D-04, D-07: the answer-rule block goes after the citation instruction; it is the prompt itself with every switch off
       const answerRuleOptions = {
         mode: ragMode,
@@ -3019,7 +3072,7 @@ Context:
       const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
       systemPrompt = appendHistoryNotEvidence(
         answerTurn.composeSystemPrompt(
-          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, promptOptions)),
           answerRuleOptions,
         ),
         historyNotEvidence,
@@ -3029,7 +3082,10 @@ Context:
         claudeSystemText = [
           appendHistoryNotEvidence(
             answerTurn.composeSystemPrompt(
-              appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+              appendAnswerLanguage(
+                citationSession.claudeSystemPrompt(ragSystemPrompt, decomposedAnswer ? { decomposedAnswer } : undefined),
+                answerLanguage,
+              ),
               answerRuleOptions,
             ),
             historyNotEvidence,
@@ -3043,6 +3099,8 @@ Context:
       console.log('[RAG SYSTEM] Reason: No context/documents found');
       systemPrompt = SystemPromptManager.injectContext(ragSystemPrompt, context);
     }
+
+    if (scopeNotice) systemPrompt = `${systemPrompt}\n\n${scopeNotice.rule}`;
 
     console.log('[RAG SYSTEM DEBUG] Final system prompt preview (first 300 chars):');
     console.log('[RAG SYSTEM DEBUG]', systemPrompt.substring(0, 300));
@@ -4806,10 +4864,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
+          // Phase 6.2 D-26: the notice is the first text part; the start chunk (with its metadata) is written before it
+          if (scopeNotice) {
+            const startMetadata = messageMetadata({ part: { type: 'start' } });
+            writer.write({ type: 'start', ...(startMetadata ? { messageMetadata: startMetadata } : {}) });
+            const noticeId = `scope-notice-${Date.now()}`;
+            writer.write({ type: 'text-start', id: noticeId });
+            writer.write({ type: 'text-delta', id: noticeId, delta: `${scopeNotice.notice}\n\n` });
+            writer.write({ type: 'text-end', id: noticeId });
+          }
+          const sendStart = precomputedSourceImages.length === 0 && !scopeNotice;
           if (claudeStream) {
             const gate = await firstTokenGate(
               claudeStream.result.toUIMessageStream({
-                sendStart: precomputedSourceImages.length === 0,
+                sendStart,
                 messageMetadata,
                 onError: () => CLAUDE_STREAM_ERROR_TEXT,
               }),
@@ -4831,7 +4899,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           if (!result) return;
           // Merge AI stream
           writer.merge(result.toUIMessageStream({
-            sendStart: precomputedSourceImages.length === 0,
+            sendStart,
             messageMetadata,
           }));
         },
@@ -4842,6 +4910,12 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
           if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          // Phase 6.2 D-12: report-only structure of a decomposed answer, recorded before the trace is finished
+          if (ragTrace && decomposedAnswer && !isAborted && !generationFailed && finishReason !== 'error') {
+            const answerText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+            const structure = answerStructureFor(decomposedAnswer, answerText, citationSession.strategy ? citationSession.aliases() : null);
+            ragTrace.collector.record(answerStructureStage(structure, ragTrace.collector.now()));
+          }
           // D-16: a sentinel refusal is logged like the server-side refusal
           if (answerTurn.refusedByModel()) setRagLogOutcome('refused_no_context', answerTurn.answerLanguage);
           if (ragTrace) {
@@ -4914,6 +4988,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           const cacheTicket = retrievalResult?.cacheTicket;
           if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
             // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label
+            // D-16: a sentinel refusal is stored like the server-side refusal (refusal TTL, no sources or citations)
+            const refusedByModel = answerTurn.refusedByModel();
             scheduleCacheStore({
               scope,
               ticket: cacheTicket,
@@ -4923,11 +4999,11 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 sourceImages: precomputedSourceImages.length > 0,
                 retrievalStatus: retrievalFailed ? 'degraded' : (retrievalResult?.status ?? 'error'),
                 answerText: responseText,
-                isRefusal: false,
+                isRefusal: refusedByModel,
                 toolsUsed: answerToolOutputUsed || webSearchResults.length > 0,
               },
-              citations: citationSession.fullRecords()?.citations ?? [],
-              sources: retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
+              citations: refusedByModel ? [] : (citationSession.fullRecords()?.citations ?? []),
+              sources: !refusedByModel && retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
               groundedness: groundednessHandle,
             });
           }

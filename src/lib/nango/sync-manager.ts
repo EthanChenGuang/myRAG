@@ -2,6 +2,7 @@ import { getNango } from './client';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { nangoPipeline, processDocumentWithMetadata } from './document-adapter';
 import { fetchFileContent } from './file-fetcher';
+import { purgeTombstoneCheck, skipByTombstone } from './purge-tombstone';
 import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } from './permission-sync';
 import {
     applySourceDeletions,
@@ -13,6 +14,8 @@ import {
     type SyncRecordRow,
 } from './source-deletions';
 import { PROVIDER_CONFIG, type NangoFileRecord, type SupportedProvider, type SyncStats } from './types';
+import { isSharePointEnabled, isSharePointProvider } from './sharepoint/config';
+import { listSharePointFiles, syncSharePointConnection, type SharePointSyncHooks } from './sharepoint/sync';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import {
@@ -288,6 +291,17 @@ async function markSourceSeen(supabaseAdmin: SupabaseAdmin, input: SourceSeenInp
     }
 }
 
+/** The shared helpers the SharePoint / OneDrive sync uses (sharepoint/sync.ts). */
+function sharePointHooks(): SharePointSyncHooks {
+    return {
+        markSourceSeen,
+        isSupportedFile,
+        ownerOnlyLabel,
+        processDocument: processDocumentWithMetadata,
+        fetchContent: (provider, connectionId, file) => fetchFileContent(provider, connectionId, file),
+    };
+}
+
 /**
  * Delete documents that no longer exist in the source (Google Drive)
  * This handles the case where files are deleted from Google Drive
@@ -499,6 +513,9 @@ async function syncGoogleDriveDocuments(
                 }
 
                 // Create/update sync record as processing
+                // D-35: an admin-purged file stays withdrawn while it still exists at the source; a failed lookup skips it.
+                if (skipByTombstone(await purgeTombstoneCheck(userId, connectionId)(file.id), stats)) continue;
+
                 await supabaseAdmin.from('nango_sync_records').upsert({
                     user_id: userId,
                     connection_id: connectionId,
@@ -666,6 +683,9 @@ async function syncGoogleDriveFilesByIds(
                 }
 
                 // Create/update sync record as processing
+                // D-35: an admin-purged file stays withdrawn while it still exists at the source; a failed lookup skips it.
+                if (skipByTombstone(await purgeTombstoneCheck(userId, connectionId)(file.id), stats)) continue;
+
                 await supabaseAdmin.from('nango_sync_records').upsert({
                     user_id: userId,
                     connection_id: connectionId,
@@ -833,6 +853,9 @@ async function syncNotionPagesByIds(
                 }
 
                 // Create/update sync record as processing
+                // D-35: an admin-purged file stays withdrawn while it still exists at the source; a failed lookup skips it.
+                if (skipByTombstone(await purgeTombstoneCheck(userId, connectionId)(pageId), stats)) continue;
+
                 await supabaseAdmin.from('nango_sync_records').upsert({
                     user_id: userId,
                     connection_id: connectionId,
@@ -1270,6 +1293,17 @@ export async function syncDocumentsForConnection(
     connectionId: string,
     provider: string
 ): Promise<SyncStats> {
+    if (isSharePointProvider(provider)) {
+        // D-24: with the switch off a SharePoint or OneDrive connection is not synced; no Graph or database call.
+        if (!isSharePointEnabled()) {
+            logger.debug('Nango', 'SharePoint and OneDrive sync is off');
+            return { processed: 0, failed: 0, skipped: 0, deleted: 0, failClosed: 0 };
+        }
+        const admin = getSupabaseAdmin();
+        if (!admin) throw new Error('Supabase admin client not available');
+        const { processed, failed, skipped, deleted, failClosed, withdrawn } = await syncSharePointConnection(connectionId, admin, sharePointHooks());
+        return { processed, failed, skipped, deleted, failClosed, ...(withdrawn ? { withdrawn } : {}) };
+    }
     const nango = getNango();
     const supabaseAdmin = getSupabaseAdmin();
 
@@ -1340,6 +1374,7 @@ export async function syncDocumentsForConnection(
                         combinedStats.failed += folderStats.failed;
                         combinedStats.skipped += folderStats.skipped;
                         combinedStats.failClosed += folderStats.failClosed;
+                        if (folderStats.withdrawn) combinedStats.withdrawn = (combinedStats.withdrawn ?? 0) + folderStats.withdrawn;
                         // Collect file IDs from this folder
                         if (folderStats.fileIds) {
                             allFileIds.push(...folderStats.fileIds);
@@ -1391,6 +1426,7 @@ export async function syncDocumentsForConnection(
                         combinedStats.skipped += pageStats.skipped;
                         combinedStats.deleted += pageStats.deleted;
                         combinedStats.failClosed += pageStats.failClosed;
+                        if (pageStats.withdrawn) combinedStats.withdrawn = (combinedStats.withdrawn ?? 0) + pageStats.withdrawn;
                     } catch (pageError) {
                         logger.error('Nango', `Failed to sync top-level page ${pageId}`, pageError);
                         combinedStats.failed++;
@@ -1484,6 +1520,9 @@ export async function syncDocumentsForConnection(
                             continue;
                         }
                     }
+
+                    // D-35: an admin-purged file stays withdrawn while it still exists at the source; a failed lookup skips it.
+                    if (skipByTombstone(await purgeTombstoneCheck(userId, connectionId)(file.id), combinedStats)) continue;
 
                     await supabaseAdmin.from('nango_sync_records').upsert({
                         user_id: userId,
@@ -1601,6 +1640,9 @@ export async function syncDocumentsForConnection(
                 }
 
                 // Create/update sync record as processing
+                // D-35: an admin-purged file stays withdrawn while it still exists at the source; a failed lookup skips it.
+                if (skipByTombstone(await purgeTombstoneCheck(userId, connectionId)(file.id), stats)) continue;
+
                 await supabaseAdmin.from('nango_sync_records').upsert({
                     user_id: userId,
                     connection_id: connectionId,
@@ -1721,6 +1763,8 @@ export async function syncAllUserConnections(userId: string): Promise<SyncStats[
 export interface ListableConnectionRow extends SourceConnectionRow {
     sync_folder_id?: string | null;
     sync_file_ids?: string[] | null;
+    /** SharePoint / OneDrive: the stored selection (metadata.source_scope); read from the row when absent. */
+    metadata?: unknown;
 }
 
 /**
@@ -1733,6 +1777,10 @@ export async function listConnectionFiles(connection: ListableConnectionRow): Pr
     const selected = connection.sync_file_ids ?? null;
     const fileIds: string[] = [];
     let complete = true;
+    if (isSharePointProvider(connection.provider)) {
+        if (!isSharePointEnabled()) return { fileIds: [], complete: false };
+        return listSharePointFiles(connection, getSupabaseAdmin());
+    }
     try {
         if (connection.provider === 'google-drive') {
             const folders = folderId === 'multi-folder-mode' && selected && selected.length > 0

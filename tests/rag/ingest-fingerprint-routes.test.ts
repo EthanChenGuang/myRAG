@@ -207,7 +207,7 @@ describe('ingest-fingerprint admin routes', () => {
       expect(body.total_current).toBe(13);
       expect(body.without_fingerprint).toEqual({ count: 5, command: 'npm run rag:fingerprint -- backfill' });
       const pending = Object.fromEntries(body.pending.map((row: { mechanism: string }) => [row.mechanism, row]));
-      expect(Object.keys(pending)).toEqual(['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'rescan']);
+      expect(Object.keys(pending)).toEqual(['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'reindex_tables', 'reindex_identifiers', 'recluster', 'rescan']);
       expect(pending.rechunk.affected).toBe(4);
       expect(pending.rechunk.by_doc_type.general).toBe(4);
       expect(pending.rechunk.by_doc_type.financial_report).toBe(0);
@@ -219,9 +219,12 @@ describe('ingest-fingerprint admin routes', () => {
         reembed: 'cli',
         recaption: 'cli',
         retranslate: 'cli',
+        reindex_tables: 'cli',
+        reindex_identifiers: 'cli',
+        recluster: 'cli',
         rescan: 'cli',
       });
-      for (const row of body.pending as Array<{ command: string }>) expect(row.command).toMatch(/^npm run rag:[a-z]+( -- [a-z -]+)?$/);
+      for (const row of body.pending as Array<{ command: string }>) expect(row.command).toMatch(/^npm run rag:[a-z][a-z-]*( -- [a-z -]+)?$/);
     });
 
     it('reports reparse as startable from the UI only when async ingestion is on', async () => {

@@ -58,6 +58,15 @@ NO_ANSWER_ADDED_BY_PLAN_05_3_15 = {"zh": 4, "en": 5, "it": 4}
 PHASE53_DOCUMENTS_05_3_15 = 2
 # Plan 05.2.1-12 documents per language: calc-rules and long-reference; test_fixture_calc_overflow.py checks them.
 PHASE521_DOCUMENTS_05_2_1_12 = 2
+# Plan 06.2-22 (tag phase62): scoped_compound, glossary and off-domain no_answer items served from the isolated q62
+# tenant (eval/fixtures/q62-corpus, not this corpus); test_golden_phase62.py checks them.
+SCOPED_COMPOUND_PER_LANGUAGE_06_2_22 = {"zh": 3, "en": 3, "it": 6}
+GLOSSARY_PER_LANGUAGE_06_2_22 = 3
+OFF_DOMAIN_PER_LANGUAGE_06_2_22 = 4
+PHASE62_PER_LANGUAGE_06_2_22 = {
+    language: count + GLOSSARY_PER_LANGUAGE_06_2_22 + OFF_DOMAIN_PER_LANGUAGE_06_2_22
+    for language, count in SCOPED_COMPOUND_PER_LANGUAGE_06_2_22.items()
+}
 PER_LANGUAGE_CATEGORY = {
     "general": 7,
     "multi_turn": 9,
@@ -82,15 +91,17 @@ PER_LANGUAGE_CATEGORY = {
     "implicit_condition": IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15,
     "multi_step_calc": MULTI_STEP_CALC_PER_LANGUAGE_05_2_1_12,
     "context_overflow": CONTEXT_OVERFLOW_PER_LANGUAGE_05_2_1_12,
+    "glossary": GLOSSARY_PER_LANGUAGE_06_2_22,
 }
 PER_LANGUAGE_CATEGORY_OVERRIDES = {
     ("en", "cross_lingual"): 13,
     ("it", "cross_lingual"): 13,
     ("it", "general"): 10,
     **{
-        (language, "no_answer"): PER_LANGUAGE_CATEGORY["no_answer"] + added
+        (language, "no_answer"): PER_LANGUAGE_CATEGORY["no_answer"] + added + OFF_DOMAIN_PER_LANGUAGE_06_2_22
         for language, added in NO_ANSWER_ADDED_BY_PLAN_05_3_15.items()
     },
+    **{(language, "scoped_compound"): count for language, count in SCOPED_COMPOUND_PER_LANGUAGE_06_2_22.items()},
 }
 # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
 FIXTURE_MAX_SELECTIVE_ROW_SHARE = 6 / 71
@@ -142,13 +153,15 @@ def test_single_language_items_forty_per_language(items):
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())
-    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + phase42 + phase53
+    phase62 = sum(PHASE62_PER_LANGUAGE_06_2_22.values())
+    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + phase42 + phase53 + phase62
     expected = {
         language: 40
         + per_language
         + PHASE42_PER_LANGUAGE_04_2_37[language]
         + IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15
         + NO_ANSWER_ADDED_BY_PLAN_05_3_15[language]
+        + PHASE62_PER_LANGUAGE_06_2_22[language]
         for language in LANGUAGES
     }
     assert {language: counts[language] for language in LANGUAGES} == expected
@@ -166,7 +179,8 @@ def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     )
     phase42 = sum(PHASE42_PER_LANGUAGE_04_2_37.values())
     phase53 = IMPLICIT_CONDITION_PER_LANGUAGE_05_3_15 * len(LANGUAGES) + sum(NO_ANSWER_ADDED_BY_PLAN_05_3_15.values())
-    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + phase42 + phase53 + len(cross)
+    phase62 = sum(PHASE62_PER_LANGUAGE_06_2_22.values())
+    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + phase42 + phase53 + phase62 + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38 + CROSS_LINGUAL_ADDED_BY_PLAN_06_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
     for pair in PAIRS:

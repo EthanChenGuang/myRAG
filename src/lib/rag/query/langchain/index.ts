@@ -98,7 +98,7 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
     const system = renderPrompt(
       loadPrompt(CONTEXTUALIZE_ID, { [CONTEXTUALIZE_ID]: contextualizePrompt }),
       {},
-      { language, maxItems: 1, protectedTokens, history },
+      { language, maxItems: 1, protectedTokens, history, ...(input.terminology ? { terminology: input.terminology } : {}) },
     );
     // The rendered text is a literal message, so braces in history or tokens are never read as template variables.
     const rephrasePrompt = ChatPromptTemplate.fromMessages([new SystemMessage(system), ['human', '{input}']]);
@@ -147,7 +147,11 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
   /** A native port of LangChain's websearch HyDE template; HydeRetriever is not used (it embeds and searches itself). */
   async function hyde(input: TransformHydeInput): Promise<HydeResult> {
     const { query, language, protectedTokens, signal } = input;
-    const text = renderPrompt(loadPrompt(HYDE_ID, { [HYDE_ID]: hydePrompt }), { question: query }, { language, maxItems: 1, protectedTokens });
+    const text = renderPrompt(
+      loadPrompt(HYDE_ID, { [HYDE_ID]: hydePrompt }),
+      { question: query },
+      { language, maxItems: 1, protectedTokens, ...(input.terminology ? { terminology: input.terminology } : {}) },
+    );
     let passage: string;
     try {
       const output = await structured(options.chatModelFactory('hyde'), 'HypotheticalDocument', [new HumanMessage(text)], signal, 'hyde');

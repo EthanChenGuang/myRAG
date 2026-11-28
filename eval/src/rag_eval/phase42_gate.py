@@ -101,14 +101,32 @@ class OffIdentityGate(_Model):
     against_run: list[OffPair] = Field(default_factory=list)
 
 
+class RedundancyMeasure(_Model):
+    """D-22 topk_redundancy as registered for the gate; v1 (cluster id only) is superseded and no longer accepted."""
+
+    version: Literal[2]
+    unit: Literal["cluster_value_signature"]
+    definition: str = Field(min_length=1)
+    supersedes: str = Field(min_length=1)
+
+
+class NoiseBandSource(_Model):
+    source: str = Field(min_length=1)
+    rule: str = Field(min_length=1)
+
+
 class DiversityGate(_Model):
     decision: str = Field(min_length=1)
+    version: Literal[2]
+    registered: str = Field(min_length=1)
     description: str
+    redundancy_measure: RedundancyMeasure
+    noise_band: NoiseBandSource
     runs: list[str] = Field(min_length=1)
     reference: str
     slice: str
     intent_coverage_min: float = Field(ge=0, le=1)
-    max_chunks_per_cluster: int = Field(ge=1)
+    max_chunks_per_unit: int = Field(ge=1)
     no_slice_drop_exclude: list[str] = Field(default_factory=list)
 
 
@@ -412,7 +430,8 @@ def off_identity_gate(
 
 def diversity_gate(gate: DiversityGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig) -> GateOutcome:
     offenders: list[str] = []
-    numbers: dict[str, Number] = {}
+    measure = gate.redundancy_measure
+    numbers: dict[str, Number] = {"redundancy_measure_version": measure.version}
     reference = outputs[gate.reference]
     for name in gate.runs:
         output = outputs[name]
@@ -429,16 +448,24 @@ def diversity_gate(gate: DiversityGate, outputs: Mapping[str, RunOutput], noise:
         elif coverage.value < gate.intent_coverage_min:
             offenders.append(f"{name}: {gate.slice} intent_coverage {coverage.value:.4f} < {gate.intent_coverage_min:.4f}")
         worst: float | None = None
+        unmeasured = {
+            trace.item_id
+            for trace in output.traces
+            if trace.topk_redundancy is None and any(chunk.dup_cluster_id is not None for chunk in trace.kept)
+        }
         for item in members:
             k, redundancy = item.context_k, item.topk_redundancy
             if not k or redundancy is None:
                 offenders.append(f"{name}: {item.item_id} has no context (topk_redundancy not measured)")
                 continue
-            limit = gate.max_chunks_per_cluster / k
+            if item.item_id in unmeasured:
+                offenders.append(f"{name}: {item.item_id} trace carries no app topk_redundancy (measure v{measure.version} {measure.unit} not measured)")
+                continue
+            limit = gate.max_chunks_per_unit / k
             excess = redundancy - limit
             worst = excess if worst is None else max(worst, excess)
             if excess > REDUNDANCY_TOLERANCE:
-                offenders.append(f"{name}: {item.item_id} topk_redundancy {redundancy:.4f} > {gate.max_chunks_per_cluster}/{k} = {limit:.4f}")
+                offenders.append(f"{name}: {item.item_id} topk_redundancy {redundancy:.4f} > {gate.max_chunks_per_unit}/{k} = {limit:.4f}")
         numbers[f"{name}.max_redundancy_over_limit"] = worst
         offenders += [f"{name}: {line}" for line in drop_offenders(output, reference, noise, reference_name=gate.reference, exclude=gate.no_slice_drop_exclude)]
     return _outcome("diversity", gate.decision, [*gate.runs, gate.reference], numbers, offenders)

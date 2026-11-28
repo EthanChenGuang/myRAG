@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
-from rag_sidecar.contracts.retrieval import ConfigProvenance, _Contract
+from rag_sidecar.contracts.retrieval import ConfigProvenance, VersionScope, _Contract
 from rag_sidecar.contracts.scopes import ScopeDimension, ScopeSlug
 
 from .languages import Language
@@ -102,13 +102,16 @@ ScopeFilterValues = Annotated[list[ScopeSlug], Field(min_length=1, max_length=MA
 
 
 class SubQuestionFilter(_Contract):
-    """D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source, version or include
-    field; every field is required and nullable for strict structured output (A-5). Plan 06.2-25 adds versions."""
+    """D-05, T-06.2-01: the only narrowing a decomposer may propose. No tenant, document, source or include field; the
+    first four fields are required and nullable for strict structured output (A-5). versions (06.2-25, P-17) is the RET-11
+    VersionScope, optional so an output written before it stays valid; the narrowing rule admits it only on comparison or
+    period questions (P-35)."""
 
     date_range: SubQuestionDateRange | None
     scopes: dict[ScopeDimension, ScopeFilterValues] | None
     doc_types: list[DocType] | None = Field(min_length=1)
     languages: list[Language] | None = Field(min_length=1)
+    versions: VersionScope | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_default_schema)
 
     @field_validator("scopes", mode="after")
     @classmethod

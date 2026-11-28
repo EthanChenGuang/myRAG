@@ -193,12 +193,14 @@ async function replay(c: Case): Promise<Recording> {
   vi.doMock('@/lib/rag', () => ({
     ingest: vi.fn(),
     buildSourceKey: identity.buildSourceKey,
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: 'multi-tenant' }),
     currentIngestConfig: () => ({ pipeline: c.pipeline }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: c.ingestAsync }),
   }));
   const { syncDocumentsForConnection } = await import('@/lib/nango/sync-manager');

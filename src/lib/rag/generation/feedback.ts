@@ -6,6 +6,7 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import type { AnswerFeedbackRequest } from '@/lib/rag-eval/contracts.generated';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { readFeedbackLoopConfig } from '../feedback-loop/config';
+import { accessGroupsEnabled } from '../tenant/access';
 import { readLangfuseConfig, type LangfuseConfig } from '../trace/config';
 import { maskPII } from '../trace/mask';
 import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOptions, type ReviewExportStatus } from '../trace/review-export';
@@ -23,6 +24,8 @@ export interface SubmitAnswerFeedbackDeps {
   langfuseTimeoutMs: number;
   /** D-10: the vote is mirrored onto rag_retrieval_log only while the log is on. */
   retrievalLogEnabled: () => boolean;
+  /** Phase 4.3 (T-04.3-143): RAG_DOC_ACCESS_GROUPS; while on, the review copy reads the record's access_sets. */
+  accessOn: () => boolean;
 }
 
 export interface SubmitAnswerFeedbackInput {
@@ -51,6 +54,7 @@ const defaultDeps: SubmitAnswerFeedbackDeps = {
   exportReview: exportReviewCandidate,
   langfuseTimeoutMs: LANGFUSE_TIMEOUT_MS,
   retrievalLogEnabled: () => readFeedbackLoopConfig().retrievalLog !== 'off',
+  accessOn: () => accessGroupsEnabled(),
 };
 
 function errorCode(error: unknown): string {
@@ -177,6 +181,27 @@ function mirrorEnabled(deps: SubmitAnswerFeedbackDeps): boolean {
   }
 }
 
+function accessOnFor(deps: SubmitAnswerFeedbackDeps): boolean {
+  try {
+    return deps.accessOn();
+  } catch {
+    return true;
+  }
+}
+
+/** T-04.3-143: the record's stored access_sets while access is on; null (unknown, so restricted) on any failure or while off. */
+async function recordAccessSets(admin: SupabaseClient, row: AnswerRecordRow): Promise<string[][] | null> {
+  try {
+    const { data, error } = await admin.from('rag_answer_records').select('id,access_sets').eq('id', row.id).maybeSingle();
+    if (error || !data) return null;
+    const sets = (data as { access_sets?: unknown }).access_sets;
+    if (!Array.isArray(sets) || !sets.every((set) => Array.isArray(set) && set.every((key) => typeof key === 'string'))) return null;
+    return sets as string[][];
+  } catch {
+    return null;
+  }
+}
+
 async function reportFeedback(row: AnswerRecordRow, feedback: AnswerFeedbackValue, userId: string, admin: SupabaseClient, deps: SubmitAnswerFeedbackDeps): Promise<void> {
   const config = deps.langfuse();
   const box = deps.langfuseTimeoutMs;
@@ -214,6 +239,7 @@ async function reportFeedback(row: AnswerRecordRow, feedback: AnswerFeedbackValu
           (async () => {
             const texts = await withTimeout(reviewTexts(admin, row, userId), box);
             const { query, answer } = texts === 'timeout' ? { query: '', answer: '' } : texts;
+            const sets = accessOnFor(deps) ? await withTimeout(recordAccessSets(admin, row), box) : null;
             const exported = await withTimeout(
               deps.exportReview(
                 {
@@ -224,6 +250,7 @@ async function reportFeedback(row: AnswerRecordRow, feedback: AnswerFeedbackValu
                   answer,
                   citedQuotes: citedQuotesOf(row.citations),
                   model: row.model_id ?? '',
+                  ...(sets && sets !== 'timeout' ? { accessSets: sets } : {}),
                 },
                 { config, timeoutMs: box },
               ),

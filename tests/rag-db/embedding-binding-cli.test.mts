@@ -178,7 +178,7 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
     return String(run[0]!.id);
   }
 
-  function comparisonFile(runId: string, provenance: Record<string, number>): string {
+  function comparisonFile(runId: string, provenance: Record<string, number>, population: 'real' | 'fixture' = 'real'): string {
     const samples = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'tests/fixtures/contracts/samples.json'), 'utf8')) as {
       samples: Record<string, Record<string, unknown>>;
     };
@@ -189,6 +189,7 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
     comparison.provenance_counts = provenance;
     comparison.reembed_run_ids = { [LAW]: runId };
     comparison.fixture_embedder = false;
+    comparison.population = population;
     const file = path.join(tmp, `comparison-${crypto.randomUUID()}.json`);
     fs.writeFileSync(file, JSON.stringify(comparison));
     return file;
@@ -210,10 +211,10 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
 
     const runId = await seedVectorsAndRun(LAW, LAW_MODEL);
 
-    const fewReal = await run('record-binding-evidence', comparisonFile(runId, { human: 3, synthetic_fixture: 37 }), '--binding', id);
+    const fewReal = await run('record-binding-evidence', comparisonFile(runId, { human: 3 }), '--binding', id);
     assert.equal(fewReal.code, 0, fewReal.text);
     const recorded = (await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [id]))[0]!.eval_evidence as Row;
-    assert.deepEqual(recorded.doc_type_slice, { n: 40, real_n: 3, passed: true, by_language: { en: true } });
+    assert.deepEqual(recorded.doc_type_slice, { n: 3, real_n: 3, passed: true, by_language: { en: true } });
     assert.equal(recorded.baseline_global_profile, LEGACY);
     assert.equal(recorded.baseline_binding_profile, null);
     assert.equal(recorded.backfill_run_id, runId);
@@ -224,23 +225,9 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
     assert.match(refused.text, /\[Embedding\] refused: binding_refused: eval_insufficient_real_items/);
     assert.equal((await rows('SELECT status FROM embedding_profile_bindings WHERE id = $1', [id]))[0]!.status, 'backfilling');
 
-    const evidence = {
-      binding_id: id,
-      target_profile: LAW,
-      doc_type: CONTRACT,
-      tenant_key: null,
-      baseline_global_profile: LEGACY,
-      baseline_binding_profile: null,
-      gate_passed: true,
-      doc_type_slice: { n: 40, real_n: 30, passed: true, by_language: { zh: true, en: true, it: true } },
-      other_slices_passed: true,
-      backfill_run_id: runId,
-      recorded_at: new Date().toISOString(),
-    };
-    const evidenceFile = path.join(tmp, 'evidence.json');
-    fs.writeFileSync(evidenceFile, JSON.stringify(evidence));
-    const realItems = await run('record-binding-evidence', evidenceFile, '--binding', id);
+    const realItems = await run('record-binding-evidence', comparisonFile(runId, { human: 18, production: 12 }), '--binding', id);
     assert.equal(realItems.code, 0, realItems.text);
+    assert.match(realItems.text, /real items 30 of 30/);
 
     assert.deepEqual(await bindings.getEffectiveBindings(TENANT_A), [], 'nothing is active before the flip');
     const activated = await run('activate-binding', id);
@@ -319,19 +306,27 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
     assert.match(outside.text, /binding_refused: profile_scope_mismatch/);
   });
 
-  test('record-binding-evidence refuses invalid JSON with exit 2 and evidence for another binding with exit 2', async () => {
+  test('record-binding-evidence refuses invalid JSON with exit 2 and writes nothing', async () => {
     await run('bind', CONTRACT, LAW);
     const id = await bindingId(CONTRACT, LAW);
     const broken = path.join(tmp, 'broken.json');
     fs.writeFileSync(broken, JSON.stringify({ hello: 'world' }));
     const invalid = await run('record-binding-evidence', broken, '--binding', id);
     assert.equal(invalid.code, 2, invalid.text);
+    assert.equal((await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [id]))[0]!.eval_evidence, null);
+  });
 
-    const other = path.join(tmp, 'other.json');
+  // quick-311 (I-2): a hand-written BindingActivationEvidence used to be stored as written, so the SQL gate trusted its real_n.
+  test('a hand-written BindingActivationEvidence is refused with exit 2, even one claiming 30 real items', async () => {
+    await run('bind', CONTRACT, LAW);
+    const id = await bindingId(CONTRACT, LAW);
+    await run('bind-status', id, 'backfilling');
+    const runId = await seedVectorsAndRun(LAW, LAW_MODEL);
+    const handWritten = path.join(tmp, `hand-written-${crypto.randomUUID()}.json`);
     fs.writeFileSync(
-      other,
+      handWritten,
       JSON.stringify({
-        binding_id: crypto.randomUUID(),
+        binding_id: id,
         target_profile: LAW,
         doc_type: CONTRACT,
         tenant_key: null,
@@ -340,13 +335,33 @@ describe('rag:embedding binding lifecycle against the fixture database', () => {
         gate_passed: true,
         doc_type_slice: { n: 40, real_n: 30, passed: true, by_language: { en: true } },
         other_slices_passed: true,
-        backfill_run_id: crypto.randomUUID(),
+        backfill_run_id: runId,
         recorded_at: new Date().toISOString(),
       }),
     );
-    const mismatch = await run('record-binding-evidence', other, '--binding', id);
-    assert.equal(mismatch.code, 2, mismatch.text);
-    assert.match(mismatch.text, /--binding must match/);
+    const refused = await run('record-binding-evidence', handWritten, '--binding', id);
+    assert.equal(refused.code, 2, refused.text);
+    assert.match(refused.text, /BindingComparison/);
+    assert.equal((await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [id]))[0]!.eval_evidence, null);
+    const activation = await run('activate-binding', id);
+    assert.equal(activation.code, 1, activation.text);
+    assert.match(activation.text, /binding_refused: eval_missing/);
+  });
+
+  test('a comparison whose population is not real is refused with exit 2 and writes nothing', async () => {
+    await run('bind', CONTRACT, LAW);
+    const id = await bindingId(CONTRACT, LAW);
+    await run('bind-status', id, 'backfilling');
+    const runId = await seedVectorsAndRun(LAW, LAW_MODEL);
+    for (const file of [
+      comparisonFile(runId, { human: 30 }, 'fixture'),
+      comparisonFile(runId, { human: 30, synthetic_fixture: 5 }, 'real'),
+    ]) {
+      const refused = await run('record-binding-evidence', file, '--binding', id);
+      assert.equal(refused.code, 2, refused.text);
+      assert.match(refused.text, /population/);
+      assert.equal((await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [id]))[0]!.eval_evidence, null);
+    }
   });
 
   test('status prints the domain switch and warns about a stale active binding', async () => {

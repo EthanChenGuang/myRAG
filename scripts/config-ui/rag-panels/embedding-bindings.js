@@ -44,6 +44,8 @@ const BINDINGS_COPY = {
   'hint.backfilling': 'Fill this profile with the re-embed job: ',
   'hint.stale':
     'Skipped when answering questions. Its evidence was recorded against {baseline}; the global active profile is now {global}. Deactivate it, record new evidence with the CLI, then activate it again.',
+  'hint.staleNoBaseline':
+    'Skipped when answering questions. Its evidence has no recorded baseline; the global active profile is now {global}. Deactivate it, record new evidence with the CLI, then activate it again.',
   'complete.notMeasured': 'Not measured for this status',
   'complete.unavailable': 'Count unavailable',
   'complete.none': 'No chunks in scope',
@@ -94,11 +96,11 @@ const BINDINGS_COPY = {
   'form.profile.placeholder': 'Choose a profile',
   'form.profile.option': '{id} ({model}, {dims} dimensions)',
   'form.profile.help': 'Only profiles scoped to the chosen document type are listed.',
-  'form.profile.none': 'No profile is scoped to this document type. Choose another document type; scoped profiles are added by a database migration.',
+  'form.profile.none': 'No profile is scoped to this document type. Scoped profiles are added by a database migration.',
   'form.required': 'Choose a value.',
   'form.submit': 'Create binding',
   'form.submitting': 'Creating…',
-  'form.cancel': 'Cancel',
+  'form.cancel': 'Close form',
   'empty.title': 'No bindings yet',
   'empty.body': 'Every document type is answered with the global profile alone. Create a binding to prepare a second profile for one document type.',
   'empty.noProfiles':
@@ -273,7 +275,7 @@ function bindingsSpinner() {
 }
 
 function bindingsMono(text, cls) {
-  return bindingsEl('span', { cls: cls || 'font-mono text-sm break-all', text, attrs: { translate: 'no' } });
+  return bindingsEl('span', { cls: cls || 'font-mono text-sm break-words', text, attrs: { translate: 'no' } });
 }
 
 function bindingsCode(text) {
@@ -306,13 +308,17 @@ const BINDINGS_BADGE_CLASS = {
 };
 
 const BINDINGS_ACTION_CLASS = {
-  stage: 'btn btn-outline md:btn-sm',
-  activate: 'btn btn-primary md:btn-sm',
-  markAvailable: 'btn btn-outline md:btn-sm',
-  retire: 'btn md:btn-sm',
-  rollback: 'btn btn-outline md:btn-sm',
-  deactivate: 'btn btn-outline md:btn-sm',
+  stage: 'btn btn-outline md:btn-sm whitespace-nowrap',
+  activate: 'btn btn-primary md:btn-sm whitespace-nowrap',
+  markAvailable: 'btn btn-outline md:btn-sm whitespace-nowrap',
+  retire: 'btn btn-outline md:btn-sm whitespace-nowrap',
+  rollback: 'btn btn-outline md:btn-sm whitespace-nowrap',
+  deactivate: 'btn btn-outline md:btn-sm whitespace-nowrap',
 };
+
+/** Activate while evidence is missing: an outline that stays legible when disabled (daisyUI fades a disabled primary to near nothing). */
+const BINDINGS_GATED_CLASS =
+  'btn btn-outline md:btn-sm whitespace-nowrap disabled:border-base-content/40 disabled:text-base-content/70 disabled:bg-transparent';
 
 // -- panel ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -401,18 +407,24 @@ class EmbeddingBindingsPanel {
 
   showSignIn(status) {
     this.signedOut = true;
+    this.formOpen = false;
+    this.formHost?.replaceChildren();
+    this.newBtn?.setAttribute('aria-expanded', 'false');
     if (this.contentEl) this.contentEl.hidden = true;
     const reload = bindingsEl('button', { cls: 'btn btn-sm', text: bindingsText('action.reload'), attrs: { type: 'button' }, on: { click: () => this.load() } });
     this.alertEl?.replaceChildren(bindingsAlert('warning', 'bi-person-lock', [bindingsEl('p', { cls: 'text-sm', text: authMessage(status) }), reload]));
   }
 
-  showLoadError(text) {
+  /** One error alert with Try again; `lead` is the outcome of a mutation whose reload failed, so it shows in the same alert. */
+  showLoadError(text, lead) {
     const retry = bindingsEl('button', { cls: 'btn btn-sm', text: bindingsText('action.retry'), attrs: { type: 'button' }, on: { click: () => this.load() } });
-    this.alertEl?.replaceChildren(bindingsAlert('error', 'bi-exclamation-octagon', [bindingsEl('p', { cls: 'text-sm', text }), retry]));
+    const nodes = [lead ? bindingsEl('p', { cls: 'text-sm', text: lead }) : null, bindingsEl('p', { cls: 'text-sm', text }), retry];
+    this.alertEl?.replaceChildren(bindingsAlert('error', 'bi-exclamation-octagon', nodes));
   }
 
-  async load() {
+  async load(options) {
     const first = !this.data;
+    const lead = options && options.lead ? options.lead : null;
     this.setBusy(true);
     if (this.refreshBtn) this.refreshBtn.replaceChildren(bindingsSpinner(), bindingsText('action.refresh'));
     if (first && this.listEl) {
@@ -432,23 +444,15 @@ class EmbeddingBindingsPanel {
       if (result.status === 401 || result.status === 403) {
         this.setStatus('', false);
         this.showSignIn(result.status);
-        return;
+        return result;
       }
       if (this.contentEl) this.contentEl.hidden = false;
-      if (result.status === 503) {
-        if (this.listEl && this.data) this.listEl.classList.add('opacity-60');
-        if (this.newBtn) this.newBtn.disabled = true;
-        this.setStatus('', false);
-        this.showLoadError(bindingsText('error.registry'));
-        return;
-      }
-      if (result.network) {
-        this.setStatus('', false);
-        this.showLoadError(bindingsText('error.network'));
-        return;
-      }
-      this.setStatus(result.message, true);
-      return;
+      if (this.listEl && this.data) this.listEl.classList.add('opacity-60');
+      if (this.newBtn) this.newBtn.disabled = true;
+      this.setStatus('', false);
+      const text = result.status === 503 ? bindingsText('error.registry') : result.network || !result.message ? bindingsText('error.network') : result.message;
+      this.showLoadError(text, lead);
+      return result;
     }
     this.signedOut = false;
     if (this.contentEl) this.contentEl.hidden = false;
@@ -462,6 +466,7 @@ class EmbeddingBindingsPanel {
     }
     if (first) this.setStatus('', false);
     this.setBusy(false);
+    return result;
   }
 
   render() {
@@ -478,7 +483,7 @@ class EmbeddingBindingsPanel {
         bindingsEl('dt', { text: bindingsText('state.switch') }),
         bindingsEl('dd', { cls: 'flex items-center gap-2' }, [
           bindingsEl('span', { cls: on ? 'badge badge-success badge-outline badge-sm' : 'badge badge-ghost badge-sm', text: bindingsText(on ? 'state.on' : 'state.off') }),
-          bindingsEl('code', { cls: 'font-mono text-xs break-all', text: 'RAG_DOMAIN_EMBEDDINGS', attrs: { translate: 'no' } }),
+          bindingsEl('code', { cls: 'font-mono text-xs break-words', text: 'RAG_DOMAIN_EMBEDDINGS', attrs: { translate: 'no' } }),
         ]),
       ]),
       bindingsEl('div', { cls: 'flex flex-wrap items-center gap-2' }, [
@@ -489,12 +494,16 @@ class EmbeddingBindingsPanel {
     const nodes = [dl];
     if (!on) {
       const note = this.data.profiles_switch === 'off' ? 'off.noteProfiles' : 'off.note';
-      const alert = bindingsAlert('info', 'bi-info-circle', [bindingsEl('p', { cls: 'text-sm', text: bindingsText(note) })]);
-      alert.classList.add('mt-2');
-      nodes.push(alert);
+      nodes.push(
+        bindingsEl('div', { cls: 'flex items-start gap-2 rounded-lg border border-info/40 bg-base-100 px-4 py-2 max-w-prose', attrs: { 'data-rag-bindings-off-note': '' } }, [
+          bindingsIcon('bi-info-circle', 'text-info mt-0.5'),
+          bindingsEl('p', { cls: 'text-sm text-base-content/70 min-w-0', text: bindingsText(note) }),
+        ]),
+      );
     }
-    if (!this.canCreate()) nodes.push(bindingsEl('p', { cls: 'text-xs text-base-content/70 mt-2', text: bindingsText('empty.noProfiles') }));
-    this.stateEl.replaceChildren(...nodes);
+    // The empty state carries this sentence when there is no binding; here only when the list is shown.
+    if (!this.canCreate() && bindingsGroups(this.data).length > 0) nodes.push(bindingsEl('p', { cls: 'text-xs text-base-content/70', text: bindingsText('empty.noProfiles') }));
+    this.stateEl.replaceChildren(bindingsEl('div', { cls: 'flex flex-col gap-2' }, nodes));
   }
 
   renderList() {
@@ -530,18 +539,20 @@ class EmbeddingBindingsPanel {
         'tr',
         null,
         ['col.scope', 'col.profile', 'col.status', 'col.complete', 'col.evidence', 'col.actions'].map((key) => {
-          const cls = key === 'col.actions' ? 'sr-only' : key === 'col.evidence' ? 'text-xs font-semibold hidden md:table-cell' : key === 'col.complete' ? 'text-xs font-semibold text-right' : 'text-xs font-semibold';
+          const cls = key === 'col.actions' ? 'sr-only' : key === 'col.complete' ? 'text-xs font-semibold text-right' : 'text-xs font-semibold';
           return bindingsEl('th', { cls, text: bindingsText(key), attrs: { scope: 'col' } });
         }),
       ),
     ]);
+    // Below md the header row is visually hidden and every row stacks into labelled lines (03.1.1-UI-REVIEW BLOCKER 1).
+    head.className = 'sr-only md:not-sr-only';
     const tbody = bindingsEl('tbody');
     for (const row of group.rows) {
       tbody.appendChild(this.renderRow(row));
       const note = this.notes[row.id];
       if (note) tbody.appendChild(this.renderNote(note));
     }
-    const table = bindingsEl('table', { cls: 'table table-sm' }, [
+    const table = bindingsEl('table', { cls: 'table table-sm w-full' }, [
       bindingsEl('caption', { cls: 'sr-only', text: bindingsText('table.caption', { type: this.typeName(group.docType) }) }),
       head,
       tbody,
@@ -550,25 +561,29 @@ class EmbeddingBindingsPanel {
   }
 
   renderRow(row) {
+    const cell = 'block md:table-cell align-top';
+    const label = (key) => bindingsEl('span', { cls: 'block md:hidden text-xs font-semibold text-base-content/70', text: bindingsText(key), attrs: { 'data-rag-bindings-cell-label': '' } });
     const scope =
       row.tenant_key === null
-        ? bindingsEl('th', { cls: 'font-normal align-top min-w-40', text: bindingsText('scope.deployment'), attrs: { scope: 'row' } })
-        : bindingsEl('th', { cls: 'font-normal align-top min-w-40', attrs: { scope: 'row' } }, [
+        ? bindingsEl('th', { cls: cell + ' font-semibold md:font-normal md:min-w-40', text: bindingsText('scope.deployment'), attrs: { scope: 'row' } })
+        : bindingsEl('th', { cls: cell + ' font-semibold md:font-normal md:min-w-40', attrs: { scope: 'row' } }, [
             bindingsEl('div', { text: bindingsText('scope.tenantLabel') }),
-            bindingsMono(row.tenant_key),
+            bindingsMono(row.tenant_key, 'font-mono text-sm font-normal break-words'),
           ]);
 
-    const profile = bindingsEl('td', { cls: 'align-top min-w-0' }, [
-      bindingsEl('div', null, [bindingsMono(row.profile_id)]),
-      row.model ? bindingsEl('div', { cls: 'text-xs text-base-content/70 break-all', text: row.model, attrs: { translate: 'no' } }) : null,
-      bindingsEl('div', { cls: 'font-mono text-xs text-base-content/70 break-all', attrs: { translate: 'no' } }, [
+    const profile = bindingsEl('td', { cls: cell + ' min-w-0 md:min-w-48' }, [
+      label('col.profile'),
+      bindingsEl('div', null, [bindingsMono(row.profile_id, 'font-mono text-sm break-words md:whitespace-nowrap')]),
+      row.model ? bindingsEl('div', { cls: 'text-xs text-base-content/70 break-words', text: row.model, attrs: { translate: 'no' } }) : null,
+      bindingsEl('div', { cls: 'font-mono text-xs text-base-content/70 break-words', attrs: { translate: 'no' } }, [
         bindingsEl('span', { cls: 'sr-only', text: bindingsText('row.bindingId') + ' ' }),
         String(row.id),
       ]),
     ]);
 
     const evidence = bindingsEvidenceView(row, this.data.global_active);
-    const status = bindingsEl('td', { cls: 'align-top' }, [
+    const status = bindingsEl('td', { cls: cell }, [
+      label('col.status'),
       bindingsEl(
         'div',
         { cls: 'flex flex-wrap gap-1' },
@@ -577,7 +592,6 @@ class EmbeddingBindingsPanel {
         ),
       ),
       ...this.statusHints(row),
-      bindingsEl('div', { cls: 'md:hidden text-xs text-base-content/70 mt-1' }, this.evidenceNodes(evidence)),
     ]);
 
     const view = bindingsCompletenessView(row.completeness);
@@ -587,14 +601,15 @@ class EmbeddingBindingsPanel {
     else if (view.kind === 'missing') {
       completeChildren = [
         bindingsEl('div', { cls: 'text-sm', text: view.percent }),
-        bindingsEl('div', { cls: 'flex items-center justify-end gap-1 text-xs' }, [bindingsIcon('bi-exclamation-triangle-fill', 'text-warning'), view.detail]),
+        // Inline icon: it flows with the first line of the text, so it never drifts from it when the line wraps.
+        bindingsEl('div', { cls: 'text-xs' }, [bindingsIcon('bi-exclamation-triangle-fill', 'text-warning mr-1'), view.detail]),
       ];
     } else completeChildren = [bindingsEl('div', { cls: 'text-sm', text: view.percent }), bindingsEl('div', { cls: 'text-xs text-base-content/70', text: view.detail })];
-    const complete = bindingsEl('td', { cls: 'text-right tabular-nums align-top' }, completeChildren);
+    const complete = bindingsEl('td', { cls: cell + ' md:text-right tabular-nums' }, [label('col.complete'), ...completeChildren]);
 
-    const evidenceCell = bindingsEl('td', { cls: 'hidden md:table-cell align-top' }, this.evidenceNodes(evidence));
-    const actions = bindingsEl('td', { cls: 'text-right align-top' }, this.actionNodes(row));
-    return bindingsEl('tr', null, [scope, profile, status, complete, evidenceCell, actions]);
+    const evidenceCell = bindingsEl('td', { cls: cell + ' md:min-w-28' }, [label('col.evidence'), ...this.evidenceNodes(evidence)]);
+    const actions = bindingsEl('td', { cls: cell + ' md:text-right' }, this.actionNodes(row));
+    return bindingsEl('tr', { cls: 'flex flex-col gap-2 py-2 max-md:border-b max-md:border-base-300 md:table-row md:py-0' }, [scope, profile, status, complete, evidenceCell, actions]);
   }
 
   statusHints(row) {
@@ -603,12 +618,13 @@ class EmbeddingBindingsPanel {
     if (row.status === 'active' && row.activated_at) {
       const parts = bindingsText('hint.activated').split('{date}');
       const children = [parts[0], bindingsTime(row.activated_at, { dateStyle: 'medium', timeStyle: 'short' }), parts[1] || ''];
-      if (row.activated_by) children.push(bindingsText('hint.activatedBy'), bindingsMono(row.activated_by, 'font-mono break-all'));
+      if (row.activated_by) children.push(bindingsText('hint.activatedBy'), bindingsMono(row.activated_by, 'font-mono text-xs break-words'));
       hints.push(hint(children));
     }
     if (row.status === 'backfilling') hints.push(hint([bindingsText('hint.backfilling'), bindingsCode('npm run rag:reembed')]));
     if (row.stale === true) {
-      hints.push(hint([bindingsText('hint.stale', { baseline: row.baseline_global_profile || bindingsText('state.none'), global: this.data.global_active || bindingsText('state.none') })]));
+      const global = this.data.global_active || bindingsText('state.none');
+      hints.push(hint([row.baseline_global_profile ? bindingsText('hint.stale', { baseline: row.baseline_global_profile, global }) : bindingsText('hint.staleNoBaseline', { global })]));
     }
     return hints;
   }
@@ -618,7 +634,7 @@ class EmbeddingBindingsPanel {
     const nodes = [
       bindingsEl('div', { text: evidence.text }),
       evidence.baseline
-        ? bindingsEl('div', { cls: 'text-xs text-base-content/70' }, [bindingsText('evidence.baseline'), bindingsMono(evidence.baseline, 'font-mono break-all')])
+        ? bindingsEl('div', { cls: 'text-xs text-base-content/70' }, [bindingsText('evidence.baseline'), bindingsMono(evidence.baseline, 'font-mono text-xs break-words')])
         : bindingsEl('div', { cls: 'text-xs text-base-content/70', text: bindingsText('evidence.noBaseline') }),
     ];
     if (evidence.outdated) {
@@ -634,7 +650,7 @@ class EmbeddingBindingsPanel {
 
   actionNodes(row) {
     const values = this.rowValues(row);
-    const buttons = bindingsEl('div', { cls: 'flex flex-wrap justify-end gap-2' });
+    const buttons = bindingsEl('div', { cls: 'flex flex-wrap md:flex-nowrap md:justify-end gap-2' });
     let needsEvidence = null;
     for (const action of bindingsActionsFor(row)) {
       const label = bindingsText('action.' + action.kind);
@@ -647,12 +663,12 @@ class EmbeddingBindingsPanel {
       if (action.disabled) {
         const hintId = 'rag-bindings-evidence-' + String(row.id).replace(/[^a-z0-9-]/gi, '');
         Object.assign(attrs, { disabled: true, 'aria-disabled': 'true', title: bindingsText('activate.needsEvidence.short'), 'aria-describedby': hintId, 'data-gated': '1' });
-        needsEvidence = bindingsEl('p', { cls: 'text-xs text-base-content/70 text-right mt-1 max-w-prose ml-auto', attrs: { id: hintId } }, [
+        needsEvidence = bindingsEl('p', { cls: 'text-xs text-base-content/70 text-left mt-1 max-w-prose', attrs: { id: hintId } }, [
           bindingsText('activate.needsEvidence'),
           bindingsCode('npm run rag:embedding -- record-binding-evidence <comparison.json> --binding ' + row.id),
         ]);
       } else if (this.busy) attrs.disabled = true;
-      const button = bindingsEl('button', { cls: BINDINGS_ACTION_CLASS[action.kind], attrs }, [
+      const button = bindingsEl('button', { cls: action.disabled ? BINDINGS_GATED_CLASS : BINDINGS_ACTION_CLASS[action.kind], attrs }, [
         action.kind === 'rollback' ? bindingsIcon('bi-arrow-counterclockwise') : null,
         label,
       ]);
@@ -665,7 +681,7 @@ class EmbeddingBindingsPanel {
   renderNote(note) {
     const nodes = [bindingsEl('p', { cls: 'text-sm', text: bindingsText('refusal.lead') }), bindingsCode(note.reason)];
     if (typeof note.detail === 'string' && note.detail !== note.reason) nodes.push(bindingsCode(note.detail));
-    return bindingsEl('tr', null, [bindingsEl('td', { attrs: { colspan: '6' } }, [bindingsAlert('error', 'bi-x-octagon', nodes)])]);
+    return bindingsEl('tr', { cls: 'block md:table-row' }, [bindingsEl('td', { cls: 'block md:table-cell', attrs: { colspan: '6' } }, [bindingsAlert('error', 'bi-x-octagon', nodes)])]);
   }
 
   // -- actions ----------------------------------------------------------------------------------------------------------------------------
@@ -756,9 +772,14 @@ class EmbeddingBindingsPanel {
     }
     const message = this.statusEl ? this.statusEl.textContent : '';
     const isError = this.statusEl ? this.statusEl.classList.contains('text-error') : false;
-    await this.load();
-    this.setStatus(message, isError, { toast: Boolean(result.ok) });
+    await this.reloadAfter(message, isError, { toast: Boolean(result.ok) });
     this.focusStatus();
+  }
+
+  /** Reloads the list and restores the outcome line; when the reload fails too, an error outcome joins the load alert instead. */
+  async reloadAfter(message, isError, options) {
+    const loaded = await this.load(isError ? { lead: message } : undefined);
+    if (loaded.ok || !isError) this.setStatus(message, isError, options);
   }
 
   successText(kind, row, body) {
@@ -908,7 +929,7 @@ class EmbeddingBindingsPanel {
       this.fieldError('profile_id'),
     ]);
 
-    const submit = bindingsEl('button', { cls: 'btn btn-primary btn-sm', text: bindingsText('form.submit'), attrs: { type: 'submit' } });
+    const submit = bindingsEl('button', { cls: 'btn btn-primary btn-sm', text: bindingsText('form.submit'), attrs: { type: 'submit', disabled: noProfile, 'aria-describedby': noProfile ? 'rag-bindings-form-profile-help' : null } });
     const cancel = bindingsEl('button', { cls: 'btn btn-sm', text: bindingsText('form.cancel'), attrs: { type: 'button' }, on: { click: () => this.closeForm() } });
     const form = bindingsEl('form', { attrs: { novalidate: true } }, [
       bindingsEl('div', { cls: 'grid gap-4 md:grid-cols-2' }, [
@@ -1014,8 +1035,7 @@ class EmbeddingBindingsPanel {
     this.renderForm();
     if (result.status === 503 || result.network) {
       this.setStatus(bindingsText('error.unconfirmed'), true);
-      await this.load();
-      this.setStatus(bindingsText('error.unconfirmed'), true);
+      await this.reloadAfter(bindingsText('error.unconfirmed'), true);
     } else {
       this.setStatus(result.message, true);
     }

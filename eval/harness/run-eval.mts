@@ -27,6 +27,7 @@ import {
   type FakeLanguageModelFactory,
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
+import { installFakeModelWindows } from './fake-small-window.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
@@ -697,6 +698,46 @@ async function writeLexicalOverlap(session: InProcessEval, deploymentMode: Deplo
   fs.writeFileSync(path.join(outDir, OVERLAP_FILE), `${JSON.stringify(report, null, 2)}\n`);
 }
 
+/** Report-only tie diagnostic (quick-44): off unless the eval process sets EVAL_LEXICAL_TIES_CATEGORIES (comma-separated categories). */
+function tieCategories(): string[] {
+  return (process.env.EVAL_LEXICAL_TIES_CATEGORIES ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+}
+
+async function writeLexicalTies(session: InProcessEval, deploymentMode: DeploymentMode, items: readonly GoldenItem[], outDir: string): Promise<void> {
+  const stats = session.lexicalStats;
+  if (!stats) return;
+  const { fixtureLexicalTies, TIES_FILE, TIES_K } = await import('./lexical-stats.mts');
+  const { tenantHash } = await import('./lexical-leg-run.mts');
+  const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
+  const { getRagDeps } = await import('../../src/lib/rag/deps.ts');
+  const { lexicalOptionsOn } = await import('../../src/lib/rag/lexical/options.ts');
+  const { resolveLexicalOptions } = await import('../../src/lib/rag/lexical/resolve-options.ts');
+  const { storeScopeForTenantKey } = await import('../../src/lib/rag/tenant/store-scope.ts');
+  const { queryLanguage } = await import('../../src/lib/rag/query/language.ts');
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  const tenantKey = deploymentMode === 'multi-tenant' ? `u:${session.fixtureUserId}` : 's:default';
+  const scope = storeScopeForTenantKey(tenantKey);
+  const report = await fixtureLexicalTies(
+    session.fixtureDb,
+    tenantKey,
+    items.map((item) => ({ id: item.id, question: item.question, category: item.category ?? null })),
+    tieCategories(),
+    TIES_K,
+    {
+      tenantHash: tenantHash(tenantKey),
+      k1: stats.k1,
+      b: stats.b,
+      ...(lexicalOptionsOn(config)
+        ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
+        : {}),
+    },
+  );
+  fs.writeFileSync(path.join(outDir, TIES_FILE), `${JSON.stringify(report, null, 2)}\n`);
+}
+
 export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const {
     goldenPath,
@@ -829,6 +870,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const restoreConsole = redirectConsole(logPath);
   let inProcess: InProcessEval | undefined;
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
+  let clearFakeModelWindows: (() => void) | undefined;
   let fakeGroundedness: FakeGroundedness | undefined;
   let edgeErrors = 0;
   let cachePairsPath: string | undefined;
@@ -917,6 +959,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
         }
       }
+      // Phase 5.2.1 D-88: the fake generators' windows (the small-window fake) for the prompt budget, read in this process only
+      if (includeAnswer && generator === 'fake') clearFakeModelWindows = await installFakeModelWindows();
       if (groundedness) {
         // The eval route posts to this fake instead of RAG_SIDECAR_URL; the real client keeps the secret header and the contract.
         const fake = await startFakeGroundedness();
@@ -1050,11 +1094,13 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         throw new Error(`[Eval Harness] fake edge recorded ${edgeErrors} unsupported or failed request(s): ${sample}`);
       }
       if (inProcess.lexicalStats && !cachePairs) await writeLexicalOverlap(inProcess, deploymentMode, routed.main, outDir);
+      if (inProcess.lexicalStats && !cachePairs && tieCategories().length > 0) await writeLexicalTies(inProcess, deploymentMode, routed.main, outDir);
     }
   } finally {
     restoreConsole();
     answerModule?.setEvalLanguageModelFactory(null);
     answerModule?.setEvalGroundednessRequest(null);
+    clearFakeModelWindows?.();
     await fakeGroundedness?.close();
     if (inProcess && !retainInProcess) await inProcess.close();
   }

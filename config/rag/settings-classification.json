@@ -171,7 +171,7 @@
     {
       "name": "RAG_DUP_CLUSTERS",
       "side": "ingestion",
-      "mechanism": "reparse"
+      "mechanism": "recluster"
     },
     {
       "name": "RAG_EFFECTIVE_DATES",
@@ -371,7 +371,7 @@
     {
       "name": "RAG_IDENTIFIER_INDEX",
       "side": "ingestion",
-      "mechanism": "reparse"
+      "mechanism": "reindex_identifiers"
     },
     {
       "name": "RAG_INGEST_ASYNC",
@@ -883,7 +883,7 @@
     {
       "name": "RAG_TABLE_LOOKUP",
       "side": "both",
-      "mechanism": "reparse"
+      "mechanism": "reindex_tables"
     },
     {
       "name": "RAG_TABLE_ROW_SERIALIZATION",

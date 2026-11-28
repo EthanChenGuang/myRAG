@@ -646,7 +646,8 @@ def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
             old_bigrams.setdefault(gram, relpath)
     # Old questions too: a no_answer question must not start finding a new document (research pitfall 9).
     for item in items:
-        if MARK in item.tags:
+        # Plan 06.2-22 items (tag phase62) run against the isolated q62 tenant, which holds none of these documents.
+        if MARK in item.tags or "phase62" in item.tags:
             continue
         for text in (item.question, *(turn.content for turn in item.conversation)):
             for word in _content_words(text):

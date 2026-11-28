@@ -7,6 +7,7 @@ import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
+import { isQ62Item } from '../../eval/harness/q62-fixtures.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -32,10 +33,10 @@ export function readGoldenQuestions(): GoldenQuestion[] {
     .readFileSync(GOLDEN_PATH, 'utf8')
     .split('\n')
     .filter((line) => line.trim() !== '')
-    .map((line) => {
-      const item = JSON.parse(line) as { id: string; question: string };
-      return { id: item.id, question: item.question };
-    });
+    .map((line) => JSON.parse(line) as { id: string; question: string; category: string; tags?: string[] })
+    // The 06.2-22 items run only against the isolated q62 fixture tenant, never against the main corpus these routes serve.
+    .filter((item) => !isQ62Item(item))
+    .map((item) => ({ id: item.id, question: item.question }));
 }
 
 export function expectCharacterization(name: string, actual: unknown): void {

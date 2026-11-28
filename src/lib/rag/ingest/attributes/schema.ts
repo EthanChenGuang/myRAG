@@ -220,6 +220,11 @@ function invalidate(tenantKey: string): void {
   generations.set(tenantKey, (generations.get(tenantKey) ?? 0) + 1);
 }
 
+/** Drops the tenant's cached schema (tenant delete); a load already in flight for it does not store its result. */
+export function invalidateAttributeSchema(tenantKey: string): void {
+  invalidate(tenantKey);
+}
+
 function store(tenantKey: string, entry: CacheEntry): void {
   cache.delete(tenantKey);
   cache.set(tenantKey, entry);

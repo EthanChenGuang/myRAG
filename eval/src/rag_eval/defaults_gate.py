@@ -22,7 +22,7 @@ from rag_sidecar.contracts.report import EvalReport, MetricValue, SliceMetrics
 from rag_eval.bounds import upper_bound
 from rag_eval.gate import evaluate_gate
 from rag_eval.paired import SUBQ_METRICS
-from rag_eval.paths import repo_relative, resolve_cli_path
+from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 
 EXIT_PASS = 0
 EXIT_FAIL = 1
@@ -31,6 +31,8 @@ EXIT_INTERNAL = 70
 
 CRITERIA_STALE = "criteria_stale"
 CRITERIA_CHANGED_AFTER_RUNS = "criteria_changed_after_runs"
+CRITERIA_AFTER_GATE = "criteria_after_gate_result"
+DEFAULT_GATE_RESULT = REPO_ROOT / "eval" / "reports" / "phase-04.1" / "fixture" / "defaults-gate.json"
 DERIVATION_RULE = "ingest_baseline_overall_recall_at_10_mean_minus_band"
 FLOAT_TOLERANCE = 1e-9
 
@@ -312,6 +314,8 @@ class DefaultsGateResult(_Model):
     passed: bool
     failures: list[str]
     live: dict[str, Any] | None = None
+    git_sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    evaluated_at: str | None = None
 
 
 # ---------- helpers
@@ -472,23 +476,35 @@ def _aligned_baseline(report: EvalReport, baseline: Baseline) -> Baseline:
     return baseline.model_copy(update={"request_options": options})
 
 
-def _g1(gate: GateResult) -> CriterionResult:
+def _offender_n_band(offender: Any, report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> tuple[int | None, float | None]:
+    if offender.kind != "noise_band":
+        return None, 0.0
+    observed = _metric(report, offender.slice, offender.metric)
+    stat = _stat(baseline, offender.slice, offender.metric)
+    return (observed.n if observed is not None else None), (band_for(stat, noise) if stat is not None else None)
+
+
+def _g1(gate: GateResult, report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> CriterionResult:
     if gate.mismatches:
         return _criterion("G1", [CheckResult(name="noise_gate", status="fail", reason="; ".join(gate.mismatches))])
-    checks = [
-        CheckResult(
-            name="noise_gate",
-            slice=offender.slice,
-            metric=offender.metric,
-            direction=offender.direction,
-            observed=offender.observed,
-            bound=offender.threshold,
-            baseline_mean=offender.baseline_mean,
-            status="fail",
-            reason=offender.reason or offender.kind,
+    checks = []
+    for offender in gate.offenders:
+        n, band = _offender_n_band(offender, report, baseline, noise)
+        checks.append(
+            CheckResult(
+                name="noise_gate",
+                slice=offender.slice,
+                metric=offender.metric,
+                direction=offender.direction,
+                observed=offender.observed,
+                n=n,
+                bound=offender.threshold,
+                baseline_mean=offender.baseline_mean,
+                band=band,
+                status="fail",
+                reason=offender.reason or offender.kind,
+            )
         )
-        for offender in gate.offenders
-    ]
     if not checks:
         checks.append(CheckResult(name="noise_gate", status="pass", reason=f"no offender; {len(gate.skipped)} skipped"))
     return _criterion("G1", checks, [f"skipped {entry}" for entry in gate.skipped])
@@ -613,9 +629,10 @@ def evaluate_config_mode(
     if legacy:
         results = [_g6(evaluate_gate(run.report, baseline, noise))]
     else:
-        gate = evaluate_gate(run.report, _aligned_baseline(run.report, baseline), noise)
+        aligned = _aligned_baseline(run.report, baseline)
+        gate = evaluate_gate(run.report, aligned, noise)
         results = [
-            _g1(gate),
+            _g1(gate, run.report, aligned, noise),
             _g2(run.report, baseline, noise, run.mode, criteria),
             _g3(run.report, baseline, noise, criteria),
             _g4(run.report, baseline, noise, criteria),
@@ -883,6 +900,7 @@ def render_markdown(result: DefaultsGateResult) -> str:
     lines.append(f"Floor: {result.selections.floor or 'none chosen'}; no-key fallback: {result.selections.no_key_fallback or 'none chosen'}")
     lines.append(f"Noise band: max({result.noise['k']} x spread, {result.noise['floor']})")
     lines.append(f"G2 absolute ingest Recall@10 floor (derived): {result.absolute_ingest_recall_at_10_min:.6f}")
+    lines.append(f"Git sha: {result.git_sha or 'not recorded'}; evaluated at: {result.evaluated_at or 'not recorded'}")
     lines.append("")
     if result.failures:
         lines += ["## Failures", "", *[f"- {failure}" for failure in result.failures], ""]
@@ -902,7 +920,7 @@ def render_markdown(result: DefaultsGateResult) -> str:
                 for check in criterion.checks:
                     lines.append(
                         f"| {criterion.id} ({criterion.status}) | {check.name} | {check.slice or ''} | {check.metric or ''} | "
-                        f"{_fmt(check.observed)} | {'' if check.n is None else check.n} | {_fmt(check.bound)} | "
+                        f"{_fmt(check.observed)} | {'n/a' if check.n is None else check.n} | {_fmt(check.bound)} | "
                         f"{_fmt(check.baseline_mean)} | {_fmt(check.band)} | {_fmt(check.upper_95)} | "
                         f"{check.status}{' (' + check.reason + ')' if check.reason else ''} |"
                     )
@@ -964,6 +982,38 @@ def git_changed_at(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
 
 
+def git_head_sha() -> str | None:
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, cwd=REPO_ROOT).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sha if len(sha) == 40 else None
+
+
+def _newest_run(result: DefaultsGateResult) -> datetime | None:
+    stamps = [_parse_time(mode.created_at) for config in result.configurations for mode in config.modes]
+    if result.evaluated_at:
+        stamps.append(_parse_time(result.evaluated_at))
+    return max(stamps) if stamps else None
+
+
+def gate_result_blocks_derive(gate_path: Path, criteria_path: Path) -> str | None:
+    """D-13: once a gate result was taken on a criteria file (runs newer than the criteria it read), re-deriving that
+    file rewrites pre-registered criteria after the fact. Returns the reason, or None when no such result exists."""
+    if not gate_path.is_file():
+        return None
+    result = DefaultsGateResult.model_validate_json(gate_path.read_text(encoding="utf-8"))
+    if resolve_cli_path(result.criteria_path).resolve() != criteria_path.resolve():
+        return None
+    newest = _newest_run(result)
+    if newest is None or newest < _parse_time(result.criteria_changed_at):
+        return None
+    return (
+        f"{CRITERIA_AFTER_GATE}: {repo_relative(gate_path)} evaluated runs up to {newest.isoformat()} on the criteria of "
+        f"{result.criteria_changed_at} (sha256 {result.criteria_sha256}); a new pre-registration needs --before-run and fresh runs"
+    )
+
+
 def _load_criteria(path: Path) -> tuple[dict[str, Any], DefaultsGateCriteria]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -980,6 +1030,12 @@ def _stale(problems: list[str]) -> int:
 
 def _cmd_derive(args: argparse.Namespace) -> int:
     criteria_path = resolve_cli_path(args.criteria)
+    blocked = gate_result_blocks_derive(resolve_cli_path(args.gate_result), criteria_path)
+    if blocked and not args.before_run:
+        print(f"defaults_gate: {blocked}", file=sys.stderr)
+        return EXIT_INVALID
+    if blocked:
+        print(f"defaults_gate: --before-run given over {blocked}", file=sys.stderr)
     raw, _ = _load_criteria(criteria_path)
     baseline_path = resolve_cli_path(args.ingest_baseline)
     updated = derive_absolute_floor(raw, baseline_path, resolve_cli_path(args.noise))
@@ -1047,6 +1103,7 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
         )
     except CriteriaStaleError as exc:
         return _stale(exc.problems)
+    result = result.model_copy(update={"git_sha": git_head_sha(), "evaluated_at": datetime.now(UTC).isoformat()})
     out_dir = resolve_cli_path(args.out)
     _write_text(out_dir / "defaults-gate.json", result.model_dump_json(indent=2) + "\n")
     _write_text(out_dir / "defaults-gate.md", render_markdown(result))
@@ -1067,6 +1124,9 @@ def _main(argv: list[str] | None = None) -> int:
         command.add_argument("--criteria", required=True, type=Path)
         command.add_argument("--ingest-baseline", required=True, type=Path)
         command.add_argument("--noise", required=True, type=Path)
+        if name == "derive":
+            command.add_argument("--gate-result", type=Path, default=DEFAULT_GATE_RESULT)
+            command.add_argument("--before-run", action="store_true", help="start a new pre-registration (D-13): fresh runs must follow")
     evaluate = commands.add_parser("evaluate")
     evaluate.add_argument("--criteria", required=True, type=Path)
     evaluate.add_argument("--reports", required=True, type=Path)

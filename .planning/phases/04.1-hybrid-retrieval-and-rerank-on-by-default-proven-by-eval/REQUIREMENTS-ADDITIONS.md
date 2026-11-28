@@ -2,6 +2,8 @@
 
 **Status 2026-11-25:** `.planning/REQUIREMENTS.md` already carries DFLT-01 to DFLT-07, their traceability rows and the ADM-02 amendment in the wording of 2026-11-24. The plan revision of 2026-11-25 rewords DFLT-01, DFLT-04 and DFLT-05 below (LANG-01, the ingest dual write, no literal baseline number, RNK-07). REQUIREMENTS.md still has the earlier wording; `04.1-PLAN-INDEX.md` lists the change under "Wording changes needed outside this phase".
 
+**Status 2026-11-27 (corrected by plan-41-fixes):** the sentence above is out of date. `.planning/REQUIREMENTS.md` carries the 2026-11-25 wording of DFLT-01, DFLT-04 and DFLT-05. Phase 4.1 closed not flipped (04.1-CONTEXT D-29), so the traceability rows below no longer say Pending, and the two 07-30 amendments below apply only when the decision's `status` is `flip` (07-30 PLAN is amended).
+
 ## New section (insert after "Rerank & Context (RNK)")
 
 ### Retrieval Defaults (DFLT)
@@ -18,13 +20,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DFLT-01 | Phase 4.1 | Pending |
-| DFLT-02 | Phase 4.1 | Pending |
-| DFLT-03 | Phase 4.1 | Pending |
-| DFLT-04 | Phase 4.1 | Pending |
-| DFLT-05 | Phase 4.1 | Pending |
-| DFLT-06 | Phase 4.1 | Pending |
-| DFLT-07 | Phase 4.1 | Pending |
+| DFLT-01 | Phase 4.1 | Not met (not flipped, 04.1 D-29; the legacy-exact half holds) |
+| DFLT-02 | Phase 4.1 | Partial (`auto` built and tested; the no-key fallback is a code default, not eval-chosen; follow-up 04.1-18) |
+| DFLT-03 | Phase 4.1 | Partial (both floors built; neither passed the gate; follow-up 04.1-18) |
+| DFLT-04 | Phase 4.1 | Complete (dormant while the default is legacy; live staging check open) |
+| DFLT-05 | Phase 4.1 | Partial (gate applied and failed, nothing adopted; real-golden re-run open) |
+| DFLT-06 | Phase 4.1 | Partial (switch mirrored, legacy CI tiers, docs of the shipped state; no post-flip default tiers) |
+| DFLT-07 | Phase 4.1 | Not met (live passes not run; owner checklist) |
 
 ## Amendments to existing requirements and plans
 

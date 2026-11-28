@@ -11,8 +11,8 @@ from .languages import Language
 from .omit import omit_none_schema
 
 Side = Literal["ingestion", "query", "both"]
-RebuildMechanism = Literal["reparse", "rechunk", "relex", "reembed", "recaption", "retranslate", "rescan"]
-REBUILD_MECHANISMS: tuple[str, ...] = ("reparse", "rechunk", "relex", "reembed", "recaption", "retranslate", "rescan")
+RebuildMechanism = Literal["reparse", "rechunk", "relex", "reembed", "recaption", "retranslate", "reindex_tables", "reindex_identifiers", "recluster", "rescan"]
+REBUILD_MECHANISMS: tuple[str, ...] = ("reparse", "rechunk", "relex", "reembed", "recaption", "retranslate", "reindex_tables", "reindex_identifiers", "recluster", "rescan")
 # rescan belongs to the two security checks (D-47): it is reported, never started as a rebuild by itself.
 AUTOMATIC_REBUILD_MECHANISMS: tuple[str, ...] = tuple(m for m in REBUILD_MECHANISMS if m != "rescan")
 

@@ -17,7 +17,7 @@ import { isTenantKey } from '../writer';
 export type ImpactDocType = FingerprintImpact['by_mechanism'][number]['doc_type'];
 
 /** Every rebuild mechanism, in the order the answer lists them (D-11). */
-export const REBUILD_MECHANISMS: readonly RebuildMechanism[] = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'rescan'];
+export const REBUILD_MECHANISMS: readonly RebuildMechanism[] = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'reindex_tables', 'reindex_identifiers', 'recluster', 'rescan'];
 const DOC_TYPES: readonly ImpactDocType[] = FingerprintImpactSchema.shape.by_mechanism.element.shape.doc_type.options;
 const RPC_GROUPS = 'rag_fingerprint_groups';
 
@@ -235,6 +235,9 @@ export const MECHANISM_COMMANDS: Readonly<Record<RebuildMechanism, string>> = Ob
   reembed: 'npm run rag:rebuild -- start --mechanism reembed',
   recaption: 'npm run rag:rebuild -- start --mechanism recaption',
   retranslate: 'npm run rag:translate',
+  reindex_tables: 'npm run rag:table-rows',
+  reindex_identifiers: 'npm run rag:identifiers',
+  recluster: 'npm run rag:dup-clusters',
   rescan: 'npm run rag:rebuild -- rescan',
 });
 

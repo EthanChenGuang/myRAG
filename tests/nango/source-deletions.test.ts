@@ -6,7 +6,14 @@ const state = vi.hoisted(() => ({
   pipeline: 'unified' as 'legacy' | 'unified',
   ingestAsync: false,
   softOk: true,
+  purgeOk: true,
 }));
+
+const purgeLineage = vi.hoisted(() =>
+  vi.fn(async (_scope: unknown, lineageId: string) =>
+    state.purgeOk ? { ok: true as const, auditId: 'audit-1', lineageId, removed: {}, check: {} } : { ok: false as const, reason: 'unavailable' },
+  ),
+);
 
 const softDeleteLineage = vi.hoisted(() =>
   vi.fn(async (_scope: unknown, lineageId: string) =>
@@ -25,7 +32,9 @@ vi.mock('@/lib/rag', async () => {
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: 'multi-tenant' }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
+    purgeLineage,
     removeDocumentObjects,
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   };
 });
@@ -81,6 +90,8 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     state.pipeline = 'unified';
     state.ingestAsync = false;
     state.softOk = true;
+    state.purgeOk = true;
+    purgeLineage.mockClear();
     softDeleteLineage.mockClear();
     removeDocumentObjects.mockClear();
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -127,12 +138,26 @@ describe('applySourceDeletions (D-03, D-08)', () => {
     expect(records(memory)).toEqual([]);
   });
 
-  it('a purge connection fails its whole batch and keeps every sync record', async () => {
-    const memory = seed(['file-a', 'file-b', 'file-c']);
-    const result = await applySourceDeletions(connection('purge'), ['file-a', 'file-b', 'file-c'], 'change_feed', { admin: memory.admin as never });
-    expect(result).toEqual({ removed: 0, failed: 3, deferred: 0 });
-    expect(records(memory)).toEqual(['file-a', 'file-b', 'file-c']);
-    expect(documents(memory)).toEqual(['doc-file-a', 'doc-file-b', 'doc-file-c']);
+  it('a purge connection purges each lineage as the source sync of the connection and drops the sync records', async () => {
+    const memory = seed(['file-a', 'file-b']);
+    const result = await applySourceDeletions(connection('purge'), ['file-a', 'file-b'], 'change_feed', { admin: memory.admin as never });
+    expect(result).toEqual({ removed: 2, failed: 0, deferred: 0 });
+    expect(purgeLineage).toHaveBeenCalledTimes(2);
+    const [scope, lineageId, actor, reason] = purgeLineage.mock.calls[0] as unknown as [unknown, string, unknown, unknown];
+    expect(scope).toBeTruthy();
+    expect(lineageId).toBe('line-file-a');
+    expect(actor).toEqual({ kind: 'source_sync', id: connection('purge').id });
+    expect(reason).toEqual({ code: 'source_deleted' });
+    expect(records(memory)).toEqual([]);
+    expect(softDeleteLineage).not.toHaveBeenCalled();
+  });
+
+  it('a purge that fails keeps its sync record and reports failed', async () => {
+    state.purgeOk = false;
+    const memory = seed(['file-a']);
+    const result = await applySourceDeletions(connection('purge'), ['file-a'], 'change_feed', { admin: memory.admin as never });
+    expect(result).toEqual({ removed: 0, failed: 1, deferred: 0 });
+    expect(records(memory)).toEqual(['file-a']);
   });
 
   it('a repeated call changes nothing and reports no error', async () => {

@@ -18,6 +18,7 @@ export function evalRetrievalOverrides(
           dense: overrides.legWeights.dense ?? 1,
           lexical: overrides.legWeights.lexical ?? 1,
           exact_id: overrides.legWeights.exactId ?? 1,
+          ...(overrides.legWeights.domain != null ? { domain: overrides.legWeights.domain } : {}),
         }
       : null,
   };

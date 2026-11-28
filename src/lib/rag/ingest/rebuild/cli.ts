@@ -24,7 +24,7 @@ const TENANT_KEY = /^(?:s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 const RESCAN_SWITCH = { hidden_text: 'RAG_HIDDEN_TEXT_CHECK', links: 'RAG_INGEST_LINK_CHECK' } as const;
 
 export const USAGE = [
-  'usage: npm run rag:rebuild -- start --mechanism <reparse|rechunk|relex|reembed|recaption|retranslate> [--dry-run]',
+  'usage: npm run rag:rebuild -- start --mechanism <reparse|rechunk|relex|reembed|recaption|retranslate|reindex_tables|reindex_identifiers|recluster> [--dry-run]',
   '       npm run rag:rebuild -- status [<run_id>]',
   '       npm run rag:rebuild -- record-eval <run_id> --report <gate.json>',
   '       npm run rag:rebuild -- activate <run_id>',

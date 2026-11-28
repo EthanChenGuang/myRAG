@@ -206,6 +206,9 @@ export function failure(result: TerminologyAdminFailed): NextResponse {
       return fail(422, 'Validation failed', { issues: result.issues ?? [] });
     case 'not_pending':
       return fail(409, 'not_pending');
+    case 'schema_outdated':
+      // W-6: a terminology function signature is missing or ambiguous (a migration such as 0980 is not applied, or 0472 ran after it).
+      return fail(503, 'schema_outdated');
     default:
       return fail(503, 'Terminology is unavailable');
   }

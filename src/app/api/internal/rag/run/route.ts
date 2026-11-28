@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { ModelMessage } from 'ai';
+import { asSchema, type ModelMessage } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
@@ -27,6 +27,10 @@ import {
   evalScope,
   bodyNamesAccessGroups,
   resolveAccessScope,
+  answerStructureFor,
+  decomposedAnswerFor,
+  type AnswerStructure,
+  type DecomposedAnswerInput,
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
@@ -38,8 +42,11 @@ import {
   isCacheHitResult,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
+  AttributeFilterError,
+  checkExplicitAttributeFilter,
   readGenerationConfig,
   injectionTraceVersions,
   RERANK_TEXT_VERSION,
@@ -77,6 +84,19 @@ import {
   turnCanUseTools,
   observeCalc,
   type CalcObserved,
+  answerReserveTokens,
+  assertQuestionLast,
+  CALCULATE_TOOL_NAME,
+  currentDocumentTokenTarget,
+  decideOutputCap,
+  finalizePromptBudget,
+  modelContextLength,
+  modelFamily,
+  planPromptBudget,
+  PROMPT_BUDGET_EXCEEDED,
+  PromptOrderError,
+  type BudgetMessage,
+  type PromptBudgetPlan,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -90,9 +110,15 @@ import {
   evalTraceLanguages,
 } from '@/lib/rag-eval/trace';
 import {
+  buildEvalAnswerSystemPrompt,
+  buildEvalBudgetMessages,
+  buildEvalBudgetSystemPrompt,
   evalGroundednessRequest,
+  evalModelOutputLimit,
   evalModelToolCapability,
   generateEvalAnswerDetailed,
+  type EvalAnswerUsage,
+  type EvalBudgetInput,
   isGPTGeneratorModel,
   resolveEvalPromptTemplate,
   resolveGeneratorModel,
@@ -114,7 +140,12 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
   if (input.final_top_k != null) out.finalTopK = input.final_top_k;
   if (input.rrf_k != null) out.rrfK = input.rrf_k;
   if (input.leg_weights != null) {
-    out.legWeights = { dense: input.leg_weights.dense, lexical: input.leg_weights.lexical, exactId: input.leg_weights.exact_id };
+    out.legWeights = {
+      dense: input.leg_weights.dense,
+      lexical: input.leg_weights.lexical,
+      exactId: input.leg_weights.exact_id,
+      ...(input.leg_weights.domain != null ? { domain: input.leg_weights.domain } : {}),
+    };
   }
   if (input.rerank_model != null) out.rerankModel = input.rerank_model;
   if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
@@ -503,6 +534,7 @@ async function generateClaudeAnswer(input: {
   answerLanguage?: AnswerLanguageOptions;
   answerTurn: AnswerTurn | null;
   answerRuleOptions: EvalAnswerRuleOptions;
+  decomposedAnswer?: DecomposedAnswerInput;
 }): Promise<{ text: string; finishReason: string } | null> {
   const { session, answerTurn } = input;
   let streamError: unknown = null;
@@ -510,7 +542,10 @@ async function generateClaudeAnswer(input: {
     const history: ModelMessage[] = session.stripHistory(
       input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
     ) as ModelMessage[];
-    const claudeSystem = appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage);
+    const claudeSystem = appendAnswerLanguage(
+      session.claudeSystemPrompt(resolveEvalPromptTemplate(), input.decomposedAnswer ? { decomposedAnswer: input.decomposedAnswer } : undefined),
+      input.answerLanguage,
+    );
     const stream = session.startClaude({
       // Phase 5.2 D-07: the chat route composes the same block into the direct Claude call's system text
       system: answerTurn ? answerTurn.composeSystemPrompt(claudeSystem, input.answerRuleOptions) : claudeSystem,
@@ -591,6 +626,37 @@ function evalAnswerRulesInput(input: {
     residual: residualPass?.outputGuard ? residualOutputFindings(residualPass.outputGuard) : null,
     mixedVersions: input.mixedVersions ?? null,
   };
+}
+
+type PromptBudgetInput = Parameters<typeof planPromptBudget>[0];
+
+/** Phase 5.2.1 D-80: the tool schemas as the model receives them (name, description, JSON schema), counted on their JSON. */
+async function toolSchemaParts(tools: Record<string, unknown>): Promise<unknown[]> {
+  return Promise.all(
+    Object.entries(tools).map(async ([name, definition]) => {
+      const tool = definition as { description?: unknown; inputSchema?: unknown };
+      let parameters: unknown = null;
+      try {
+        parameters = tool.inputSchema ? await Promise.resolve(asSchema(tool.inputSchema as Parameters<typeof asSchema>[0]).jsonSchema) : null;
+      } catch {
+        parameters = null;
+      }
+      return { name, description: typeof tool.description === 'string' ? tool.description : '', parameters };
+    }),
+  );
+}
+
+/** D-82: the eval conversation is user and assistant turns only, so kept history maps back one to one. */
+function toEvalConversation(messages: readonly BudgetMessage[]): EvalConversationTurn[] {
+  return messages.map((message) => ({
+    role: message.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+  }));
+}
+
+/** The first occurrence of `part` removed, so the system part is measured without the documents and the rules. */
+function withoutPart(text: string, part: string): string {
+  return part ? text.replace(part, () => '') : text;
 }
 
 type EvalTraceCacheState = NonNullable<RagTrace['cache']>;
@@ -685,17 +751,28 @@ export async function POST(req: NextRequest) {
   const entryProfile = voiceEntry ? 'voice' : 'eval';
 
   let retrievalFilters: RetrievalFilterInput | undefined;
+  let callerVersionsCurrent = false;
   if (options?.retrieval_filters && !voiceEntry) {
-    const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
+    const filterBody = toFilterBody(options.retrieval_filters);
+    const filtersParsed = parseRetrievalFilters(filterBody);
     if (!filtersParsed.ok) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
     }
     retrievalFilters = filtersParsed.filters;
+    callerVersionsCurrent = requestsCurrentVersions(filterBody);
     if (retrievalFilters?.scopes) {
       try {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
       } catch (error) {
         if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
+    if (retrievalFilters?.attributes) {
+      try {
+        await checkExplicitAttributeFilter(scope, retrievalFilters.attributes, { signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof AttributeFilterError)) throw error;
         return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
       }
     }
@@ -752,6 +829,58 @@ export async function POST(req: NextRequest) {
     const calcHolder = createCalcTraceHolder();
     let calcOffer: EvalCalcOffer | null = null;
 
+    // Phase 5.2.1 D-79 to D-82, D-95: with RAG_PROMPT_BUDGET on, the prompt is planned against the generator's window before
+    // retrieval, with the v2 token budget as the document target in both pipelines; off, nothing is computed
+    let budgetInput: PromptBudgetInput | null = null;
+    let budgetPlan: PromptBudgetPlan | null = null;
+    if (answerTurn !== null && generatorModel !== null && answerTurn.config.promptBudget) {
+      const modelLimit = evalModelOutputLimit(generatorModel);
+      // D-31, D-80: the reserve the Phase 5.2 cap gives on a knowledge turn; checked again once the cap is decided
+      const plannedReserve =
+        answerTurn.config.maxOutputTokens.kind !== 'off'
+          ? answerReserveTokens({
+              decision: decideOutputCap({
+                config: answerTurn.config,
+                mode: ragMode,
+                knowledgeContext: true,
+                userMaxTokens: false,
+                reasoning: generatorModel.includes('gpt-5'),
+                approvalContinuation: false,
+                channel: 'eval',
+              }),
+              modelLimit,
+            })
+          : modelLimit;
+      budgetInput = {
+        window: modelContextLength(generatorModel),
+        family: modelFamily(generatorModel),
+        parts: {
+          system: buildEvalBudgetSystemPrompt(ragMode),
+          rules: answerTurn.rulesBlock({ ...answerRuleOptions, ...(calcMayBeOffered ? { calculation: { mode: 'tool' as const } } : {}) }),
+          tools: calcMayBeOffered
+            ? await toolSchemaParts({ [CALCULATE_TOOL_NAME]: buildCalculateTool({ aliases: new Set<string>(), holder: createCalcTraceHolder() }) })
+            : '',
+          question: query,
+        },
+        history: history as BudgetMessage[],
+        answerReserve: plannedReserve,
+        documentTarget: currentDocumentTokenTarget(),
+        ...(answerTurn.answerLanguage ? { answerLanguage: answerTurn.answerLanguage } : {}),
+        overflowMode: 'truncate',
+      };
+      budgetPlan = planPromptBudget(budgetInput);
+      if (budgetPlan.status === 'exceeded') {
+        console.warn('[Prompt Budget] Eval request does not fit the model window; not sent', {
+          code: PROMPT_BUDGET_EXCEEDED,
+          window: budgetPlan.trace.window,
+          windowSource: budgetPlan.trace.window_source,
+        });
+      }
+    }
+    let promptBudgetTrace = budgetPlan?.trace ?? null;
+    let answerError: string | null = null;
+    let answerUsage: EvalAnswerUsage | null = null;
+
     // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
     const cacheOverride = !voiceEntry && cacheOverrideOn(options);
     const cacheContext: RetrievalCacheContext | undefined = cacheOverride
@@ -777,6 +906,8 @@ export async function POST(req: NextRequest) {
             isGPTModel,
             ragMode,
             webSearchEnabled: false,
+            // Packing counts raw counter tokens, so the planner's raw packing budget is the option (not the factor-scaled one)
+            ...(budgetPlan?.status === 'ok' ? { documentTokenBudget: budgetPlan.packingBudget } : {}),
             ...(options?.degrade ? { degrade: options.degrade } : {}),
             ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
             ...bindingOverrides.value,
@@ -786,6 +917,7 @@ export async function POST(req: NextRequest) {
       ...(voiceEntry ? { evalEntry: true as const } : {}),
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
+      ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
       ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),
@@ -824,6 +956,8 @@ export async function POST(req: NextRequest) {
       let answer: string | null = null;
       let finishReason: string | null = null;
       let answerChain: AnswerTextPipelineResult | null = null;
+      let decomposedAnswer: DecomposedAnswerInput | undefined;
+      let answerStructure: AnswerStructure | null = null;
       const calcRun: { outcome: ReturnType<typeof runCalcChecks> | null } = { outcome: null };
       let calcObserved: CalcObserved | null = null;
       const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
@@ -832,6 +966,9 @@ export async function POST(req: NextRequest) {
         : result.refusalCandidate || result.refusal?.decision === 'refuse' || (voiceResults !== null && voiceResults.length === 0);
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
+      } else if (generatorModel !== null && !serverRefused && budgetPlan?.status === 'exceeded') {
+        // D-84: the request would not fit the window, so it is not sent; the eval records the structured error
+        answerError = PROMPT_BUDGET_EXCEEDED;
       } else if (generatorModel !== null && !serverRefused) {
         // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
         collector.markRequestStart(requestReceivedAt);
@@ -870,6 +1007,9 @@ export async function POST(req: NextRequest) {
           answerRuleOptions = { ...answerRuleOptions, calculation: { mode: calcMode } };
         }
         const answerLanguage = answerLanguageOptions(result);
+        // Phase 6.2 D-11, D-12: the per-sub-question block of a decomposed turn; undefined leaves the prompt unchanged
+        decomposedAnswer =
+          result.context.length > 0 ? decomposedAnswerFor(result, { citationsActive: Boolean(citationSession?.strategy) }) : undefined;
         // Phase 5.2 D-30: decided once, before the composer, with the chat route's rule (the eval request sets no limit of its own)
         if (answerTurn && answerTurn.config.maxOutputTokens.kind !== 'off') {
           answerTurn.decideOutputCap({
@@ -883,20 +1023,80 @@ export async function POST(req: NextRequest) {
           });
         }
         // D-04, D-07: the chat route's order: enhanced prompt, citation decoration, then the answer-rule block (with context only)
+        let builtRules = '';
         const decorateSystemPrompt = (prompt: string): string => {
           if (!answerTurn || result.context.length === 0) return citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt;
-          return answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions);
+          const composed = answerTurn.composeSystemPrompt(citationSession ? citationSession.decorateSystemPrompt(prompt) : prompt, answerRuleOptions);
+          // D-86: the rule block measured on its own; when it is not the composed suffix it stays counted in the system part
+          if (budgetPlan) {
+            const rules = answerTurn.rulesBlock(answerRuleOptions);
+            builtRules = rules && composed.endsWith(rules) ? rules : '';
+          }
+          return composed;
         };
-        try {
+        const calcTool = calcOffer?.mode === 'tool' ? buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) : undefined;
+        // Phase 5.2.1 D-80 to D-84: the built request is checked against the window; history goes before any document and the
+        // question stays last. A request that still does not fit is not sent.
+        let budgetConversation = conversation;
+        let budgetRequest: EvalBudgetInput | null = null;
+        if (budgetPlan && budgetInput && answerTurn) {
+          let plan = budgetPlan;
+          const reserve = answerTurn.maxOutputTokens(evalModelOutputLimit(generatorModel));
+          if (reserve > budgetInput.answerReserve) {
+            budgetInput = { ...budgetInput, answerReserve: reserve };
+            plan = planPromptBudget({ ...budgetInput, documentTarget: 0 });
+          }
+          // D-82: when turns were dropped and the query layer condensed the question, the note is planned with the packed documents
+          const standalone = result.queryPlan?.standalone?.trim();
+          if (plan.status === 'ok' && standalone && standalone !== result.queryPlan?.original?.trim() && plan.trace.dropped_history_turns > 0) {
+            const replanned = planPromptBudget({ ...budgetInput, standaloneQuery: standalone, documentTarget: plan.documentBudget });
+            if (replanned.status === 'ok') plan = replanned;
+          }
+          const system = buildEvalAnswerSystemPrompt({
+            context: result.context,
+            ragMode,
+            decorateSystemPrompt,
+            ...(answerLanguage ? { answerLanguage } : {}),
+            ...(decomposedAnswer ? { decomposedAnswer } : {}),
+          });
+          const finalized = finalizePromptBudget(plan, {
+            builtParts: {
+              system: withoutPart(withoutPart(system, result.context), builtRules),
+              rules: builtRules,
+              tools: calcTool ? await toolSchemaParts({ [CALCULATE_TOOL_NAME]: calcTool }) : '',
+              documents: result.context,
+            },
+            droppedDocuments: result.packing?.droppedDocuments ?? 0,
+          });
+          promptBudgetTrace = finalized.trace;
+          if (finalized.status === 'exceeded') {
+            console.warn('[Prompt Budget] Built eval request does not fit the model window; not sent', {
+              code: PROMPT_BUDGET_EXCEEDED,
+              window: finalized.trace.window,
+            });
+            answerError = PROMPT_BUDGET_EXCEEDED;
+          } else {
+            budgetConversation = toEvalConversation(finalized.keptHistory);
+            budgetRequest = { system, standaloneNote: finalized.standaloneNote };
+            try {
+              assertQuestionLast(buildEvalBudgetMessages(query, budgetConversation, finalized.standaloneNote) as BudgetMessage[], query);
+            } catch (error: unknown) {
+              if (!(error instanceof PromptOrderError)) throw error;
+              answerError = error.code;
+            }
+          }
+        }
+        if (answerError === null) try {
           if (citationSession?.strategy === 'claude-citations') {
             const claude = await generateClaudeAnswer({
               session: citationSession,
               query,
-              conversation: conversation ?? [],
+              conversation: budgetConversation ?? [],
               signal: req.signal,
               ...(answerLanguage ? { answerLanguage } : {}),
               answerTurn,
               answerRuleOptions,
+              ...(decomposedAnswer ? { decomposedAnswer } : {}),
             });
             if (claude) {
               answer = claude.text;
@@ -906,25 +1106,28 @@ export async function POST(req: NextRequest) {
           if (answer === null) {
             const generated = await generateEvalAnswerDetailed({
               query,
-              conversation,
+              conversation: budgetConversation,
               context: result.context,
               ragMode,
               generatorModel,
               decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
+              ...(decomposedAnswer ? { decomposedAnswer } : {}),
               outputCap: answerTurn?.outputCapDecision() ?? null,
               ...(calcOffer
                 ? {
                     calc: {
                       mode: calcOffer.mode,
                       holder: calcHolder,
-                      ...(calcOffer.mode === 'tool' ? { tool: buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder }) } : {}),
+                      ...(calcTool ? { tool: calcTool } : {}),
                     },
                   }
                 : {}),
+              ...(budgetRequest ? { budget: budgetRequest } : {}),
             });
             answer = generated.text;
             finishReason = generated.finishReason;
+            if (budgetRequest) answerUsage = generated.usage;
             await citationSession?.ingestFullText(answer);
           }
           await citationSession?.settleAccessCheck();
@@ -932,6 +1135,10 @@ export async function POST(req: NextRequest) {
           const detail = errorDetail(error);
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
+        }
+        // D-12: report-only structure of the model's answer; never a regeneration
+        if (decomposedAnswer && answer !== null) {
+          answerStructure = answerStructureFor(decomposedAnswer, answer, citationSession?.strategy ? citationSession.aliases() : null);
         }
         // Phase 5.2 RESEARCH Pitfall 21: the eval does not stream, so the whole-text twin of the chain runs on the answer:
         // sentinel, output guard, then the notices as a final paragraph (D-16, D-35, D-11, D-33). Off: the answer is untouched.
@@ -1142,6 +1349,7 @@ export async function POST(req: NextRequest) {
         ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         ...(result.speculative ? { speculative: result.speculative } : {}),
         ...(result.sourceRecheck ? { stale_index_drop: result.sourceRecheck.dropped } : {}),
+        ...(answerStructure ? { answer_structure: answerStructure } : {}),
         ...(injection ? { injection } : {}),
         ...(result.versionConflict ? { version_conflict: versionConflictTrace(result.versionConflict, mixedVersions) } : {}),
         answer,
@@ -1157,6 +1365,10 @@ export async function POST(req: NextRequest) {
         ...(accessMode ? { access: { mode: accessMode, violations: accessCheck?.violations ?? 0 } } : {}),
         ...(calcRun.outcome ? { calc: calcRun.outcome.checks, review_reasons: calcRun.outcome.reviewReasons } : {}),
         ...(calcObserved ? { calc_observed: calcObserved } : {}),
+        // Phase 5.2.1 D-86: counts and fixed words only; absent while RAG_PROMPT_BUDGET is off
+        ...(promptBudgetTrace ? { prompt_budget: promptBudgetTrace } : {}),
+        ...(answerUsage ? { usage: answerUsage } : {}),
+        ...(answerError ? { answer_error: answerError } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

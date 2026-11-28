@@ -6,7 +6,9 @@ import { raiseSourceAlert } from './source-alerts';
 import { env } from '@/lib/env';
 import {
     nangoOwnerScope,
+    purgeLineage,
     queueConfigFromProcessEnv,
+    recomputeDirtyDupClusters,
     removeDocumentObjects,
     scopeKey,
     softDeleteLineage,
@@ -208,12 +210,16 @@ export async function applySourceDeletions(
             else result.failed++;
         }
     } else if (mode === 'purge') {
-        // The purge arm lands with plan 06.3-21; until then the batch fails whole and every sync record is kept.
-        logger.warn(SOURCE_RECONCILE, 'Purge mode is not available yet; the batch is kept for retry', {
-            connectionId: connection.id,
-            count: records.length,
-        });
-        result.failed = records.length;
+        // D-08, D-11: purge mode withdraws every store of the lineage; a sync record stays until its purge succeeded.
+        const tenantKey = connectionTenantKey(connection);
+        for (const record of records) {
+            const removed =
+                tenantKey !== null &&
+                (await purgeNangoLineages(admin, tenantKey, connection, record.file_id)) &&
+                (await deleteSyncRecord(admin, record, connection.user_id));
+            if (removed) result.removed++;
+            else result.failed++;
+        }
     } else {
         // Unified: lineages are removed inside the tenant of the connection owner only. An owner that cannot be a tenant
         // deletes nothing.
@@ -307,6 +313,42 @@ export async function softDeleteNangoLineages(
 }
 
 /**
+ * Purge mode (D-08, D-11): every lineage of the file inside the owner's tenant is purged through purgeLineage with the
+ * source sync of this connection as the actor. Returns false on the first failure, so the sync record is kept and
+ * the next run retries. A source-sync purge leaves no tombstone (D-35).
+ */
+export async function purgeNangoLineages(
+    supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+    tenantKey: string,
+    connection: Pick<SourceConnectionRow, 'id' | 'connection_id' | 'user_id'>,
+    fileId: string
+): Promise<boolean> {
+    try {
+        const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connection.connection_id, fileId);
+        if (lineages.length === 0) return true;
+        const owner = nangoOwnerScope({ ownerUserId: connection.user_id });
+        if (!owner.ok || scopeKey(owner.scope) !== tenantKey) return false;
+        for (const lineageId of lineages) {
+            const result = await purgeLineage(
+                owner.scope,
+                lineageId,
+                { kind: 'source_sync', id: connection.id },
+                { code: 'source_deleted' },
+                { signal: AbortSignal.timeout(120_000) }
+            );
+            if (!result.ok) {
+                logger.error('Nango', 'Source purge failed', { connectionId: connection.id, lineageId, reason: result.reason });
+                return false;
+            }
+        }
+        return true;
+    } catch (error) {
+        logger.error('Nango', 'Source purge failed', { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
+        return false;
+    }
+}
+
+/**
  * Delete every version of the files a source no longer has, inside one tenant. A file is found by its identity
  * (the provider file id of this connection), never by the document id a sync record holds: that id can name another
  * lineage when ingest reported a duplicate of an older, unrelated document. Returns false when a delete failed, so
@@ -316,7 +358,8 @@ export async function deleteNangoLineages(
     supabaseAdmin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
     tenantKey: string,
     connectionId: string,
-    fileId: string
+    fileId: string,
+    ownerUserId?: string
 ): Promise<boolean> {
     try {
         const lineages = await collectNangoLineageIds(supabaseAdmin, tenantKey, connectionId, fileId);
@@ -342,6 +385,13 @@ export async function deleteNangoLineages(
             .eq('tenant_key', tenantKey)
             .eq('source', 'nango');
         if (documentsError) throw documentsError;
+        // DATA-21: the chunk delete marked the lineages' duplicate clusters dirty; switch-gated and never fails the delete.
+        if (ownerUserId !== undefined) {
+            const owner = nangoOwnerScope({ ownerUserId });
+            if (owner.ok && scopeKey(owner.scope) === tenantKey) {
+                await recomputeDirtyDupClusters(owner.scope, { signal: AbortSignal.timeout(120_000) });
+            }
+        }
         // Best effort and after the rows: the originals and parse files of the removed versions leave the private bucket.
         await removeDocumentObjects({ tenantKey, rows: versionRows });
         return true;
@@ -371,7 +421,7 @@ export async function applyDefaultDeletion(record: SyncRecordRow, ctx: DefaultDe
         if (tenantKey !== null) {
             const removed = orphanUsesSoftDelete()
                 ? await softDeleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId)
-                : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id);
+                : await deleteNangoLineages(supabaseAdmin, tenantKey, connectionId, record.file_id, userId);
             if (!removed) {
                 return deleted;
             }

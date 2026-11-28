@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { env } from '@/lib/env';
 import { getSupabase } from '@/lib/supabase';
+import { withoutUnselectableAuto } from '@/lib/chat/auto-model';
 
 export type Model = {
   id: string;
@@ -71,7 +72,7 @@ let AI_PROVIDER = env.NEXT_PUBLIC_AI_PROVIDER as 'openai' | 'openrouter' | 'groq
 // Load models dynamically from API
 const fetchModelsFromAPI = async (): Promise<{ models: Model[], provider: 'openai' | 'openrouter' | 'groq' }> => {
   try {
-    const response = await fetch('/api/config/models');
+    const response = await fetch('/api/config/models?for=chat');
     if (!response.ok) {
       throw new Error('Failed to fetch models');
     }
@@ -117,8 +118,8 @@ const getAvailableModelsFromEnv = (): Model[] => {
       models = JSON.parse(env.NEXT_PUBLIC_GROQ_MODELS || '[]');
     }
 
-    // Enhance with reasoning detection
-    return models.map((model: Model) => {
+    // The browser cannot see RAG_MODEL_ROUTING, so the env fallback never offers Auto
+    return withoutUnselectableAuto(models, false).map((model: Model) => {
       const reasoningInfo = detectReasoningSupport(model);
       return {
         ...model,
@@ -226,7 +227,7 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
     // Set up listener for config changes (faster refresh when config UI updates models)
     const checkForModelUpdates = async () => {
       try {
-        const response = await fetch('/api/config/models');
+        const response = await fetch('/api/config/models?for=chat');
         if (response.ok) {
           const data = await response.json();
           let currentModelsStr = '';

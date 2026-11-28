@@ -806,7 +806,7 @@ describe('re-embed job (src/lib/rag/ingest/reembed)', () => {
       const refuse = (name: string) => async () => {
         throw new Error(`${name} must not be called by the re-embed job`);
       };
-      objectStoreModule.setObjectStoreForTests({ put: refuse('object store'), get: refuse('object store'), remove: refuse('object store'), exists: refuse('object store') });
+      objectStoreModule.setObjectStoreForTests({ put: refuse('object store'), get: refuse('object store'), remove: refuse('object store'), exists: refuse('object store'), list: refuse('object store') });
       depsModule.setIngestDepsForTests({ embedDocuments: refuse('legacy embedder'), rehydrate: refuse('rehydrate') as never });
       const fake = fakeEmbeddingProvider({ id: 'voyage', model: VOYAGE_MODEL });
       useProvider(fake);

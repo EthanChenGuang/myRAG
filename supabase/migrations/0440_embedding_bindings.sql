@@ -15,6 +15,11 @@
 --   SELECT 'f7aa72d3c0bcc173f7dd103cced69c03' AS expected, pg_catalog.md5(p.prosrc) AS live
 --     FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.rag_chunk_embeddings_guard()');
 -- Re-running 0425 after this file puts back the 0425 guard without the scope check, so re-run 0440 after it.
+-- Large chunk_embeddings tables: the three partial HNSW indexes below are built inside this file's transaction, which blocks writes to
+-- chunk_embeddings for the whole build. On a table that already holds many rows, create them first, outside a transaction, with
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS and the same name, expression, opclass, WITH options and WHERE clause, one statement at a time
+-- (CONCURRENTLY cannot run inside BEGIN/COMMIT). The IF NOT EXISTS statements here then skip them. Check that none is left INVALID
+-- (pg_catalog.pg_index.indisvalid) before applying this file; drop and rebuild an invalid one. (quick-311, T-3.1.1-15b)
 -- Idempotent: ADD COLUMN IF NOT EXISTS, constraints added only when absent, ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE.
 
 BEGIN;

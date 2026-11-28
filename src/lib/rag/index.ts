@@ -1,7 +1,10 @@
 export { runRetrieval, runStage, deriveStatus, StageError } from './pipeline';
 export type { StageSpec, StageOutcome } from './pipeline';
-export { parseRetrievalFilters } from './query/filters';
+export { parseRetrievalFilters, requestsCurrentVersions } from './query/filters';
 export { resolveScopesFilter, ScopeFilterError } from './query/scopes';
+export { AttributeFilterError, checkExplicitAttributeFilter } from './retrieval/attributes';
+export { deleteTenantRuleData } from './ingest/rules/tenant-delete';
+export type { TenantRuleDataDeleteResult } from './ingest/rules/tenant-delete';
 export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
@@ -14,7 +17,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -133,6 +136,7 @@ export type {
   SharingRuleRow,
 } from './access/connector';
 export { UNKNOWN_ACCESS_SET, accessSetsFor } from './access/sets';
+export { cachedSourceDocumentIds } from './cache/sources';
 export type {
   AccessIdentity,
   AccessScopeRefusalReason,
@@ -320,6 +324,10 @@ export {
 export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
+export { answerStructureFor, answerStructureStage, decomposedAnswerFor } from './generation/decomposed-turn';
+export { isOutOfScopeResult, scopeGateNoticeFor, type ScopeNotice } from './generation/scope-notice';
+export type { DecomposedAnswerInput } from './generation/decomposed-answer';
+export type { AnswerStructure } from './generation/answer-structure';
 export {
   answerLanguageInstruction,
   answerLanguageOptions,
@@ -381,7 +389,7 @@ export {
   CALC_REQUEST_JSON_SCHEMA,
   type VoiceCalcSource,
 } from './calc/voice-sources';
-export { promptBudgetConfig } from './context/prompt-budget-config';
+export { factorFor, promptBudgetConfig } from './context/prompt-budget-config';
 export { fixedText } from './lang/texts';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
@@ -666,6 +674,8 @@ export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
+export { isPurgeTombstoned, purgeDocumentAsAdmin, purgeLineage, PURGE_ADMIN_REASON_CODES, rescrubRecentPurges, retryPendingPurgeObjects, reverifyPurgeAsAdmin, listPurgeRecords, verifyPurge } from './ingest/purge';
+export type { PurgeActor, PurgeAdminReasonCode, PurgeCheck, PurgeCheckResult, PurgeDocumentAsAdminInput, PurgeFailure, PurgeLineageResult, PurgeReason, PurgeReasonCode, RescrubResult, RetryPendingResult, VerifyPurgeInput, VerifyPurgeResult, PurgeRecord, ListPurgeRecordsResult, ReverifyPurgeResult } from './ingest/purge';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
 export {

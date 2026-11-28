@@ -3,7 +3,7 @@ import type { SettingValues } from './settings-hash.cjs';
 export type RagGateInput = { check_id?: string; override?: { reason?: string }; skipped?: boolean } | null | undefined;
 export type SaveDecision =
   | { kind: 'write'; gateResult: 'pass' | 'fail' | 'error' | 'skipped' | 'not_required'; checkId: string | null; overrideReason: string | null }
-  | { kind: 'refuse'; status: 400 | 409; error: 'invalid_reason' | 'rag_gate_required' };
+  | { kind: 'refuse'; status: 400 | 409; error: 'invalid_reason' | 'rag_gate_required' | 'rag_gate_override_required' };
 export interface CheckLike {
   check_id: string;
   status: string;

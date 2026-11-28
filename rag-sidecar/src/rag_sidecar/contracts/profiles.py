@@ -209,6 +209,7 @@ class BindingComparison(_Contract):
     hashes: BindingComparisonHashes
     reembed_run_ids: dict[str, UUID]
     fixture_embedder: bool
+    population: Literal["fixture", "real"] = "fixture"
     gate_passed: bool
     recommended_profile: BindingProfileId | None = None
     notes: list[str] = Field(default_factory=list)

@@ -18,6 +18,7 @@ import {
   SUB_QUESTION_FILTER_FIELDS,
   type NarrowVocabulary,
   type SubQuestionFilter,
+  type VersionRules,
 } from '../subq-filters';
 import subqPrompt from '../prompts/llamaindex.subq.v1.json';
 import { callNative, NATIVE_SYSTEM_PROMPT, type NativeDeps, type NativeTransformSkip } from './call';
@@ -61,6 +62,8 @@ export type SubqFilterContext = {
   vocabulary: NarrowVocabulary;
   /** subq_filter_vocab_cap for the prompt addendum. */
   vocabCap: number;
+  /** P-35: when a proposed version scope may widen past current versions; absent accepts none. */
+  versionRules?: VersionRules;
 };
 
 export type SubQuestionVariant = {
@@ -196,7 +199,7 @@ export function finishDecompose(input: FinishDecomposeInput, output: unknown): D
       filterTrace.push({ index, status: 'dropped_invalid', retried: false, retry_skipped_cap: false });
       return;
     }
-    const narrowed = narrowFilters(context.base, parsed.filter, context.vocabulary);
+    const narrowed = narrowFilters(context.base, parsed.filter, context.vocabulary, context.versionRules);
     subQuestionSpecs.push({ text: variant.text, filter: narrowed.applied });
     subQuestionFilters.push(narrowed.applied ? (narrowed.filters ?? null) : null);
     filterTrace.push({ index, status: narrowed.status, retried: false, retry_skipped_cap: false });

@@ -3251,7 +3251,7 @@
       "name": "RAG_CONFIG_GATE",
       "status": "managed",
       "knownGaps": [],
-      "ragAffecting": false,
+      "ragAffecting": true,
       "description": "Pre-save setting check in the Config UI: off | warn | enforce (off saves at once, as before).",
       "group": "evaluation",
       "label": "Setting check before save",

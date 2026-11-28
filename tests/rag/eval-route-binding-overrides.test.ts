@@ -110,6 +110,14 @@ describe('eval route binding overrides (D-22)', () => {
     expect(input.options.domainControlLeg).toBe('contract_legal');
   });
 
+  // quick-311 (gap 6): leg_weights.domain was dropped by the route, so a domain-weight sweep changed nothing.
+  it('carries leg_weights.domain through the retrieval overrides', async () => {
+    const route = await loadRoute();
+    await route.POST(evalRequest({ retrieval_overrides: { leg_weights: { dense: 1, lexical: 1, exact_id: 1, domain: 0.25 } } }));
+    const input = h.runSpy.mock.calls[0][0];
+    expect(input.stageOverrides.retrievalOverrides.legWeights).toEqual({ dense: 1, lexical: 1, exactId: 1, domain: 0.25 });
+  });
+
   it('passes neither field when the request names none, and the response is unchanged', async () => {
     const route = await loadRoute();
     const response = await route.POST(evalRequest({ max_results: 5 }));

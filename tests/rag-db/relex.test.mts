@@ -209,7 +209,7 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
       throw new Error(`${name} must not be called by the relex job`);
     };
     try {
-      objectStoreModule.setObjectStoreForTests({ put: refuse('object store'), get: refuse('object store'), remove: refuse('object store'), exists: refuse('object store') });
+      objectStoreModule.setObjectStoreForTests({ put: refuse('object store'), get: refuse('object store'), remove: refuse('object store'), exists: refuse('object store'), list: refuse('object store') });
       depsModule.setIngestDepsForTests({ embedDocuments: refuse('legacy embedder') });
       await relex.runRelex({ db: db(), tenantKey: TENANT_A, batchSize: 500 });
       assert.equal(sidecar.calls.length, 0);

@@ -75,7 +75,13 @@ describe('qdrant collection setup', () => {
     expect(create.hnsw_config).toEqual({ m: 64, ef_construct: 200 });
     expect(create).not.toHaveProperty('quantization_config');
     expect(create.strict_mode_config).toEqual({ enabled: true, unindexed_filtering_retrieve: false, unindexed_filtering_update: false });
-    expect(create.metadata).toEqual({ profile_id: PROFILE, dims: 3, lexical_mode: 'text_bm25', hnsw: { m: 64, ef_construct: 200 } });
+    expect(create.metadata).toEqual({
+      profile_id: PROFILE,
+      dims: 3,
+      lexical_mode: 'text_bm25',
+      hnsw: { m: 64, ef_construct: 200 },
+      lexical_bm25: { k1: 1.2, b: 0.75 },
+    });
     const indexes = client.requests.slice(2).map((r) => [r.body.field_name, r.body.field_schema]);
     expect(indexes[0]).toEqual(['tenant_key', { type: 'keyword', is_tenant: true }]);
     expect(indexes.map(([field]) => field)).toEqual([
@@ -124,7 +130,13 @@ describe('qdrant collection setup', () => {
     const store = createQdrantStore({ writeClient: client });
     expect(await store.describeCollection(PROFILE)).toBeNull();
     await store.ensureCollection({ profileId: PROFILE, dims: 3 });
-    expect(await store.describeCollection(PROFILE)).toEqual({ profileId: PROFILE, dims: 3, tenants: null, lexicalMode: 'text_bm25' });
+    expect(await store.describeCollection(PROFILE)).toEqual({
+      profileId: PROFILE,
+      dims: 3,
+      tenants: null,
+      lexicalMode: 'text_bm25',
+      lexicalParams: { k1: 1.2, b: 0.75 },
+    });
   });
 
   it('never writes a point into a collection before its indexes exist', async () => {

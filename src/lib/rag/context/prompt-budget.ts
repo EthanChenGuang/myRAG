@@ -87,7 +87,13 @@ interface PlanState {
 
 export interface PromptBudgetPlan {
   status: 'ok' | 'exceeded';
+  /** The document part in estimated (factor-scaled) tokens, as the trace's parts count it. */
   documentBudget: number;
+  /**
+   * The same budget in raw counter tokens, the unit packing counts in: pass it as RetrievalOptions.documentTokenBudget, so the
+   * packed documents re-estimate to at most documentBudget.
+   */
+  packingBudget: number;
   keptHistory: BudgetMessage[];
   standaloneNote: string | null;
   trace: PromptBudgetTrace;
@@ -231,6 +237,7 @@ export function planPromptBudget(input: PromptBudgetInput): PromptBudgetPlan {
     return {
       status: 'exceeded',
       documentBudget: 0,
+      packingBudget: 0,
       keptHistory: [],
       standaloneNote: null,
       state,
@@ -254,6 +261,7 @@ export function planPromptBudget(input: PromptBudgetInput): PromptBudgetPlan {
   return {
     status: 'ok',
     documentBudget,
+    packingBudget: Math.floor(documentBudget / factor),
     keptHistory: keptHistoryOf(state),
     standaloneNote: noteOf(state),
     state,
