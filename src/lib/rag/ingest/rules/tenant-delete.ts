@@ -28,6 +28,9 @@ export async function deleteTenantRuleData(tenantKey: string, signal?: AbortSign
     if (signal) request = request.abortSignal(signal);
     const response = await request;
     if (response.error) {
+      const code = (response.error as { code?: string }).code ?? null;
+      // Without migration 1009 the five Phase 3.3 tables do not exist either: nothing to delete.
+      if (code === '42883' || code === 'PGRST202') return { ok: true, deleted: {} };
       console.error(`${LOG} tenant rule data delete failed`, { rpc: RPC, code: (response.error as { code?: string }).code ?? null });
       return { ok: false, reason: 'unavailable' };
     }

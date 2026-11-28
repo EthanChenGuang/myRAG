@@ -337,6 +337,12 @@ for (const mode of MODES) {
         assert.deepEqual(await deleteTenantRuleData('not-a-key'), { ok: false, reason: 'invalid_tenant_key' });
         const foreign = mode === 'single-tenant' ? `o:${ORG_A}` : 's:default';
         assert.deepEqual(await deleteTenantRuleData(foreign), { ok: false, reason: 'unavailable' });
+        await db.exec('ALTER FUNCTION public.rag_tenant_rule_data_delete(text) RENAME TO rag_tenant_rule_data_delete_hidden');
+        try {
+          assert.deepEqual(await deleteTenantRuleData(a.key), { ok: true, deleted: {} }, 'a project without 1009 has nothing to delete');
+        } finally {
+          await db.exec('ALTER FUNCTION public.rag_tenant_rule_data_delete_hidden(text) RENAME TO rag_tenant_rule_data_delete');
+        }
       } finally {
         deps.resetIngestDepsForTests();
         lexicon.resetAttributeLexiconForTests();
