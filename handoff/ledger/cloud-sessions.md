@@ -1158,3 +1158,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 05:32Z 07-49 final report: DONE (rollouts admin, promote). Salt is absent from every response (tested). The broad vitest run did not finish locally; train CI covers it. Session archived for good. Queued for train 43 (07-51 contains it).
 - 05:45Z t42 found a real gap: the 04.4-07 purge-inventory hand-off (6 lexical relations, the hook is never called). Orchestrator decision: fix it in t42 with a new migration at the next free number (~0746; 0742-0745 are taken by the 07-x line). Nudged the idle t41 builder with priority now about the #141 CI failures.
 - 05:59Z t41 #141 CI fixes pushed (ccdb82821; 4 root causes, each reproduced). Forwarded to t42. Waiting for CI.
+- 05:59Z t42 lexical purge hand-off done (228737718, migration 0746). train42-live.sql is at f01e0a09e (runs after t41's SQL and 0991). Eval pytest passes. Next: test-rag, then the 4.2/4.4 gates, then wait for #141.
