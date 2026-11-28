@@ -1,0 +1,157 @@
+{
+  "description": "Hand-written synthetic Microsoft Graph drive delta recording (D-25): a token-less enumeration of drive-a over two pages for the selection tests (Folder 1 selected; Folder 2 and the root are outside it). Neutral names and made-up ids only.",
+  "responses": {
+    "/v1.0/drives/drive-a/root/delta": {
+      "status": 200,
+      "body": {
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/drives/drive-a/root/delta?token=scope-page-2",
+        "value": [
+          {
+            "id": "item-root",
+            "name": "root",
+            "root": {},
+            "folder": {
+              "childCount": 3
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-folder-1",
+            "name": "Folder 1",
+            "folder": {
+              "childCount": 1
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-root",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-folder-1a",
+            "name": "Folder 1A",
+            "folder": {
+              "childCount": 1
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-folder-1",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-file-a",
+            "name": "file-a.txt",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000a1},1\"",
+            "lastModifiedDateTime": "2026-01-03T00:00:00Z",
+            "file": {
+              "mimeType": "text/plain"
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-folder-1",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-file-b",
+            "name": "file-b.txt",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000b1},1\"",
+            "lastModifiedDateTime": "2026-01-04T00:00:00Z",
+            "file": {
+              "mimeType": "text/plain"
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-root",
+              "siteId": "site-a"
+            }
+          }
+        ]
+      }
+    },
+    "/v1.0/drives/drive-a/root/delta?token=scope-page-2": {
+      "status": 200,
+      "body": {
+        "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/drive-a/root/delta?token=scope-delta-1",
+        "value": [
+          {
+            "id": "item-file-n",
+            "name": "file-n.txt",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000e1},1\"",
+            "lastModifiedDateTime": "2026-01-05T00:00:00Z",
+            "file": {
+              "mimeType": "text/plain"
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-folder-1a",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-folder-2",
+            "name": "Folder 2",
+            "folder": {
+              "childCount": 1
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-root",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-file-x",
+            "name": "file-x.txt",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000f2},1\"",
+            "lastModifiedDateTime": "2026-01-06T00:00:00Z",
+            "file": {
+              "mimeType": "text/plain"
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-folder-2",
+              "siteId": "site-a"
+            }
+          },
+          {
+            "id": "item-gone-1",
+            "deleted": {
+              "state": "deleted"
+            },
+            "file": {},
+            "parentReference": {
+              "driveId": "drive-a"
+            }
+          }
+        ]
+      }
+    },
+    "/v1.0/drives/drive-a/root/delta?token=scope-delta-1": {
+      "status": 200,
+      "body": {
+        "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/drive-a/root/delta?token=scope-delta-2",
+        "value": [
+          {
+            "id": "item-file-n2",
+            "name": "file-n2.txt",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000e2},1\"",
+            "lastModifiedDateTime": "2026-01-07T00:00:00Z",
+            "file": {
+              "mimeType": "text/plain"
+            },
+            "parentReference": {
+              "driveId": "drive-a",
+              "id": "item-folder-1a",
+              "siteId": "site-a"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
