@@ -121,8 +121,8 @@ describe('semantic cache invalidation triggers on documents', () => {
     assert.equal(await cacheCount(db, TENANT_B), 2);
   });
 
-  test("inserting a document as the authenticated owner through the legacy path deletes the tenant's rows", async () => {
-    await asRole(db, 'authenticated', USER_A, () =>
+  test("inserting a document through the legacy writer (service_role, column defaults) deletes the tenant's rows", async () => {
+    await asRole(db, 'service_role', null, () =>
       db.query(`INSERT INTO documents (filename, content, metadata, user_id) VALUES ('legacy.md', 'placeholder', '{}'::jsonb, $1)`, [USER_A]),
     );
     assert.equal(await cacheCount(db, TENANT_A), 0);
