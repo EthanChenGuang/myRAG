@@ -271,3 +271,60 @@ describe('Phase 4.4 lexical scoring dependency wiring in the Config UI (04.4-06,
     }
   });
 });
+
+describe('Phase 4.4 BM25 document frequency mode in every config location (04.4-16, D-44)', () => {
+  const NAME = 'RAG_LEXICAL_DF_MODE';
+
+  it('the five locations, the manifest, the classification and the eval pin carry it with default raw', () => {
+    expect(initEnv).toMatch(/^RAG_LEXICAL_DF_MODE=raw$/m);
+    expect(server).toContain(`'${NAME}=raw'`);
+    expect(server).toContain(`${NAME}=\${getEnvValue('${NAME}') || 'raw'}`);
+    expect([...server.matchAll(new RegExp(`${NAME}=`, 'g'))].length).toBe([...server.matchAll(/RAG_LEXICAL_STEM_IT=/g)].length);
+    expect(envTs).toContain(`${NAME}: process.env.${NAME} || 'raw'`);
+    const row = entries<{ name: string; status: string; default?: string; options?: string[] }>(manifest).find((item) => item.name === NAME);
+    expect(row?.status).toBe('managed');
+    expect(row?.default).toBe('raw');
+    expect(row?.options).toEqual(['raw', 'cluster']);
+    const side = entries<{ name: string; side: string; mechanism?: string }>(classification).find((item) => item.name === NAME);
+    expect(side?.side).toBe('query');
+    expect(side?.mechanism).toBeUndefined();
+    expect(evalEnv[NAME]).toBe('raw');
+  });
+
+  it('the select sits after the BM25 parameters and before the reranker, offers raw and cluster with raw selected', () => {
+    const content = phase4Box();
+    const b = content.indexOf('id="RAG_LEXICAL_BM25_B"');
+    const df = content.indexOf(`id="${NAME}"`);
+    expect(df).toBeGreaterThan(b);
+    expect(content.indexOf('id="RAG_RERANKER"')).toBeGreaterThan(df);
+    const tag = openingTag(NAME);
+    expect(attr(tag, 'name')).toBe(NAME);
+    expect(attr(tag, 'translate')).toBe('no');
+    expect(attr(tag, 'aria-describedby')).toBe(helpId(NAME));
+    const block = new RegExp(`<select\\b[^>]*\\bid="${NAME}"[^>]*>([\\s\\S]*?)</select>`).exec(html)?.[1] ?? '';
+    const options = [...block.matchAll(/<option value="([^"]*)"( selected)?>([^<]*)<\/option>/g)];
+    expect(options.map((m) => m[1])).toEqual(['raw', 'cluster']);
+    expect(options.filter((m) => m[2]).map((m) => m[1])).toEqual(['raw']);
+    expect(html).toContain(`data-rag-i18n="${NAME}.label"`);
+    expect(html).toContain(`data-rag-i18n="${NAME}.help"`);
+    const help = new RegExp(`<p\\b[^>]*\\bid="${helpId(NAME)}"[^>]*>([\\s\\S]*?)</p>`).exec(html)?.[1] ?? '';
+    expect(help).toContain('Counts a duplicate cluster once in BM25 document frequency.');
+    expect(help).toContain('RAG_DUP_CLUSTERS');
+  });
+
+  it('the select is disabled while the scoring is not bm25, like k1 and b', () => {
+    const method = lexicalScoringMethod();
+    for (const mode of ['ts_rank_cd', 'bm25']) {
+      const select = stubControl(NAME, { value: 'raw' });
+      const controls = new Map<string, StubControl>([
+        ['RAG_LEXICAL_SCORING', stubControl('RAG_LEXICAL_SCORING', { value: mode })],
+        ['RAG_LEXICAL_SEARCH', stubControl('RAG_LEXICAL_SEARCH', { checked: true })],
+        [NAME, select],
+      ]);
+      const doc = { getElementById: (id: string) => controls.get(id) ?? null };
+      (method as unknown as (d: unknown) => () => void)(doc).call({});
+      expect(select.disabled, mode).toBe(mode !== 'bm25');
+      expect(select.getAttribute('aria-disabled'), mode).toBe(mode === 'bm25' ? null : 'true');
+    }
+  });
+});

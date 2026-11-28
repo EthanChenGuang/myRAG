@@ -1379,7 +1379,7 @@ describe('Phase 3.3 switches (D-03, D-29, D-33)', () => {
 
 describe('Phase 4.4 lexical scoring (D-05)', () => {
   const ON = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' };
-  const DEFAULT = { mode: 'ts_rank_cd', k1: 1.2, b: 0.75 };
+  const DEFAULT = { mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' };
 
   test('unset, empty or ts_rank_cd: the default block and no warning', () => {
     expect(loadRagConfig({}).v2.lexicalScoring).toEqual(DEFAULT);
@@ -1389,16 +1389,18 @@ describe('Phase 4.4 lexical scoring (D-05)', () => {
   });
 
   test('bm25 with the v2 pipeline and lexical search is effective and carries k1 and b', () => {
-    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.2, b: 0.75 });
+    expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' }).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.2, b: 0.75, dfMode: 'raw' });
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'BM25', RAG_LEXICAL_BM25_K1: '2', RAG_LEXICAL_BM25_B: '0' }).v2.lexicalScoring).toEqual({
       mode: 'bm25',
       k1: 2,
       b: 0,
+      dfMode: 'raw',
     });
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '0.5', RAG_LEXICAL_BM25_B: '1' }).v2.lexicalScoring).toEqual({
       mode: 'bm25',
       k1: 0.5,
       b: 1,
+      dfMode: 'raw',
     });
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '3', RAG_LEXICAL_BM25_B: '0.40' }).v2.lexicalScoring.k1).toBe(3);
     expect(configWarnings()).toEqual([]);
@@ -1449,6 +1451,59 @@ describe('Phase 4.4 lexical scoring (D-05)', () => {
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_SCORING: 'bm25' })).not.toBe(base);
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_K1: '2' })).not.toBe(base);
     expect(loadRagConfig({ ...ON, RAG_LEXICAL_BM25_B: '0.5' })).not.toBe(base);
+  });
+});
+
+describe('Phase 4.4 BM25 document frequency mode (04.4-16, D-44, D-45)', () => {
+  const BM25 = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25' };
+  const CLUSTER = { ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' };
+  const dfWarnings = () => configWarnings().filter((line) => line.includes('RAG_LEXICAL_DF_MODE'));
+
+  test('unset, empty or raw is raw without a warning', () => {
+    expect(loadRagConfig({}).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig(BM25).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig({ ...BM25, RAG_LEXICAL_DF_MODE: '' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig({ ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'raw' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('cluster with effective bm25 and duplicate clusters on is effective', () => {
+    expect(loadRagConfig(CLUSTER).v2.lexicalScoring).toEqual({ mode: 'bm25', k1: 1.2, b: 0.75, dfMode: 'cluster' });
+    expect(loadRagConfig({ ...CLUSTER, RAG_LEXICAL_DF_MODE: 'CLUSTER' }).v2.lexicalScoring.dfMode).toBe('cluster');
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('an invalid value warns once and is raw', () => {
+    expect(loadRagConfig({ ...CLUSTER, RAG_LEXICAL_DF_MODE: 'clustered' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig({ ...CLUSTER, RAG_LEXICAL_DF_MODE: 'clustered', RAG_CONTEXT_TOKEN_BUDGET: '5000' }).v2.lexicalScoring.dfMode).toBe('raw');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_DF_MODE');
+  });
+
+  test('cluster while bm25 is not the effective scoring warns once and is raw', () => {
+    expect(loadRagConfig({ ...CLUSTER, RAG_LEXICAL_SCORING: 'ts_rank_cd' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig({ ...CLUSTER, RAG_LEXICAL_SCORING: 'ts_rank_cd', RAG_CONTEXT_TOKEN_BUDGET: '5000' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(dfWarnings()).toHaveLength(1);
+    expect(dfWarnings()[0]).toContain('RAG_LEXICAL_SCORING');
+  });
+
+  test('cluster with bm25 requested but not effective (lexical search off) is raw', () => {
+    const config = loadRagConfig({ ...CLUSTER, RAG_LEXICAL_SEARCH: 'false' });
+    expect(config.v2.lexicalScoring).toEqual({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' });
+    expect(dfWarnings()).toHaveLength(1);
+  });
+
+  test('cluster while RAG_DUP_CLUSTERS is off warns once and is raw', () => {
+    expect(loadRagConfig({ ...CLUSTER, RAG_DUP_CLUSTERS: 'false' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(loadRagConfig({ ...CLUSTER, RAG_DUP_CLUSTERS: '' }).v2.lexicalScoring.dfMode).toBe('raw');
+    expect(dfWarnings()).toHaveLength(1);
+    expect(dfWarnings()[0]).toContain('RAG_DUP_CLUSTERS');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig({ ...BM25, RAG_DUP_CLUSTERS: 'true' });
+    expect(loadRagConfig({ ...BM25, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' })).not.toBe(base);
   });
 });
 

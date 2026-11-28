@@ -672,6 +672,7 @@ ${fullValues.RAG_LEXICAL_STEM_IT !== undefined ? `RAG_LEXICAL_STEM_IT=${fullValu
 ${fullValues.RAG_LEXICAL_SCORING !== undefined ? `RAG_LEXICAL_SCORING=${fullValues.RAG_LEXICAL_SCORING}` : 'RAG_LEXICAL_SCORING=ts_rank_cd'}
 ${fullValues.RAG_LEXICAL_BM25_K1 !== undefined ? `RAG_LEXICAL_BM25_K1=${fullValues.RAG_LEXICAL_BM25_K1}` : 'RAG_LEXICAL_BM25_K1=1.2'}
 ${fullValues.RAG_LEXICAL_BM25_B !== undefined ? `RAG_LEXICAL_BM25_B=${fullValues.RAG_LEXICAL_BM25_B}` : 'RAG_LEXICAL_BM25_B=0.75'}
+${fullValues.RAG_LEXICAL_DF_MODE !== undefined ? `RAG_LEXICAL_DF_MODE=${fullValues.RAG_LEXICAL_DF_MODE}` : 'RAG_LEXICAL_DF_MODE=raw'}
 ${fullValues.RAG_VERSION_SCOPE !== undefined ? `RAG_VERSION_SCOPE=${fullValues.RAG_VERSION_SCOPE}` : 'RAG_VERSION_SCOPE=false'}
 ${fullValues.RAG_EMBED_VERSION_SCOPE !== undefined ? `RAG_EMBED_VERSION_SCOPE=${fullValues.RAG_EMBED_VERSION_SCOPE}` : 'RAG_EMBED_VERSION_SCOPE=false'}
 ${fullValues.RAG_TABLE_LOOKUP !== undefined ? `RAG_TABLE_LOOKUP=${fullValues.RAG_TABLE_LOOKUP}` : 'RAG_TABLE_LOOKUP=false'}
@@ -1719,6 +1720,7 @@ RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
 RAG_LEXICAL_SCORING=${getEnvValue('RAG_LEXICAL_SCORING') || 'ts_rank_cd'}
 RAG_LEXICAL_BM25_K1=${getEnvValue('RAG_LEXICAL_BM25_K1') || '1.2'}
 RAG_LEXICAL_BM25_B=${getEnvValue('RAG_LEXICAL_BM25_B') || '0.75'}
+RAG_LEXICAL_DF_MODE=${getEnvValue('RAG_LEXICAL_DF_MODE') || 'raw'}
 RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
 RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
 RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}
@@ -2263,6 +2265,7 @@ RAG_LEXICAL_STEM_IT=${getEnvValue('RAG_LEXICAL_STEM_IT') || 'false'}
 RAG_LEXICAL_SCORING=${getEnvValue('RAG_LEXICAL_SCORING') || 'ts_rank_cd'}
 RAG_LEXICAL_BM25_K1=${getEnvValue('RAG_LEXICAL_BM25_K1') || '1.2'}
 RAG_LEXICAL_BM25_B=${getEnvValue('RAG_LEXICAL_BM25_B') || '0.75'}
+RAG_LEXICAL_DF_MODE=${getEnvValue('RAG_LEXICAL_DF_MODE') || 'raw'}
 RAG_VERSION_SCOPE=${getEnvValue('RAG_VERSION_SCOPE') || 'false'}
 RAG_EMBED_VERSION_SCOPE=${getEnvValue('RAG_EMBED_VERSION_SCOPE') || 'false'}
 RAG_TABLE_LOOKUP=${getEnvValue('RAG_TABLE_LOOKUP') || 'false'}

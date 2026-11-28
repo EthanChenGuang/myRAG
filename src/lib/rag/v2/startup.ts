@@ -3,7 +3,7 @@ import { getChunkingCoverage, type ChunkingCoverageRow } from '../chunking/profi
 import { loadRagConfig, type RagConfig, type RagEnvInput } from '../config';
 import { getRagDeps } from '../deps';
 import { icuSegmentsChinese } from '../lexical/icu-check';
-import { countReadyLexstatsTenants } from '../lexical/stats';
+import { countReadyClusterLexstatsTenants, countReadyLexstatsTenants } from '../lexical/stats';
 import { resolveEffectivePipeline } from './readiness';
 
 function compareSemver(a: string, b: string): number {
@@ -210,6 +210,14 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
       'lexical_scoring_bm25',
       'warn',
       `RAG_LEXICAL_SCORING=bm25: tenants with ready lexical statistics: ${ready ?? 'unknown'}; any other tenant is served by ts_rank_cd until npm run rag:lexstats rebuilds it`,
+    );
+  }
+  if (config.v2.lexicalScoring.mode === 'bm25' && config.v2.lexicalScoring.dfMode === 'cluster' && admin) {
+    const ready = await countReadyClusterLexstatsTenants(admin);
+    logOnce(
+      'lexical_df_cluster',
+      'warn',
+      `RAG_LEXICAL_DF_MODE=cluster: tenants with ready cluster statistics: ${ready ?? 'unknown'}; any other tenant is served by raw BM25 document frequency`,
     );
   }
 

@@ -292,13 +292,17 @@ export interface RetrievalConfigHashLexicalScoring {
   mode: 'bm25';
   k1: number;
   b: number;
+  /** D-44: present only while the effective DF mode is cluster, so a raw bm25 block keeps its hash. */
+  df_mode?: 'cluster';
 }
 
 /** D-08: null while the effective mode is ts_rank_cd, whatever k1 and b say, so the off-hash keeps its value. */
 export function lexicalScoringHashBlock(config: Pick<RagConfig, 'v2'>): RetrievalConfigHashLexicalScoring | null {
   const scoring = config.v2.lexicalScoring;
   if (scoring.mode !== 'bm25') return null;
-  return { mode: 'bm25', k1: scoring.k1, b: scoring.b };
+  return scoring.dfMode === 'cluster'
+    ? { mode: 'bm25', k1: scoring.k1, b: scoring.b, df_mode: 'cluster' }
+    : { mode: 'bm25', k1: scoring.k1, b: scoring.b };
 }
 
 function sortKeys(value: unknown): unknown {

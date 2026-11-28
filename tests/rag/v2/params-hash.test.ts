@@ -29,6 +29,8 @@ const COMMITTED = RetrievalParamsSchema.parse(rawCommitted);
 
 /** requestRetrievalConfigHash(requestInput()) on the code before 04.2-06 (base ci/merge-train-24). */
 const PINNED_REQUEST_OFF_HASH = '1bbdc29901e372073c7a9d899a9a9fce1198b05c42d234f3958de0dd1fdc5273';
+/** 04.4-16: the bm25 request hash as computed before RAG_LEXICAL_DF_MODE existed (raw must keep it, D-44). */
+const PINNED_REQUEST_BM25_RAW_HASH = '57054f0f30fdb40fd6b2eafecee216fe8bc68ac63a9424933b0fc731791a9020';
 
 function baseConfig(overrides: Record<string, string> = {}): RagConfig {
   return loadRagConfig({
@@ -751,6 +753,39 @@ describe('requestRetrievalConfigHash lexical scoring block (04.4-01, D-08)', () 
       mode: 'bm25',
       k1: 2,
       b: 0.75,
+    });
+  });
+
+  describe('RAG_LEXICAL_DF_MODE (04.4-16, D-44)', () => {
+    const env = { RAG_PIPELINE: 'v2', RAG_CONTEXT_TOKEN_BUDGET: '7500', RAG_CONTEXT_COMPRESSION: 'true', RAG_RERANK_TIER_CHAT: 'quality', RAG_RERANK_TIER_VOICE: 'fast', RAG_LEXICAL_SEARCH: 'true' };
+
+    it('ts_rank_cd keeps the pinned off-hash with any DF mode', async () => {
+      for (const mode of ['raw', 'cluster']) {
+        resetRagConfigForTests();
+        expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_DUP_CLUSTERS: 'false', RAG_LEXICAL_DF_MODE: mode }))).toBe(PINNED_REQUEST_OFF_HASH);
+      }
+    });
+
+    it('bm25 with raw, or with cluster that resolves to raw, keeps the bm25 hash pinned before the switch existed', async () => {
+      expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25' }))).toBe(PINNED_REQUEST_BM25_RAW_HASH);
+      resetRagConfigForTests();
+      expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_DF_MODE: 'raw' }))).toBe(PINNED_REQUEST_BM25_RAW_HASH);
+      resetRagConfigForTests();
+      expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_DF_MODE: 'cluster' }))).toBe(PINNED_REQUEST_BM25_RAW_HASH);
+    });
+
+    it('effective cluster changes the hash and adds df_mode to the block', async () => {
+      const raw = await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_DUP_CLUSTERS: 'true' }));
+      resetRagConfigForTests();
+      const cluster = await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' }));
+      expect(cluster).not.toBe(raw);
+      expect(lexicalScoringHashBlock(loadRagConfig({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_DUP_CLUSTERS: 'true' }))).toEqual({ mode: 'bm25', k1: 1.2, b: 0.75 });
+      expect(lexicalScoringHashBlock(loadRagConfig({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' }))).toEqual({
+        mode: 'bm25',
+        k1: 1.2,
+        b: 0.75,
+        df_mode: 'cluster',
+      });
     });
   });
 });

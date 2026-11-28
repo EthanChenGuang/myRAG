@@ -55,6 +55,7 @@ const PHASE44_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> 
   RAG_LEXICAL_SCORING: ['ts_rank_cd', 'bm25'],
   RAG_LEXICAL_BM25_K1: null,
   RAG_LEXICAL_BM25_B: null,
+  RAG_LEXICAL_DF_MODE: ['raw', 'cluster'],
 };
 const PHASE44_DECIMAL_BOUNDS: Readonly<Record<string, readonly [number, number]>> = {
   RAG_LEXICAL_BM25_K1: [0.5, 3],

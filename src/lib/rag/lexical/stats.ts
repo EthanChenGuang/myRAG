@@ -79,6 +79,20 @@ export async function countReadyLexstatsTenants(client: SupabaseClient): Promise
   }
 }
 
+/** D-49: tenants whose cluster-aware statistics (corpus chunks_cluster) are ready; a count, never a tenant key. */
+export async function countReadyClusterLexstatsTenants(client: SupabaseClient): Promise<number | null> {
+  try {
+    const { count, error } = await client
+      .from('rag_lexical_stats_state')
+      .select('tenant_key', { count: 'exact', head: true })
+      .eq('cluster_status', 'ready');
+    if (error || typeof count !== 'number') return null;
+    return count;
+  } catch {
+    return null;
+  }
+}
+
 export function resetLexstatsCacheForTests(): void {
   readyCache.clear();
 }
