@@ -1133,3 +1133,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     - C: root fix, local_bm25 uses corpus- or tenant-level statistics. Needs a separate plan, new baselines and a signature.
     - D: OCR-tolerant normalization.
 - t42 interim: 3 branch-level test fixes made on the train (translation-seam, legacy-post-filter-sentinel, eval-route-query-layer). Sidecar 2955 pass.
+- 03:40Z 07-27 DONE (exec/07-27 eca55095: README_RAG_PIPELINE, env template grouping, AGENTS.md) and archived; queued for train 43. Dispatched 07-45 (session for base 07-27). t42 step 3: merged 06.2-28, 04.4-19, 06.3-23, 07-25.
