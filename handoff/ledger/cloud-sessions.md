@@ -1169,3 +1169,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 06:20Z verify 6.3 DONE (verify/06.3 0c428e69) and archived. gaps_found. Dispatched quick-63-gaps for G1-G5 plus the AGENTS 4.4 re-run rule (base t42 7c4d2ed5).
 - 06:24Z MERGED #141 (t41, all green at ccdb82821) -> main e6afe8a2. Archived the t41 builder. Told t42 to merge main and open its PR.
 - 06:25Z Dispatched the train 43 builder on t42: 07-31 (c536c9e5), 07-49 (d4af52b6) and quick-63-gaps when it is done.
+- 06:46Z verify 7 DONE (verify/07 cbfc67f7) and archived. SECURED. G1-G3, IW-1 and the pr-smoke split were sent to the t43 builder.
