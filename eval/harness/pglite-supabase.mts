@@ -556,7 +556,7 @@ export interface RunLexicalStatsReport {
 
 /**
  * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures and the ingest clustering step), enable and rebuild the
- * lexical statistics of every fixture tenant, the isolated table_split tenants included, when the run's effective scoring (the app
+ * lexical statistics of every fixture tenant, the isolated table_split, q62 and dominant-language tenants included, when the run's effective scoring (the app
  * config under the run's environment) is bm25; with the effective DF mode `cluster` (plan 04.4-18) the cluster corpus too. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
  * tables stay empty.
  */
@@ -564,6 +564,8 @@ export async function seedRunLexicalStats(fixture: {
   db: PGlite;
   sqlSha256: Record<string, string>;
   tableSplitTenants?: ReadonlyArray<{ db: PGlite; tenantKey: string }>;
+  q62Tenant?: { db: PGlite; tenantKey: string };
+  dominantLanguageTenant?: { db: PGlite; tenantKey: string };
 }): Promise<RunLexicalStatsReport | null> {
   const { loadRagConfig } = await import('@/lib/rag/config');
   const { getRagDeps } = await import('@/lib/rag/deps');
@@ -573,6 +575,10 @@ export async function seedRunLexicalStats(fixture: {
   const seedOptions = scoring.dfMode === 'cluster' ? { cluster: true } : {};
   const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db), seedOptions);
   for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
+  // The isolated q62 (06.2-22) and dominant-language (06.2-41) tenants are separate databases; their items search them under bm25 too.
+  for (const tenant of [fixture.q62Tenant, fixture.dominantLanguageTenant]) {
+    if (tenant) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
+  }
   fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
   if (scoring.dfMode === 'cluster') fixture.sqlSha256['lexical_stats:cluster'] = sha256Hex('cluster');
   return { k1: scoring.k1, b: scoring.b, dfMode: scoring.dfMode, tenants };
