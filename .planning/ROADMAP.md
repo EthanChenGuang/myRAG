@@ -838,7 +838,7 @@ Plans:
   6. *(Removed 2026-11-24: moved to Phase 5.1.1 with EVAL-17.)*
   7. Traces carry chunk languages; online judge scores, votes and the "information not available" rate are split per language, and a fixture where one language drops while the average holds raises an alert; a new embedding profile can be activated for chosen tenants or a traffic share first and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents; a red-team run started from the Config UI replays the growing attack corpus and opens a review case per success; the defaults record includes cost per 1,000 documents and queries.
 **Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end; run the 07-50 live checks (purge, source recheck and access groups on the hosted backends, a gradual rollout and the LANG-10 alert channel end to end, a red-team run started from the Config UI).
-**Plans**: 52 plans in 18 waves (48 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1; 07-35..07-52 added 2026-11-25 for the purge outbox, forced source recheck, access-group filter, LANG-10/11, SEC-11 red team and ADM-02 cost blocks; 07-37/07-44 wait for Phase 6.3, 07-38/07-39 for Phase 4.3, 07-46 for Phase 5.3; `/gsd-ui-phase 07` must produce `07-UI-SPEC.md` before 07-48, 07-49 and 07-52) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
+**Plans**: 53 plans in 18 waves (49 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1; 07-53 added 2026-11-27 for the LEX-05 adapter clause, gap G3 of the Phase 4.4 verification: BM25 k1 and b from the configuration on Weaviate and Qdrant; 07-35..07-52 added 2026-11-25 for the purge outbox, forced source recheck, access-group filter, LANG-10/11, SEC-11 red team and ADM-02 cost blocks; 07-37/07-44 wait for Phase 6.3, 07-38/07-39 for Phase 4.3, 07-46 for Phase 5.3; `/gsd-ui-phase 07` must produce `07-UI-SPEC.md` before 07-48, 07-49 and 07-52) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
 **Incumbent defaults (2026-11-24, Phase 4.1)**: the regression and the release-defaults check (07-17, 07-25, 07-30) start from the Phase 4.1 decision `eval/decisions/04.1-retrieval-defaults.json` as the incumbent; route-fixture tests that assert legacy output pin `RAG_PIPELINE=legacy`.
 
 Plans:
@@ -876,6 +876,7 @@ Plans:
 - [ ] 07-32-PLAN.md — Collect the three human decisions and actions Phase 7 needs before the live checks: the Vercel plan… (wave 12, autonomous: false)
 - [ ] 07-33-PLAN.md — Run the Phase 7 live verification items as explicit checkpoints, then apply the shipped defaults from… (wave 13, autonomous: false)
 - [x] 07-34-PLAN.md — Extend the cross-tenant canary suite to the voice and embed entry points on pgvector, Weaviate and Qdrant,… (wave 6) — done, pending merge (exec/07-28)
+- [x] 07-53-PLAN.md — Make the Weaviate and Qdrant adapters score with the BM25 k1 and b of the configuration (LEX-05), record the pair on each collection, refuse a mismatched index until it is rebuilt,… (wave 7) — done, pending merge (train 41)
 **UI hint**: yes
 
 ## Progress
@@ -911,4 +912,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 20/20 | Executed on main | - |
 | 6.2. Query Layer Additions (INSERTED) | 11/40 | In Progress — 12 done pending merge (train only); 3 done pending merge (exec/verify only); 14 without SUMMARY | - |
 | 6.3. Source Deletion Sync & Purge (INSERTED) | 0/29 | In Progress — 3 done pending merge (train only); 4 done pending merge (exec/verify only); 22 without SUMMARY | - |
-| 7. External Backends & Release Defaults | 26/52 | In Progress — 1 done pending merge (train only); 2 done pending merge (exec/verify only); 23 without SUMMARY (UI-SPEC pending for 07-48, 07-49, 07-52 (as of last ROADMAP revision)) | - |
+| 7. External Backends & Release Defaults | 26/53 | In Progress — 2 done pending merge (train only); 2 done pending merge (exec/verify only); 23 without SUMMARY (07-53 added 2026-11-27 for LEX-05; UI-SPEC pending for 07-48, 07-49, 07-52 (as of last ROADMAP revision)) | - |
