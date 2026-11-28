@@ -981,6 +981,7 @@ export async function POST(req: NextRequest) {
             query,
             classification,
             plan: result.queryPlan,
+            retrievalHit: result.kept.length > 0 && result.context.trim().length > 0,
             contextTokens: countTokens(result.context),
             params: effectiveQueryParams('eval', options?.query_params),
             ids: modelRouting,
