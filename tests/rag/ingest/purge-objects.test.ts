@@ -89,7 +89,8 @@ function rpcClient() {
             .filter((row) => row.finished_at !== null && Date.parse(String(row.finished_at)) > Date.now() - 7 * 86_400_000)
             .filter((row) => (row.version_ids as unknown[]).length > 0)
             .filter((row) => args.p_after_started_at === null || auditKey(row) > `${new Date(String(args.p_after_started_at)).toISOString()}|${String(args.p_after_id)}`)
-            .slice(0, Number(args.p_limit));
+            .slice(0, Number(args.p_limit))
+            .map((row) => ({ ...row, cursor_started_at: new Date(String(row.started_at)).toISOString() }));
           break;
         case 'rag_purge_scrub_chats':
           data = 1;

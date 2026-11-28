@@ -776,29 +776,51 @@ export async function retryPendingPurgeObjects(input: { limit?: number; signal: 
 
 export type RescrubResult = { ok: true; records: number; scrubbed: number } | { ok: false; reason: PurgeFailure };
 
-/** Runs the chat scrub again for purges of the last 7 days, so a stale browser tab that wrote a quote back loses it again (C-10). */
+const RESCRUB_PAGE = 1000;
+
+/**
+ * Runs the chat scrub again for purges of the last 7 days, so a stale browser tab that wrote a quote back loses it again (C-10).
+ * Pages through rag_purge_audit_recent (1015) on a (started_at, id) cursor, so every recent purge is scrubbed once whatever the
+ * backlog of pending records (06.3-SECURITY W7).
+ */
 export async function rescrubRecentPurges(input: { signal: AbortSignal }): Promise<RescrubResult> {
-  const listed = await pendingRecords(1000, input.signal);
-  if (!listed.ok) return listed;
   const since = Date.now() - RECENT_MS;
   let records = 0;
   let scrubbed = 0;
-  for (const record of listed.records) {
-    if (record.finishedAt === null || Date.parse(record.finishedAt) < since || record.versionIds.length === 0) continue;
-    const scrub = await call(
-      'rag_purge_scrub_chats',
-      {
-        p_tenant_key: record.tenantKey,
-        p_lineage_id: record.lineageId,
-        p_document_ids: record.versionIds,
-        p_withdrawn_at: record.startedAt ?? record.finishedAt,
-      },
+  let cursor: { startedAt: string; id: string } | null = null;
+  for (;;) {
+    input.signal.throwIfAborted();
+    const page = await call(
+      'rag_purge_audit_recent',
+      { p_after_started_at: cursor?.startedAt ?? null, p_after_id: cursor?.id ?? null, p_limit: RESCRUB_PAGE },
       input.signal,
     );
-    if (!scrub.ok) return scrub;
-    records += 1;
-    const n = Number(scalarOf(scrub.rows, 'rag_purge_scrub_chats'));
-    if (Number.isFinite(n) && n > 0) scrubbed += n;
+    if (!page.ok) return page;
+    let next: { startedAt: string; id: string } | null = null;
+    for (const row of page.rows) {
+      const id = text(row, 'id');
+      const cursorAt = text(row, 'cursor_started_at');
+      const startedAt = timeOf(row, 'started_at');
+      if (id === null || cursorAt === null || startedAt === null) return { ok: false, reason: 'unavailable' };
+      next = { startedAt: cursorAt, id };
+      const tenantKey = text(row, 'tenant_key');
+      const lineageId = text(row, 'lineage_id');
+      const finishedAt = timeOf(row, 'finished_at');
+      const versionIds = strings(row, 'version_ids');
+      if (tenantKey === null || lineageId === null || !UUID.test(lineageId)) continue;
+      if (finishedAt === null || Date.parse(finishedAt) < since || versionIds.length === 0) continue;
+      const scrub = await call(
+        'rag_purge_scrub_chats',
+        { p_tenant_key: tenantKey, p_lineage_id: lineageId, p_document_ids: versionIds, p_withdrawn_at: startedAt },
+        input.signal,
+      );
+      if (!scrub.ok) return scrub;
+      records += 1;
+      const n = Number(scalarOf(scrub.rows, 'rag_purge_scrub_chats'));
+      if (Number.isFinite(n) && n > 0) scrubbed += n;
+    }
+    if (page.rows.length < RESCRUB_PAGE || next === null) break;
+    cursor = next;
   }
   return { ok: true, records, scrubbed };
 }
