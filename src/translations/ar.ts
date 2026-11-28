@@ -401,6 +401,7 @@ export const ar = {
   executingTool: "جاري تشغيل الأداة، يرجى الانتظار...",
   toolError: "حدث خطأ أثناء تشغيل الأداة.",
   voiceUnavailable: "الصوت غير متاح مؤقتًا. يرجى المحاولة لاحقًا.",
+  emptyReply: "تعذّر إنشاء إجابة هذه المرة. يرجى المحاولة مرة أخرى أو إعادة صياغة السؤال.",
   
   // Chat message action tooltips
   copyTooltip: "نسخ",

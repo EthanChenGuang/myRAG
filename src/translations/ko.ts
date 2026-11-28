@@ -396,6 +396,7 @@ export const ko = {
   executingTool: "도구 실행 중, 잠시 기다려 주세요...",
   toolError: "도구 실행 중 오류가 발생했습니다.",
   voiceUnavailable: "음성을 일시적으로 사용할 수 없습니다. 나중에 다시 시도해 주세요.",
+  emptyReply: "이번에는 답변을 생성하지 못했습니다. 다시 시도하거나 질문을 바꿔 보세요.",
   
   // Chat message action tooltips
   copyTooltip: "복사",

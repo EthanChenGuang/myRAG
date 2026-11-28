@@ -440,6 +440,7 @@ export const en = {
   executingTool: "Executing tool, please wait...",
   toolError: "An error occurred while running the tool.",
   voiceUnavailable: "Voice is temporarily unavailable. Please try again later.",
+  emptyReply: "I could not produce an answer this time. Please try again or rephrase your question.",
 
   // Chat message action tooltips
   copyTooltip: "Copy",

@@ -402,6 +402,7 @@ export const ja = {
   executingTool: "ツールを実行中です。お待ちください...",
   toolError: "ツールの実行中にエラーが発生しました。",
   voiceUnavailable: "音声は一時的に利用できません。しばらくしてから再度お試しください。",
+  emptyReply: "今回は回答を生成できませんでした。もう一度お試しいただくか、質問を言い換えてください。",
   
   // Chat message action tooltips
   copyTooltip: "コピー",
