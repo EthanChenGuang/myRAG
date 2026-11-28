@@ -959,3 +959,9 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   3. No full local rag-db in quicks (executor brief updated).
   4. /gsd-fast for trivial edits.
   5. Plan executions are at least half of the running sessions.
+- 00:24Z debug-42-scanned DONE (a5927a673). The scanned slice is not new. The trigger is the 05.2.1-12 fixtures: the token "24" appears 94 times, which lowers its pool-relative IDF under local_bm25.
+  - Latent limits exposed:
+    - b1: the identifier filter works at chunk level.
+    - b2: an MMR cutoff.
+  - DECISION on the owner's behalf: amend D-31 to a document-level identifier filter. plan-42-docid-filter (Fable) dispatched.
+  - OWNER decision pending: a min_gate_n for phase-gate slice drops (D-37). Archived.
