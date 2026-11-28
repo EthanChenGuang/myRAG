@@ -100,7 +100,12 @@ export interface LexicalScoringRequest {
   mode: 'bm25';
   k1: number;
   b: number;
+  /** D-49: set only while RAG_LEXICAL_DF_MODE=cluster is effective; absent means raw document frequencies. */
+  dfMode?: 'cluster';
 }
+
+/** D-49: how a cluster request's BM25 call was served; cluster_unavailable is raw BM25 (statistics not ready or refused). */
+export type LexicalDfOutcome = 'cluster' | 'cluster_unavailable';
 
 /** D-25: how a request with lexicalScoring was served; bm25 by the BM25 function, the others by the unchanged ts_rank_cd leg. */
 export type LexicalScoringOutcome = 'bm25' | 'stats_unavailable' | 'bm25_failed';
@@ -114,6 +119,8 @@ export interface BackendLegsMeta {
   accessIterativeScan?: 'off' | 'relaxed_order' | 'strict_order';
   /** Present only for a request that carried lexicalScoring and had a lexical leg to serve. */
   lexicalScoring?: LexicalScoringOutcome;
+  /** Present only when a dfMode cluster request was served by the BM25 function. */
+  lexicalDfMode?: LexicalDfOutcome;
 }
 
 export interface BackendLegs {

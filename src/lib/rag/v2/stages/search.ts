@@ -3,6 +3,7 @@ import { resolveRetrievalBackend } from '../../backend/factory';
 import { backendForRequest } from '../../backend/registry';
 import type {
   BackendLegs,
+  LexicalDfOutcome,
   LexicalScoringOutcome,
   LexicalScoringRequest,
   RankedHit,
@@ -297,23 +298,33 @@ export function backendAttributes(selection: RetrievalBackendSelection): Record<
 export const LEXICAL_SCORING_BM25 = 'lexical_scoring_bm25';
 export const LEXICAL_STATS_UNAVAILABLE = 'lexical_stats_unavailable';
 export const LEXICAL_BM25_FAILED = 'lexical_bm25_failed';
+export const LEXICAL_DF_CLUSTER = 'lexical_df_cluster';
+export const LEXICAL_DF_CLUSTER_UNAVAILABLE = 'lexical_df_cluster_unavailable';
 
 /** D-28: the request field every backend.search call of a request carries while bm25 is the effective mode; empty for ts_rank_cd. */
 export function lexicalScoringArg(config: RagConfig): { lexicalScoring?: LexicalScoringRequest } {
   const scoring = config.v2.lexicalScoring;
-  return scoring.mode === 'bm25' ? { lexicalScoring: { mode: 'bm25', k1: scoring.k1, b: scoring.b } } : {};
+  if (scoring.mode !== 'bm25') return {};
+  // D-49: dfMode only for an effective cluster mode, so a raw request is today's request.
+  return { lexicalScoring: { mode: 'bm25', k1: scoring.k1, b: scoring.b, ...(scoring.dfMode === 'cluster' ? { dfMode: 'cluster' as const } : {}) } };
 }
 
 /**
  * The backend as seen by every leg of one request under bm25: each search request gains lexicalScoring (k1 and b from server config
  * only) and the outcome each call reports is collected. searchTranslations and every other member are the backend's own (D-21).
  */
-function withLexicalScoring(backend: RetrievalBackend, scoring: LexicalScoringRequest, outcomes: LexicalScoringOutcome[]): RetrievalBackend {
+function withLexicalScoring(
+  backend: RetrievalBackend,
+  scoring: LexicalScoringRequest,
+  outcomes: LexicalScoringOutcome[],
+  dfOutcomes: LexicalDfOutcome[],
+): RetrievalBackend {
   const wrapped = Object.create(backend) as RetrievalBackend;
   Object.defineProperty(wrapped, 'search', {
     value: async (req: Parameters<RetrievalBackend['search']>[0]) => {
       const legs = await backend.search({ ...req, lexicalScoring: scoring });
       if (legs.meta?.lexicalScoring) outcomes.push(legs.meta.lexicalScoring);
+      if (legs.meta?.lexicalDfMode) dfOutcomes.push(legs.meta.lexicalDfMode);
       return legs;
     },
   });
@@ -325,6 +336,13 @@ function lexicalScoringCode(outcomes: readonly LexicalScoringOutcome[]): string 
   if (outcomes.includes('bm25_failed')) return LEXICAL_BM25_FAILED;
   if (outcomes.includes('stats_unavailable')) return LEXICAL_STATS_UNAVAILABLE;
   if (outcomes.includes('bm25')) return LEXICAL_SCORING_BM25;
+  return undefined;
+}
+
+/** D-49: one DF code per request, the worst of the BM25-served calls; none when no call asked for cluster or BM25 served none. */
+function lexicalDfCode(outcomes: readonly LexicalDfOutcome[]): string | undefined {
+  if (outcomes.includes('cluster_unavailable')) return LEXICAL_DF_CLUSTER_UNAVAILABLE;
+  if (outcomes.includes('cluster')) return LEXICAL_DF_CLUSTER;
   return undefined;
 }
 
@@ -572,7 +590,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const attributeActive = attributes !== null && (attributes.softIds.length > 0 || fallbackFilters !== null);
   const scoring = lexicalScoringArg(config).lexicalScoring;
   const scoringOutcomes: LexicalScoringOutcome[] = [];
-  const scoringCode = (): string | undefined => (scoring ? lexicalScoringCode(scoringOutcomes) : undefined);
+  const dfOutcomes: LexicalDfOutcome[] = [];
+  const scoringCode = (): string | undefined => (scoring ? joinDetail([lexicalScoringCode(scoringOutcomes), lexicalDfCode(dfOutcomes)]) : undefined);
   type SoftOutcome = { legs: BackendLegs | null; failed: boolean };
   // D-11, D-24: one backend per request; every variant, binding, translation, term and soft call goes through it.
   const resolved = resolveRetrievalBackend(profile, config, stageOverrides?.retrievalOverrides);
@@ -584,7 +603,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       historyScope || identifiersNorm
         ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg }, resolved.backend)
         : { backend: resolved.backend };
-    const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes) : route.backend;
+    const backend = scoring ? withLexicalScoring(route.backend, scoring, scoringOutcomes, dfOutcomes) : route.backend;
     const selection = (): RetrievalBackendSelection =>
       route.backend === resolved.backend
         ? resolved.selection()
