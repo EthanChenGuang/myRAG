@@ -690,7 +690,8 @@ describe('the impact guard of plan 57 (UI-SPEC 6.2.2, 6.4.1)', () => {
         saved: { RAG_SUPPORTED_LANGUAGES: 'en', RAG_PRIMARY_LANGUAGE: 'en' },
       },
     ]);
-    expect(page.calls.some((c) => c.init.method === 'POST')).toBe(false);
+    // LANG-11 (plan 07-52): an addition is planned first with a preview POST, which writes nothing.
+    expect(page.calls.some((c) => c.init.method === 'POST' && (c.body as Json).preview !== true)).toBe(false);
     expect(useBox(page.content, 'zh').checked).toBe(true);
     expect(buttonByText(page.content, 'Save languages').disabled).toBe(false);
   });
@@ -700,7 +701,7 @@ describe('the impact guard of plan 57 (UI-SPEC 6.2.2, 6.4.1)', () => {
     toggle(useBox(page.content, 'zh'), true);
     buttonByText(page.content, 'Save languages').click();
     await flush();
-    expect(page.calls.find((c) => c.init.method === 'POST')!.body).toEqual({ languages: ['zh', 'en'], primary: 'en' });
+    expect(page.calls.find((c) => c.init.method === 'POST' && (c.body as Json).preview !== true)!.body).toEqual({ languages: ['zh', 'en'], primary: 'en' });
   });
 
   it('a changed primary alone, the first choice from unset and a missing guard all save directly', async () => {

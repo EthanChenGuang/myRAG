@@ -45,7 +45,10 @@ function planLanguageChange(input, context) {
   const validation = validateLanguageSettings({ supported: proposed, primary }, context);
   const refusals = [...validation.errors];
   const knownCodes = new Set(registry.packs.map((pack) => pack.code));
-  for (const language of added) {
+  // The first choice of languages (nothing saved yet) is the Phase 3.2 setup: there is no earlier set to add to,
+  // so no baseline is required and nothing is reprocessed by this rule.
+  const firstChoice = current.length === 0;
+  for (const language of firstChoice ? [] : added) {
     if (knownCodes.has(language) && !hasBaseline(language)) {
       refusals.push({ code: 'language_baseline_missing', language, command: baselineCommand(language) });
     }
@@ -55,9 +58,10 @@ function planLanguageChange(input, context) {
   const steps = [];
   const notes = [];
   if (ok) {
-    if (added.length > 0) steps.push({ kind: 'baseline', languages: added, state: 'recorded' });
+    const adding = added.length > 0 && !firstChoice;
+    if (adding) steps.push({ kind: 'baseline', languages: added, state: 'recorded' });
     if (added.length > 0 || removed.length > 0) steps.push({ kind: 'save' });
-    if (added.length > 0) steps.push({ kind: 'rebuild', selection: 'language_add', mechanism: 'reparse' });
+    if (adding) steps.push({ kind: 'rebuild', selection: 'language_add', mechanism: 'reparse' });
     for (const language of removed) notes.push({ code: 'removed_documents_stay_searchable', language });
   }
   return {
@@ -69,7 +73,8 @@ function planLanguageChange(input, context) {
     normalized: ok ? validation.normalized : null,
     steps,
     notes,
-    rebuild: ok && added.length > 0 ? { selection: 'language_add', mechanism: 'reparse' } : null,
+    firstChoice,
+    rebuild: ok && added.length > 0 && !firstChoice ? { selection: 'language_add', mechanism: 'reparse' } : null,
   };
 }
 

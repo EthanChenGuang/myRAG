@@ -30,6 +30,7 @@ export const USAGE = [
   '       npm run rag:languages -- add <code> [--primary <code>] [--dry-run]',
   '       npm run rag:languages -- remove <code> [--primary <code>] [--dry-run]',
   '       npm run rag:languages -- rebuild   (start or continue the language_add reprocessing for the saved set)',
+  '       npm run rag:languages -- selection --languages <a,b,...> [--primary <code>]   (JSON counts of the language_add groups, a dry run)',
 ].join('\n');
 
 export interface CliIo {
@@ -42,6 +43,7 @@ export type ParsedLanguagesArgs =
   | { ok: true; command: 'plan'; languages: string[]; primary: string | null }
   | { ok: true; command: 'add' | 'remove'; code: string; primary: string | null; dryRun: boolean }
   | { ok: true; command: 'rebuild' }
+  | { ok: true; command: 'selection'; languages: string[]; primary: string | null }
   | { ok: false; error: string };
 
 export function parseLanguagesArgs(argv: string[]): ParsedLanguagesArgs {
@@ -93,6 +95,13 @@ export function parseLanguagesArgs(argv: string[]): ParsedLanguagesArgs {
       if (positional.length !== 1 || !code || !CODE.test(code)) return { ok: false, error: `${command} needs one language code` };
       return { ok: true, command, code, primary, dryRun: flags['dry-run'] === true };
     }
+    case 'selection': {
+      const unknown = allowed(['languages', 'primary']);
+      if (unknown) return { ok: false, error: `unknown option: --${unknown}` };
+      const languages = parseLanguageList(value('languages') ?? '');
+      if (languages.length === 0 || positional.length > 0 || !languages.every((code) => CODE.test(code))) return { ok: false, error: 'selection needs --languages <a,b,...>' };
+      return { ok: true, command, languages, primary };
+    }
     case 'rebuild':
       if (rest.length > 0) return { ok: false, error: 'rebuild takes no argument' };
       return { ok: true, command };
@@ -116,6 +125,8 @@ export interface LanguagesCliDeps {
   /** Starts the Phase 3.2 rebuild with the language_add selection under the saved values. */
   startRebuild?: (saved: { languages: string[]; primary: string }) => Promise<StartRebuildResult>;
   /** Runs rag_eval.baseline record and returns the path of the full baseline it wrote. */
+  /** The dry run behind `selection`. */
+  dryRunSelection?: (saved: { languages: string[]; primary: string }) => Promise<StartRebuildResult>;
   runBaseline?: (options: { out: string; fixtureMode: string; baseUrl: string | null }) => number;
   now?: () => Date;
 }
@@ -224,6 +235,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   if (parsed.command === 'baseline') return recordBaseline(parsed, root, deps, io);
 
   const saved = (deps.readSaved ?? (() => defaultReadSaved(root)))();
+  if (parsed.command === 'selection') return printSelection(parsed, io, deps);
   if (parsed.command === 'rebuild') {
     if (saved.languages.length === 0 || !saved.primary) {
       io.err(`${TAG} no supported language is saved`);
@@ -271,6 +283,30 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
     return 1;
   }
   return runRebuild(plan.normalized, io, deps);
+}
+
+/** One JSON line with the language_add group counts under the given set (a dry run; nothing is written). Used by the Config UI server. */
+async function printSelection(parsed: Extract<ParsedLanguagesArgs, { command: 'selection' }>, io: CliIo, deps: LanguagesCliDeps): Promise<number> {
+  if (deps.dryRunSelection === undefined && !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    io.err(`${TAG} refused: set SUPABASE_SERVICE_ROLE_KEY`);
+    return 1;
+  }
+  const primary = parsed.primary && parsed.languages.includes(parsed.primary) ? parsed.primary : (parsed.languages[0] as string);
+  try {
+    const result = await (deps.dryRunSelection ?? defaultDryRunSelection)({ languages: parsed.languages, primary });
+    io.out(JSON.stringify({ groups: result.groups ?? { und: 0, scanned: 0, stale: 0 }, total: result.affected }));
+    return 0;
+  } catch (error) {
+    io.err(`${TAG} the selection could not be counted (${error instanceof Error ? error.name : 'error'})`);
+    return 1;
+  }
+}
+
+async function defaultDryRunSelection(saved: { languages: string[]; primary: string }): Promise<StartRebuildResult> {
+  const { startRebuild } = await import('../ingest/rebuild/run');
+  const { savedFingerprintValues } = await import('../ingest/fingerprint/impact');
+  const values = { ...savedFingerprintValues(), RAG_SUPPORTED_LANGUAGES: saved.languages.join(','), RAG_PRIMARY_LANGUAGE: saved.primary };
+  return startRebuild({ mechanism: 'reparse', selection: 'language_add', dryRun: true, startedBy: 'cli:rag:languages' }, { saved: values });
 }
 
 async function runRebuild(saved: { languages: string[]; primary: string }, io: CliIo, deps: LanguagesCliDeps): Promise<number> {

@@ -38,6 +38,8 @@ export interface LanguageChangePlan {
   normalized: { languages: string[]; primary: string; supported: string } | null;
   steps: LanguageChangeStep[];
   notes: Array<{ code: 'removed_documents_stay_searchable'; language: string }>;
+  /** Nothing was saved before: the Phase 3.2 first choice, with no baseline rule and no rebuild. */
+  firstChoice: boolean;
   rebuild: { selection: 'language_add'; mechanism: 'reparse' } | null;
 }
 

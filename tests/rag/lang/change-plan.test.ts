@@ -97,6 +97,14 @@ describe('planLanguageChange', () => {
     expect(accepted.notes).toEqual([{ code: 'removed_documents_stay_searchable', language: 'en' }]);
   });
 
+  it('the first choice of languages (nothing saved) needs no baseline and plans no rebuild', () => {
+    const plan = planLanguageChange({ current: [], proposed: ['zh', 'en'], primary: 'zh' }, context({ baselines: [] }));
+    expect(plan.ok).toBe(true);
+    expect(plan.firstChoice).toBe(true);
+    expect(plan.steps).toEqual([{ kind: 'save' }]);
+    expect(plan.rebuild).toBeNull();
+  });
+
   it('baselineChecker reads eval/baselines/languages/<code>.json and ignores a record of another language', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lang-baseline-'));
     temps.push(root);
