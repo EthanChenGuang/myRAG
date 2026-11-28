@@ -874,13 +874,14 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
             await assertOwnRows(label, result, where);
             assertNoForeignText(label, { result, stages: result.stages, rerankRequests: rerank }, where);
             const rerankStage = stage(result, 'rerank');
-            if (variant.hosted) {
+            // quick-41 gate hardening: auto reaches Cohere only for AUTO_HOSTED_PROFILES (chat, embed, eval); voice keeps local_bm25
+            if (variant.hosted && selectModule.AUTO_HOSTED_PROFILES.includes(profile)) {
               assert.ok(rerank.length >= 1, `${where}: auto with a Cohere key reranks on the edge`);
               for (const body of rerank) assertNoForeignText(label, { query: body.query, documents: body.documents }, `${where} rerank input`);
             } else {
-              assert.equal(rerank.length, 0, `${where}: no key, no rerank request`);
-              assert.equal(rerankStage?.detail, 'auto:local_bm25', `${where}: keyless auto takes the no-key fallback`);
-              assert.notEqual(rerankStage?.status, 'degraded', `${where}: keyless auto is not degraded`);
+              assert.equal(rerank.length, 0, `${where}: no key or a profile outside AUTO_HOSTED_PROFILES, no rerank request`);
+              assert.equal(rerankStage?.detail, 'auto:local_bm25', `${where}: auto takes the local fallback`);
+              assert.notEqual(rerankStage?.status, 'degraded', `${where}: the local fallback is not degraded`);
             }
           }
         }
