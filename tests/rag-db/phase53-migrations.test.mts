@@ -54,7 +54,11 @@ export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; 
 /** Functions a 0960 to 0979 file may re-create but does not own, with the reason; left out of the phase sweep and definer check. */
 const NOT_PHASE_OWNED_FUNCTIONS = new Map<string, string>([
   ['rag_purge_store_inventory()', 'Phase 6.3 function re-created by 0976'],
+  ['rag_monitor_stale_index_drop(date)', 'Phase 6.3 function created by 1013 (quick-63-gaps), which extends 0963 and is left out with it'],
 ]);
+
+/** Later files that extend a 0960 to 0979 table and stop with 55000 without it (1013 needs 0963); left out with the phase. */
+const REQUIRES_PHASE53 = /^supabase\/migrations\/1013_/;
 
 /** Tables of the block that must never be folded into a setup file, checked by name as well as by the inventory diff. */
 const NOT_FOLDED_NAMES = ['rag_monitor_runs', 'rag_monitor_alert_evidence', 'rag_monitor_cluster_shares', 'rag_review_items_enqueue_re_review'];
@@ -126,7 +130,7 @@ for (const mode of MODES) {
 
     before(async () => {
       ({ db: full } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
-      withoutPhase = await buildWithout(mode, (file) => PHASE_FILE.test(file));
+      withoutPhase = await buildWithout(mode, (file) => PHASE_FILE.test(file) || REQUIRES_PHASE53.test(file));
       const [a, b] = [await inventory(withoutPhase), await inventory(full)];
       phaseFunctions = b.functions
         .filter((name) => !a.functions.includes(name))
