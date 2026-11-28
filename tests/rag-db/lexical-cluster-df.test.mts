@@ -761,8 +761,9 @@ for (const mode of MODES) {
       for (const line of before) assert.match(line, /anon=false authenticated=false service_role=true$/, line);
       await db.exec(fs.readFileSync(file, 'utf8'));
       await db.exec(fs.readFileSync(file, 'utf8'));
-      // AGENTS.md 6.3: after re-running 0746, re-run 0747 (common file, then the mode file), which redefines both bodies.
-      for (const name of ['0747_purge_gap_closure.sql', `0747_purge_gap_closure.${mode}.sql`]) {
+      // AGENTS.md 6.3: after re-running 0746, re-run 0747 (common file, then the mode file), which redefines both bodies, and after
+      // re-running 0747 re-run 1015 (the newest rag_purge_lineage).
+      for (const name of ['0747_purge_gap_closure.sql', `0747_purge_gap_closure.${mode}.sql`, '1015_purge_hardening.sql']) {
         const later = path.join(REPO_ROOT, 'supabase/migrations', name);
         if (fs.existsSync(later)) await db.exec(fs.readFileSync(later, 'utf8'));
       }
