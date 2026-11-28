@@ -404,6 +404,7 @@ describe('SourceSyncPanel in a fake DOM', () => {
     expect(groups).toHaveLength(2);
     expect(groups.map((g) => g.getAttribute('data-source-sync-run'))).toEqual(['run-cap', RUN_B]);
     expect(groups[0]!.textContent).toContain('daily purge limit of 3');
+    expect(groups.map((g) => g.getAttribute('aria-describedby'))).toEqual(['source-sync-run-body-run-cap', `source-sync-run-body-${RUN_B}`]);
     expect(groups[1]!.textContent).toContain('That is above the 30% limit');
     for (const group of groups) {
       expect(byText(group, 'button', 'Dismiss run')).toBeTruthy();

@@ -1046,7 +1046,12 @@ class SourceSyncPanel {
     if (expired) {
       inner.appendChild(sourceSyncEl('p', 'max-w-prose', run.expiredBody));
     } else {
-      inner.appendChild(sourceSyncEl('p', 'max-w-prose', run.body));
+      const body = sourceSyncEl('p', 'max-w-prose', run.body);
+      if (run.id) {
+        body.id = 'source-sync-run-body-' + run.id;
+        block.setAttribute('aria-describedby', body.id);
+      }
+      inner.appendChild(body);
       if (run.foundAt && run.expiresAt) {
         const when = sourceSyncEl('p', 'text-xs');
         sourceSyncFillNodes(when, this.t('paused.when'), {
