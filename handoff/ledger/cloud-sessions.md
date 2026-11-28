@@ -931,3 +931,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - RULE SLIP: I archived fix/ci-timeouts (SUMMARY 2682a364 was pushed) while its shard verification was still running. Unarchived it and asked it to finish the checks and report.
   - Nudged term-rpc-hardening (idle 76 min) and the 3.2 verify (idle 2 h) to rerun stalled background suites in the foreground.
   - Still running: verify 6.1/6, 07-37, 06.2-41, and the rest of the in-flight list.
+- 00:12Z quick-62-sysprompt-hash DONE exec/quick-62-sysprompt-hash 604e236c -> train 41 (G2; inert until an entry point passes the block; a tripwire test guards it). Archived.
+- 00:12Z 06.2-42 DONE exec/06.2-42 7e5ae674 (SUMMARY).
+  - ROUTE A (openai-3-small via OpenRouter): D-34 separates_at_least_as_well = TRUE.
+  - Route B: bge-m3 false, voyage false.
+  - R-1 is answered for the active profile. 06.2-26 is unblocked once 06.2-41 is done.
+  - NOTE: 26 must read the openai-3-small-1536/ subdir, and a profile switch requires re-measuring (06.2-33).
+  - Archived.
