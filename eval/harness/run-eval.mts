@@ -979,6 +979,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
     if (voiceEntry) requestOptions.entry_profile = 'voice';
+    if (runConfig.selectedModel !== undefined) requestOptions.selected_model = runConfig.selectedModel;
     if (runConfig.chunkingProfiles?.length) {
       if (baseUrl) throw new RunConfigError('[Eval Harness] chunking_profiles seed the fixture database only; a --base-url run cannot use them');
       if (fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
@@ -1337,6 +1338,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(citations ? { citations: true } : {}),
     ...(groundedness ? { groundedness: true } : {}),
     ...(requestOptions.entry_profile ? { entry_profile: requestOptions.entry_profile } : {}),
+    ...(requestOptions.selected_model ? { selected_model: requestOptions.selected_model } : {}),
   };
   const embedder = baseUrl
     ? null
