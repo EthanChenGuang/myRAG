@@ -1,26 +1,26 @@
 /**
- * Tax-id checks written by hand on purpose and held to the sidecar's python-stdnum answers by
- * tests/fixtures/ingest/tax-id-vectors.json. Italian Partita IVA, Chinese USCC and the EU VAT numbers of the
- * countries below carry a checksum; any other EU prefix is reported as not valid (such a token is still looked up
- * as an ordinary identifier).
+ * Checksum-bearing identifier shapes, written by hand on purpose and held to the sidecar's python-stdnum answers by the shared
+ * vector fixture (tests/rag/checksum-id-vectors.test.ts). The eleven-digit shape, the eighteen-character shape and the
+ * country-prefixed shapes of the countries below carry a checksum; any other two-letter prefix is reported as not valid (such a
+ * token is still looked up as an ordinary identifier). Scheme values are a sidecar contract and keep their spelling.
  */
-export type TaxIdScheme = 'it_iva' | 'cn_uscc' | 'eu_vat' | 'unknown';
+export type ChecksumIdScheme = 'it_iva' | 'cn_uscc' | 'eu_vat' | 'unknown';
 
-export interface TaxIdCheck {
-  scheme: TaxIdScheme;
+export interface ChecksumIdCheck {
+  scheme: ChecksumIdScheme;
   valid: boolean;
   normalized: string;
 }
 
 const SEPARATORS = /[\s.\-/_]/gu;
-const IT_IVA_SHAPE = /^\d{11}$/;
-const CN_USCC_SHAPE = /^[0-9A-Z]{18}$/;
-const EU_VAT_SHAPE = /^[A-Z]{2}[0-9A-Z]{2,12}$/;
-const USCC_ALPHABET = '0123456789ABCDEFGHJKLMNPQRTUWXY';
-const USCC_WEIGHTS = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28];
+const ELEVEN_DIGIT_SHAPE = /^\d{11}$/;
+const EIGHTEEN_CHAR_SHAPE = /^[0-9A-Z]{18}$/;
+const COUNTRY_PREFIXED_SHAPE = /^[A-Z]{2}[0-9A-Z]{2,12}$/;
+const EIGHTEEN_CHAR_ALPHABET = '0123456789ABCDEFGHJKLMNPQRTUWXY';
+const EIGHTEEN_CHAR_WEIGHTS = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28];
 const DIGITS = /^\d+$/;
 
-export function normalizeTaxId(raw: string): string {
+export function normalizeChecksumId(raw: string): string {
   return raw.replace(SEPARATORS, '').toUpperCase();
 }
 
@@ -38,7 +38,7 @@ function luhnChecksum(digits: string): number {
   return total % 10;
 }
 
-function ibanStyleMod97(text: string): number {
+function alnumMod97(text: string): number {
   let remainder = 0;
   for (const character of text) {
     const value = Number.parseInt(character, 36);
@@ -49,7 +49,7 @@ function ibanStyleMod97(text: string): number {
 }
 
 function validItalian(body: string): boolean {
-  if (!IT_IVA_SHAPE.test(body) || Number(body.slice(0, 7)) === 0) return false;
+  if (!ELEVEN_DIGIT_SHAPE.test(body) || Number(body.slice(0, 7)) === 0) return false;
   const province = body.slice(7, 10);
   const provinceOk = (province >= '001' && province <= '100') || province === '120' || province === '121' || province === '888' || province === '999';
   return provinceOk && luhnChecksum(body) === 0;
@@ -86,7 +86,7 @@ function validBelgian(raw: string): boolean {
   return (Number(body.slice(0, -2)) + Number(body.slice(-2))) % 97 === 0;
 }
 
-function validDutchBsn(nine: string): boolean {
+function validDutchNineDigit(nine: string): boolean {
   if (!DIGITS.test(nine) || Number(nine) <= 0 || nine.length !== 9) return false;
   let total = 0;
   for (let index = 0; index < 8; index += 1) total += (9 - index) * (nine.charCodeAt(index) - 48);
@@ -100,27 +100,27 @@ function validDutch(body: string): boolean {
   if (!DIGITS.test(number.slice(0, 9)) || Number(number.slice(0, 9)) <= 0) return false;
   if (!DIGITS.test(number.slice(10)) || Number(number.slice(10)) <= 0) return false;
   if (number.length !== 12 || number[9] !== 'B') return false;
-  return validDutchBsn(number.slice(0, 9)) || ibanStyleMod97(`NL${number}`) === 1;
+  return validDutchNineDigit(number.slice(0, 9)) || alnumMod97(`NL${number}`) === 1;
 }
 
-export function isValidPartitaIva(raw: string): boolean {
-  const normalized = normalizeTaxId(raw);
+export function isValidElevenDigitId(raw: string): boolean {
+  const normalized = normalizeChecksumId(raw);
   return validItalian(normalized.startsWith('IT') ? normalized.slice(2) : normalized);
 }
 
-export function isValidUscc(raw: string): boolean {
-  const normalized = normalizeTaxId(raw);
+export function isValidEighteenCharId(raw: string): boolean {
+  const normalized = normalizeChecksumId(raw);
   if (normalized.length !== 18 || !DIGITS.test(normalized.slice(0, 8))) return false;
-  if ([...normalized.slice(8)].some((character) => !USCC_ALPHABET.includes(character))) return false;
+  if ([...normalized.slice(8)].some((character) => !EIGHTEEN_CHAR_ALPHABET.includes(character))) return false;
   let total = 0;
-  for (let index = 0; index < 17; index += 1) total += USCC_ALPHABET.indexOf(normalized[index] as string) * (USCC_WEIGHTS[index] as number);
-  const expected = USCC_ALPHABET[(((31 - total) % 31) + 31) % 31];
+  for (let index = 0; index < 17; index += 1) total += EIGHTEEN_CHAR_ALPHABET.indexOf(normalized[index] as string) * (EIGHTEEN_CHAR_WEIGHTS[index] as number);
+  const expected = EIGHTEEN_CHAR_ALPHABET[(((31 - total) % 31) + 31) % 31];
   return normalized[17] === expected;
 }
 
-export function isValidEuVat(raw: string): boolean {
-  const normalized = normalizeTaxId(raw);
-  if (!EU_VAT_SHAPE.test(normalized)) return false;
+export function isValidCountryPrefixedId(raw: string): boolean {
+  const normalized = normalizeChecksumId(raw);
+  if (!COUNTRY_PREFIXED_SHAPE.test(normalized)) return false;
   const country = normalized.slice(0, 2);
   const body = normalized.slice(2);
   switch (country) {
@@ -142,10 +142,10 @@ export function isValidEuVat(raw: string): boolean {
 }
 
 /** Picks the scheme by shape, as the sidecar does, and validates it. */
-export function classifyTaxId(raw: string): TaxIdCheck {
-  const normalized = normalizeTaxId(raw);
-  if (IT_IVA_SHAPE.test(normalized)) return { scheme: 'it_iva', valid: validItalian(normalized), normalized };
-  if (CN_USCC_SHAPE.test(normalized)) return { scheme: 'cn_uscc', valid: isValidUscc(normalized), normalized };
-  if (EU_VAT_SHAPE.test(normalized)) return { scheme: 'eu_vat', valid: isValidEuVat(normalized), normalized };
+export function classifyChecksumId(raw: string): ChecksumIdCheck {
+  const normalized = normalizeChecksumId(raw);
+  if (ELEVEN_DIGIT_SHAPE.test(normalized)) return { scheme: 'it_iva', valid: validItalian(normalized), normalized };
+  if (EIGHTEEN_CHAR_SHAPE.test(normalized)) return { scheme: 'cn_uscc', valid: isValidEighteenCharId(normalized), normalized };
+  if (COUNTRY_PREFIXED_SHAPE.test(normalized)) return { scheme: 'eu_vat', valid: isValidCountryPrefixedId(normalized), normalized };
   return { scheme: 'unknown', valid: false, normalized };
 }

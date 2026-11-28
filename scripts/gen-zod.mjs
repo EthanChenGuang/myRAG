@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { jsonSchemaToZod } from 'json-schema-to-zod';
+import { jsonSchemaToZod, parseSchema } from 'json-schema-to-zod';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -108,6 +108,23 @@ function inline(node, defs, stack = []) {
   return node;
 }
 
+/**
+ * An object with `if`/`then` and no `else` (the Pydantic model validators exported as JSON Schema): the object itself, then a
+ * refinement that checks `then` whenever `if` matches. json-schema-to-zod drops `if`/`then` on object schemas.
+ */
+function conditionalObject(schema, refs) {
+  if (schema.type !== 'object' || !schema.if || !schema.then || 'else' in schema) return undefined;
+  const { if: $if, then: $then, ...rest } = schema;
+  const base = parseSchema(rest, refs);
+  const ifCode = parseSchema($if, { ...refs, path: [...refs.path, 'if'] });
+  const thenCode = parseSchema($then, { ...refs, path: [...refs.path, 'then'] });
+  return `${base}.superRefine((value, ctx) => {
+  if (!${ifCode}.safeParse(value).success) return;
+  const result = ${thenCode}.safeParse(value);
+  if (!result.success) result.error.errors.forEach((error) => ctx.addIssue(error));
+})`;
+}
+
 function main() {
   const { schemasDir, out, registry, textsOut } = parseArgs(process.argv.slice(2));
   const files = fs
@@ -128,6 +145,7 @@ function main() {
       name: `${model}Schema`,
       module: 'esm',
       type: model,
+      parserOverride: conditionalObject,
     });
     blocks.push(
       code

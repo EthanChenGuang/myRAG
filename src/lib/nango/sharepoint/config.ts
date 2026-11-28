@@ -20,3 +20,15 @@ export function sharePointIntegrationKey(provider: SharePointProvider): string {
     const trimmed = (configured || '').trim();
     return trimmed || provider;
 }
+
+/** True when the request names one of the two providers while the switch is off: the route answers 404 (D-24). */
+export function isSharePointBlocked(provider: unknown): boolean {
+    return typeof provider === 'string' && isSharePointProvider(provider) && !isSharePointEnabled();
+}
+
+const GRAPH_ID = /^[A-Za-z0-9!_.,-]{1,256}$/;
+
+/** A Graph site, drive or item id: no separators, no encoding, not a dot segment. */
+export function isGraphId(value: string): boolean {
+    return GRAPH_ID.test(value) && !/^\.+$/.test(value);
+}

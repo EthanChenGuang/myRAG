@@ -396,6 +396,7 @@ cancelTool: "ተው",
   executingTool: "መሳሪያ በሂደት ላይ፣ እባክዎ ይጠብቁ...",
   toolError: "መሳሪያውን በመስራት ጊዜ ስህተት ተፈጥሯል.",
   voiceUnavailable: "ድምፅ ለጊዜው አይገኝም። እባክዎ ቆይተው እንደገና ይሞክሩ።",
+  emptyReply: "በዚህ ጊዜ መልስ መፍጠር አልተቻለም። እባክዎ እንደገና ይሞክሩ ወይም ጥያቄውን በሌላ መንገድ ይጠይቁ።",
   
   // Chat message action tooltips
   copyTooltip: "ኮፒ አድርግ",

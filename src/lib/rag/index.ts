@@ -324,7 +324,7 @@ export {
 export { defaultQueryContext } from './query/temporal-query-detector';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
-export { answerStructureFor, answerStructureStage, decomposedAnswerFor } from './generation/decomposed-turn';
+export { answerStructureFor, answerStructureStage, decomposedAnswerEffective, decomposedAnswerFor } from './generation/decomposed-turn';
 export { isOutOfScopeResult, scopeGateNoticeFor, type ScopeNotice } from './generation/scope-notice';
 export {
   initialModelRoute,
@@ -345,6 +345,7 @@ export {
   type AnswerLanguageOptions,
 } from './generation/answer-language';
 export {
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   knowledgeBaseUnavailableLanguage,
@@ -978,3 +979,4 @@ export type {
   ScopeGateStatusResult,
   StartScopeRebuildResult,
 } from './scope/admin';
+export { captionLegacyImage } from './ingest/legacy-image-caption';

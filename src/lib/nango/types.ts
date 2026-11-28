@@ -138,6 +138,8 @@ export interface NangoSyncRecord {
  * Nango webhook payload types
  */
 export type NangoWebhookType =
+  | 'sync'
+  | 'auth'
   | 'sync.success'
   | 'sync.error'
   | 'auth.token_expired'
@@ -156,9 +158,18 @@ export interface NangoWebhookPayload {
     deleted: number;
   };
   error?: {
-    message: string;
+    message?: string;
     type: string;
+    description?: string;
   };
+  /** Current payloads (type 'sync' and 'auth'): whether the run or the auth operation succeeded. */
+  success?: boolean;
+  /** Current sync payloads: `from === null` marks a full sync (D-33). */
+  checkpoints?: { from: string | null; to: string | null };
+  /** Auth payloads: creation, override, refresh or deletion. */
+  operation?: string;
+  startedAt?: string;
+  failedAt?: string;
 }
 
 /**

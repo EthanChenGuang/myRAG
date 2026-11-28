@@ -31,6 +31,8 @@ export interface RetrievalBackendSelection {
   fallbackReason: BackendFallbackReason | null;
   tenantValidationDropped: number;
   degraded: boolean;
+  /** RET-05: set only when every search call of the request was served by the external backend; its re-validation is the recheck. */
+  sourceRecheck?: { checked: number; dropped: number };
 }
 
 export interface Candidate {

@@ -35,6 +35,8 @@ import type { LexicalStamp } from '../../lexical/resolve-options';
 import { scopeAccessFilter, type ScopeAccessFilter } from '../../tenant/access';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { runSourceRecheckStage, type SourceRecheckMarker } from '../../retrieval/source-recheck';
+import { isExternalBackendId, sourceRecheckDecision } from '../../backend/source-recheck';
+import { scheduleStaleRepair } from '../../backend/stale-repair';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
@@ -341,6 +343,7 @@ export function backendAttributes(selection: RetrievalBackendSelection): Record<
   return {
     backend: selection.backend,
     tenant_validation_dropped: selection.tenantValidationDropped,
+    ...(selection.sourceRecheck ? { stale_index_drop: selection.sourceRecheck.dropped } : {}),
     ...(selection.fallbackReason ? { fallback_reason: selection.fallbackReason } : {}),
   };
 }
@@ -1142,7 +1145,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       (exactList?.hits.length ?? 0) +
       (tableList?.hits.length ?? 0) +
       (softLegs ? softLegs.dense.length + softLegs.lexical.length : 0);
-    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found, filterRetries };
+    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, found, filterRetries, selection };
   };
 
   let legs = await runLegs(filterIdentifiers, []);
@@ -1152,6 +1155,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     legs = await runLegs(undefined, [IDENTIFIER_FILTER_FALLBACK]);
   }
   const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, softLegs, filterRetries } = legs;
+  const served = legs.selection();
 
   // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
   const termList: RankedList | null =
@@ -1229,8 +1233,17 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
+  // RET-05: on Weaviate and Qdrant the backend's re-validation was the recheck (forced, one query); its drops start a bounded repair
+  // after the response. A pgvector-served request follows RAG_SOURCE_RECHECK.
+  const decision = sourceRecheckDecision(served.backend, config.sourceRecheck);
+  const externalRecheck = decision.run && decision.forced ? served.sourceRecheck : undefined;
+  if (isExternalBackendId(resolved.choice)) {
+    const stale = resolved.staleChunkIds();
+    if (stale.length > 0) scheduleStaleRepair({ target: resolved.choice, scope, chunkIds: stale });
+  }
+
   // D-19, D-38: an index row that missed a delete never reaches rerank; a failed recheck keeps the candidates and degrades the result.
-  const recheck = config.sourceRecheck
+  const recheck = decision.run && !externalRecheck
     ? await runSourceRecheckStage({
         spec: spec('source_recheck', 'skip'),
         signal,
@@ -1245,7 +1258,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   return {
     fusedHits: recheck ? recheck.items : capped.hits,
     dedupeCounts: capped.counts,
-    ...(recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
+    ...(externalRecheck ? { sourceRecheck: externalRecheck } : recheck?.marker ? { sourceRecheck: recheck.marker } : {}),
     versionScope: anyHistoryScope ?? versions.scope,
     ...(tableRows ? { tableRows } : {}),
     ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),

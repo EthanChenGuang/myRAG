@@ -11,6 +11,7 @@ import { useAuth } from '@/components/providers/auth-provider';
 import { useModel, AVAILABLE_MODELS } from '@/components/providers/model-provider';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/ui/header';
+import { isBlankAssistantMessage, isBlankContent } from '@/lib/chat/blank-message';
 import { cn } from '@/lib/utils';
 import { Sidebar } from '@/components/ui/sidebar';
 import { useChatStore } from '@/lib/chat-store';
@@ -2479,6 +2480,10 @@ export default function Home() {
             ];
           }
 
+          if (!generatedImageData && isBlankContent(messageContent)) {
+            messageContent = `⚠️ ${t('emptyReply')}`;
+          }
+
           const finalMessage: ExtendedMessage = {
             id: generateMessageId(),
             role: 'assistant',
@@ -4270,7 +4275,9 @@ export default function Home() {
   };
 
   // Prepare messages array with thinking state
-  const displayMessages = [...messages].map(msg => {
+  const displayMessages = [...messages].filter((msg, index) =>
+    !(isBlankAssistantMessage(msg) && !(isChatLoading && index === messages.length - 1))
+  ).map(msg => {
     // Clean tool call JSON patterns from assistant messages
     if (msg.role === 'assistant' && typeof msg.content === 'string') {
       // Use the cleanToolCallArtifacts function to properly clean metadata

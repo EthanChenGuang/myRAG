@@ -396,6 +396,7 @@ export const yo = {
   executingTool: "Ṣiṣẹ́ irinṣẹ́, jọ̀wọ́ dúró...",
   toolError: "Àṣìṣe kan wáyé nigbà ṣiṣẹ́ irinṣẹ́ náà.",
   voiceUnavailable: "Ohùn kò sí fún ìgbà díẹ̀. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i nígbà míì.",
+  emptyReply: "Kò ṣeé ṣe láti fún ọ ní ìdáhùn ní àkókò yìí. Jọ̀wọ́ gbìyànjú lẹ́ẹ̀kan sí i tàbí tún ìbéèrè náà sọ.",
   
   // Chat message action tooltips
   copyTooltip: "Ṣẹ̀dà",

@@ -1,11 +1,21 @@
 import { HiddenTextRulesSchema, type HiddenTextRules } from '@/lib/rag-eval/contracts.generated';
 import rawRules from '../../../../config/rag/hidden-text-rules.json';
 
-/** The zero-width code points of D-33, in this order in every report. */
-export const ZERO_WIDTH_CODE_POINTS = [0x200b, 0x200c, 0x200d, 0x2060, 0xfeff] as const;
+const TAG_FIRST = 0xe0000;
+const TAG_LAST = 0xe007f;
+
+/** The zero-width code points of D-33 plus the Unicode tag characters U+E0000-U+E007F, in this order in every report. */
+export const ZERO_WIDTH_CODE_POINTS: readonly number[] = [
+  0x200b,
+  0x200c,
+  0x200d,
+  0x2060,
+  0xfeff,
+  ...Array.from({ length: TAG_LAST - TAG_FIRST + 1 }, (_, i) => TAG_FIRST + i),
+];
 
 const BYTE_ORDER_MARK = 0xfeff;
-const ZERO_WIDTH_GLOBAL = /[​‌‍⁠﻿]/gu;
+const ZERO_WIDTH_GLOBAL = /[\u200b\u200c\u200d\u2060\ufeff\u{e0000}-\u{e007f}]/gu;
 
 export interface ZeroWidthFinding {
   /** Counted by code point; a U+FEFF at position 0 is a byte-order mark and is not counted. */

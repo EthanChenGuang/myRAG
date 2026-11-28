@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { guardEmptyReply } from '@/lib/chat/empty-reply';
 import { env } from '@/lib/env';
 import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
 import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
@@ -36,6 +37,7 @@ import {
   isSmallTalkResult,
   isV2Pipeline,
   createAnswerTurn,
+  emptyReplyText,
   kbUnavailableLanguage,
   kbUnavailableText,
   readAnswerConfig,
@@ -924,6 +926,12 @@ export async function POST(request: NextRequest) {
             }
           : {};
       // Phase 6.2 D-26: the notice is the first text part, after the start chunk and before the model's answer
+      const guardModelStream = <T extends { type: string }>(stream: ReadableStream<T>): ReadableStream<T> =>
+        guardEmptyReply(stream, {
+          route: 'embed',
+          model: safeModelId,
+          message: () => emptyReplyText(answerTurn, preferredLanguage(request)),
+        });
       const answerStream = scopeNotice
         ? createUIMessageStream({
             execute: ({ writer }) => {
@@ -932,10 +940,10 @@ export async function POST(request: NextRequest) {
               writer.write({ type: 'text-start', id: noticeId });
               writer.write({ type: 'text-delta', id: noticeId, delta: `${scopeNotice.notice}\n\n` });
               writer.write({ type: 'text-end', id: noticeId });
-              writer.merge(result.toUIMessageStream({ ...streamOptions, sendStart: false }));
+              writer.merge(guardModelStream(result.toUIMessageStream({ ...streamOptions, sendStart: false })));
             },
           })
-        : result.toUIMessageStream(streamOptions);
+        : guardModelStream(result.toUIMessageStream(streamOptions));
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       // Same composition as result.toUIMessageStreamResponse, with the first text delta observed

@@ -162,7 +162,7 @@ describe('pgvector request fields (D-12, D-31, D-45)', () => {
 });
 
 describe('exactIdLookup pass-through', () => {
-  const tokens = [{ value: 'AB-1234', kind: 'model' as const }];
+  const tokens = [{ value: 'AB-1234', kind: 'alnum_code' as const }];
 
   it('sends nothing new when unset, and both values when set', async () => {
     const { client, calls } = recordingClient();

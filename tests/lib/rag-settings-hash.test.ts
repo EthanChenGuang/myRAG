@@ -54,10 +54,14 @@ describe('rag_settings_hash (D-12)', () => {
     expect(ragAffectingDiff({ RAG_PIPELINE: 'legacy' }, { RAG_PIPELINE: 'v2', OTHER: 'x' }, ['RAG_PIPELINE'])).toEqual(['RAG_PIPELINE']);
   });
 
-  it('exports the generated RAG-affecting names without gate switches or secrets', () => {
+  it('exports the generated RAG-affecting names without secrets; of the gate switches only RAG_CONFIG_GATE (quick-53 W-1)', () => {
     expect(RAG_AFFECTING_NAMES).toContain('RAG_BEHAVIOR_MODE');
     expect(RAG_AFFECTING_NAMES).toContain('NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE');
-    expect(RAG_AFFECTING_NAMES).not.toContain('RAG_CONFIG_GATE');
+    // W-1 (05.3 security): lowering RAG_CONFIG_GATE in enforce needs an override reason and a change record, so it is RAG-affecting
+    expect(RAG_AFFECTING_NAMES).toContain('RAG_CONFIG_GATE');
+    expect(RAG_AFFECTING_NAMES).not.toContain('RAG_CONFIG_GATE_LIVE');
+    expect(RAG_AFFECTING_NAMES).not.toContain('RAG_MONITOR');
+    expect(RAG_AFFECTING_NAMES.filter((name) => name.startsWith('RAG_MONITOR') || name === 'RAG_REPRESENTATIVE_SAMPLE')).toEqual([]);
     expect(RAG_AFFECTING_NAMES.filter((name) => isSecretName(name))).toEqual([]);
   });
 });

@@ -1484,6 +1484,13 @@
             color: rgba(255, 255, 255, 0.75);
         }
 
+        /* The card heading and card body colours above would turn a warning alert's text white on amber */
+        [data-theme="dark"] .card .alert-warning,
+        [data-theme="dark"] .card .alert-warning h3,
+        [data-theme="dark"] .card .alert-warning .link {
+            color: var(--fallback-wac, oklch(var(--wac) / 1));
+        }
+
         /* Divider text in dark mode */
         [data-theme="dark"] .divider {
             color: rgba(255, 255, 255, 0.8);
@@ -7346,7 +7353,7 @@
                                                     <label class="label" for="RAG_UPLOADER_ALERT_THRESHOLD">
                                                         <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD">Alert level: events from one uploader</span>
                                                     </label>
-                                                    <input type="number" id="RAG_UPLOADER_ALERT_THRESHOLD" name="RAG_UPLOADER_ALERT_THRESHOLD" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_THRESHOLD-help">
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_THRESHOLD" name="RAG_UPLOADER_ALERT_THRESHOLD" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" class="input input-bordered w-full md:max-w-40 tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_THRESHOLD-help">
                                                     <label class="label">
                                                         <span id="RAG_UPLOADER_ALERT_THRESHOLD-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD.help">An alert opens above this number. 0 means no alerts.</span> <code translate="no">RAG_UPLOADER_ALERT_THRESHOLD</code></span>
                                                     </label>
@@ -7355,7 +7362,7 @@
                                                     <label class="label" for="RAG_UPLOADER_ALERT_WINDOW_HOURS">
                                                         <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_WINDOW_HOURS">Window in hours</span>
                                                     </label>
-                                                    <input type="number" id="RAG_UPLOADER_ALERT_WINDOW_HOURS" name="RAG_UPLOADER_ALERT_WINDOW_HOURS" min="1" max="720" step="1" placeholder="24" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_WINDOW_HOURS-help">
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_WINDOW_HOURS" name="RAG_UPLOADER_ALERT_WINDOW_HOURS" min="1" max="720" step="1" placeholder="24" inputmode="numeric" autocomplete="off" class="input input-bordered w-full md:max-w-40 tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_WINDOW_HOURS-help">
                                                     <label class="label">
                                                         <span id="RAG_UPLOADER_ALERT_WINDOW_HOURS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><code translate="no">RAG_UPLOADER_ALERT_WINDOW_HOURS</code></span>
                                                     </label>

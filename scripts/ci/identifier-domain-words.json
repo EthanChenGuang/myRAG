@@ -1,0 +1,53 @@
+{
+  "description": "Quick 261127-idn (Phase 4.2 W-5(j)): identifier code under these paths uses shape names only. A finding is a word of an identifier, comment or string (split at case changes, digits and separators) that is in `words`, or a `phrases` entry found as a substring. `allow` lists exact texts kept on purpose: each is removed before the scan and must still occur in its file.",
+  "scan": ["src/lib/rag/ids", "src/lib/rag/retrieval/exact-id.ts"],
+  "words": [
+    "invoice", "invoices", "receipt", "receipts", "bill", "billing", "tax", "taxes", "vat", "iva", "uscc", "iban", "bsn",
+    "supplier", "buyer", "customer", "payroll", "salary", "salaries", "financial", "finance", "fattura", "ricevuta", "partita",
+    "warranty", "legal", "lawsuit", "litigation", "court", "statute", "plaintiff", "defendant", "attorney", "clause",
+    "medical", "patient", "patients", "diagnosis", "prescription", "clinical", "hospital", "dosage", "icd"
+  ],
+  "phrases": ["发票", "發票", "账单", "賬單", "收据", "收據", "税号", "稅號", "病历", "病歷", "处方", "處方", "合同"],
+  "allow": [
+    {
+      "path": "src/lib/rag/ids/checksum-ids.ts",
+      "text": "'it_iva' | 'cn_uscc' | 'eu_vat'",
+      "reason": "Scheme values are the sidecar contract (rag_sidecar.contracts.ingest TaxIdScheme, InvoiceFields JSON Schema, generated Zod) and are stored in documents' extracted fields."
+    },
+    {
+      "path": "src/lib/rag/ids/checksum-ids.ts",
+      "text": "scheme: 'it_iva'",
+      "reason": "Contract scheme value, see above."
+    },
+    {
+      "path": "src/lib/rag/ids/checksum-ids.ts",
+      "text": "scheme: 'cn_uscc'",
+      "reason": "Contract scheme value, see above."
+    },
+    {
+      "path": "src/lib/rag/ids/checksum-ids.ts",
+      "text": "scheme: 'eu_vat'",
+      "reason": "Contract scheme value, see above."
+    },
+    {
+      "path": "src/lib/rag/retrieval/exact-id.ts",
+      "text": "token.scheme === 'eu_vat'",
+      "reason": "Contract scheme value, see above."
+    },
+    {
+      "path": "src/lib/rag/retrieval/exact-id.ts",
+      "text": "token.scheme === 'it_iva'",
+      "reason": "Contract scheme value, see above."
+    },
+    {
+      "path": "src/lib/rag/retrieval/exact-id.ts",
+      "text": "/发票|發票|账单|賬單|单据|單據|收据|收據|invoice|receipt|\\bbill\\b|fattura|ricevuta|nota di credito|credit note/iu",
+      "reason": "REFERENCE_CUE matching behaviour is unchanged by this rename-only task; moving the cue words to the language registry is a behaviour change left to a later plan."
+    },
+    {
+      "path": "src/lib/rag/retrieval/exact-id.ts",
+      "text": "financial_score",
+      "reason": "Field of the shared Candidate type (src/lib/rag/types.ts), outside the identifier modules."
+    }
+  ]
+}
