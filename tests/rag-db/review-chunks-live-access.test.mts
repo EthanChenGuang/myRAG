@@ -181,7 +181,9 @@ for (const mode of MODES) {
       assert.equal((await rows(db, 'SELECT access_sets FROM rag_review_items WHERE id = $1', [itemId]))[0]?.access_sets, null);
       await setSwitch(true, admin);
       assert.deepEqual(await servedText(OUTSIDER, itemId), [], 'the outsider gets no text for the NULL-set item');
-      assert.deepEqual(await servedText(MEMBER, itemId), [MARKER]);
+      // 0990 (rih G8): while access is enforced a NULL-set item fails closed and only the tenant's administrators read it, so a
+      // group member without admin rights gets nothing either until the 0984/0986 backfill recomputes its sets.
+      assert.deepEqual(await servedText(MEMBER, itemId), [], 'a NULL-set item fails closed for a non-admin member while enforced');
     });
 
     // 5.1.1 G7 / T-0511-89: the label evidence check goes through the same live check, not the item's write-time access_sets

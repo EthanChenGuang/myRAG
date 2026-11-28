@@ -230,16 +230,9 @@ describe('two-tenant canary: the semantic cache never crosses tenants, entry pro
     assert.equal((await cache.check(query('a')))?.answer.is_refusal, true, 'positive control: the refusal hits');
 
     const a = tenant('a');
-    await db().exec('SET ROLE authenticated');
-    await db().query("SELECT set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claim.role', 'authenticated', false)", [a.userId]);
-    try {
-      await db().query(`INSERT INTO documents (filename, content, metadata, user_id) VALUES ('v2-cache-upload.md', 'placeholder upload', '{}'::jsonb, $1)`, [
-        a.userId,
-      ]);
-    } finally {
-      await db().exec('RESET ROLE');
-      await db().query("SELECT set_config('request.jwt.claim.sub', '', false), set_config('request.jwt.claim.role', '', false)");
-    }
+    await asServiceRole(`INSERT INTO documents (filename, content, metadata, user_id) VALUES ('v2-cache-upload.md', 'placeholder upload', '{}'::jsonb, $1)`, [
+      a.userId,
+    ]);
     assert.equal(await cache.check(query('a')), null);
     assert.equal(await rowsOf('a'), 0);
     assert.equal((await cache.check(query('b')))?.answer.answer_text, 'placeholder refusal B');

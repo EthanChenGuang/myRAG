@@ -256,6 +256,16 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
   },
   {
     reason:
+      'Purge foreign stores (0728, 06.3-19): tenant-checked with rag_ingest_assert_tenant_key, service_role only, called from the purge path only; the steps delete rows of other phases by tenant and version id and return per-store counts (jsonb, or store and remaining), never row content; the inventory is a fixed list that reads no table.',
+    functions: ['rag_purge_foreign_stores', 'rag_purge_foreign_leftovers', 'rag_purge_store_inventory'],
+  },
+  {
+    reason:
+      'Source sync admin listing (0721, 06.3-04): service_role only for the admin connections route; limited to the tenants rag_admin_tenant_keys gives the actor; returns connection metadata, statuses and counts (document_count, candidate counts), never document or chunk text.',
+    functions: ['rag_source_sync_admin_connections'],
+  },
+  {
+    reason:
       'Purge citation scrub (0724, 06.3-10): rewrites the messages jsonb it is passed (withdrawn citation markers); it reads no table and returns only its input.',
     functions: ['rag_withdrawn_chat_messages'],
   },

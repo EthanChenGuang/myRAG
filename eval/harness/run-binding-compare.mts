@@ -245,15 +245,21 @@ function defaultGolden(
   merge: (paths: string[], outPath: string) => string,
   ingestPaths: () => string[],
   partition: <T extends { category: string }>(items: T[]) => { main: T[]; tableSplit: T[] },
+  isQ62: (item: { category: string; tags?: readonly string[] | null }) => boolean,
 ): string {
   const merged = merge(
     [...ingestPaths(), 'eval/fixtures/domain/golden.jsonl'].map((file) => path.join(REPO_ROOT, file)),
     path.join(outDir, 'golden.all.jsonl'),
   );
   const lines = fs.readFileSync(merged, 'utf8').split('\n').filter((line) => line.trim() !== '');
-  const items = lines.map((line) => ({ line, category: (JSON.parse(line) as { category: string }).category }));
+  const items = lines.map((line) => {
+    const parsed = JSON.parse(line) as { category: string; tags?: string[] | null };
+    return { line, category: parsed.category, tags: parsed.tags ?? null };
+  });
   const out = path.join(outDir, 'golden.merged.jsonl');
-  fs.writeFileSync(out, `${partition(items).main.map((item) => item.line).join('\n')}\n`);
+  // The q62 items (Phase 6.2) need their own isolated tenant, which this comparison does not load; like table_split, they stay out.
+  const kept = partition(items).main.filter((item) => !isQ62(item));
+  fs.writeFileSync(out, `${kept.map((item) => item.line).join('\n')}\n`);
   return out;
 }
 
@@ -377,6 +383,7 @@ async function main(argv: string[]): Promise<number> {
   const domain = await loadDomainPack();
   const ingestMode = await import('./ingest-mode.mts');
   const { mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems, buildIngestFixtureDatabase } = ingestMode;
+  const { isQ62Item } = await import('./q62-fixtures.mts');
 
   const full = await buildIngestFixtureDatabase({
     deploymentMode: 'single-tenant',
@@ -485,7 +492,7 @@ async function main(argv: string[]): Promise<number> {
       args.golden ??
       (args.baselineOnly
         ? path.join(REPO_ROOT, DOMAIN_GOLDEN)
-        : defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems));
+        : defaultGolden(args.outDir, mergeGoldenFiles, ingestModeGoldenPaths, partitionIngestModeItems, isQ62Item));
 
     const runEvalModule = await import('./run-eval.mts');
     inProcess = await runEvalModule.prepareInProcessEval({

@@ -679,3 +679,73 @@ for (const mode of MODES) {
     });
   });
 }
+
+async function asUser<T>(db: PGlite, role: 'anon' | 'authenticated' | 'service_role', userId: string | null, run: () => Promise<T>): Promise<T> {
+  await db.query("SELECT set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claim.role', $2, false)", [userId ?? '', role]);
+  try {
+    return await asRole(db, role, run);
+  } finally {
+    await db.query("SELECT set_config('request.jwt.claim.sub', '', false), set_config('request.jwt.claim.role', '', false)");
+  }
+}
+
+for (const mode of MODES) {
+  describe(`UF-1 upload approval cannot be bypassed by a direct table insert (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('a non-admin member cannot insert a ready, current document that skips the approval hold', async () => {
+      const id = crypto.randomUUID();
+      const token = next('directdoc');
+      const sql =
+        ctx.mode === 'multi-tenant'
+          ? "INSERT INTO documents (id, filename, content, status, is_current, user_id, organization_id) VALUES ($1, 'direct.md', $2, 'ready', true, $3, $4)"
+          : "INSERT INTO documents (id, filename, content, status, is_current, user_id) VALUES ($1, 'direct.md', $2, 'ready', true, $3)";
+      const params = ctx.mode === 'multi-tenant' ? [id, `${token} neutral body`, ctx.member, ctx.orgId] : [id, `${token} neutral body`, ctx.member];
+      const refused = await asUser(ctx.db, 'authenticated', ctx.member, () => failure(ctx.db, sql, params));
+      assert.equal((await rows(ctx.db, 'SELECT 1 FROM documents WHERE id = $1', [id])).length, 0, 'no row may be written');
+      assert.ok(refused, 'the insert must be refused');
+      assert.equal(refused.code, '42501', refused.message);
+    });
+
+    it('no client can plant a ready chunk under a published document of the tenant', async () => {
+      const sourceKey = `approval/${next('direct')}.md`;
+      const doc = await begin(ctx, sourceKey, next('direct-v1'));
+      await writeChunks(ctx, doc, ['neutral probe sentence about a shared topic']);
+      assert.equal(await publish(ctx, doc), 'published');
+      const token = next('plantedtok');
+      const actor = ctx.mode === 'single-tenant' ? ctx.admin : ctx.member;
+      const chunkId = crypto.randomUUID();
+      const sql =
+        ctx.mode === 'multi-tenant'
+          ? "INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, status, is_current, organization_id) VALUES ($1, $2, $3, $4::vector, 9, 'ready', true, $5)"
+          : "INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, status, is_current) VALUES ($1, $2, $3, $4::vector, 9, 'ready', true)";
+      const text = `${token} planted neutral sentence`;
+      const params = ctx.mode === 'multi-tenant' ? [chunkId, doc, text, vectorText(embedText(text)), ctx.orgId] : [chunkId, doc, text, vectorText(embedText(text))];
+      const refused = await asUser(ctx.db, 'authenticated', actor, () => failure(ctx.db, sql, params));
+      assert.equal((await rows(ctx.db, 'SELECT 1 FROM document_chunks WHERE id = $1', [chunkId])).length, 0, 'no chunk may be written');
+      assert.ok(refused, 'the insert must be refused');
+      assert.equal(refused.code, '42501', refused.message);
+      assert.deepEqual(await hybridDocuments(ctx, text, token), [], 'the planted text is not retrievable');
+    });
+
+    it('service_role still writes documents and chunks directly', async () => {
+      const id = crypto.randomUUID();
+      const sql =
+        ctx.mode === 'multi-tenant'
+          ? "INSERT INTO documents (id, filename, content, user_id, organization_id) VALUES ($1, 'svc.md', 'neutral body', $2, $3)"
+          : "INSERT INTO documents (id, filename, content, user_id) VALUES ($1, 'svc.md', 'neutral body', $2)";
+      const params = ctx.mode === 'multi-tenant' ? [id, ctx.member, ctx.orgId] : [id, ctx.member];
+      assert.equal(await asUser(ctx.db, 'service_role', null, () => failure(ctx.db, sql, params)), null);
+      assert.equal((await rows(ctx.db, 'SELECT 1 FROM documents WHERE id = $1', [id])).length, 1);
+    });
+  });
+}
