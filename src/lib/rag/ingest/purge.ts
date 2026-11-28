@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import type { RpcClient } from '../backend/supabase-rpc';
 import { redisvlInvalidationTarget } from '../cache/emit';
 import type { SemanticCache } from '../cache/types';
+import { kickVectorSync } from '../sync/kick';
 import { backfillScope } from '../tenant/backfill-scope';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { removeVersionObjects, versionPrefix } from './artifacts';
@@ -608,6 +609,7 @@ async function purgeTenantLineage(
   const row = purged.rows[0];
   const auditId = row ? text(row, 'audit_id') : null;
   if (!row || auditId === null) return { ok: false, reason: 'unavailable' };
+  kickVectorSync();
   const removed = countsOf(row.counts);
 
   const target: LineageTarget = {
