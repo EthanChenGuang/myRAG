@@ -449,8 +449,10 @@ describe('UI review fixes (03.1.1-UI-REVIEW, quick 261127-cuf)', () => {
     const { root } = mountPanel(() => ({ ok: true, status: 200, body: listBody() }));
     await flush();
     const icon = root.querySelectorAll('[data-rag-bindings-list] .bi-exclamation-triangle-fill').find((el) => text(el.parentElement).includes('chunks missing'))!;
-    expect(classes(icon.parentElement)).toContain('items-start');
+    // The icon flows inline with the text (no flex row that could centre it or push it away from a wrapped line).
+    expect(classes(icon.parentElement)).not.toContain('flex');
     expect(classes(icon.parentElement)).not.toContain('items-center');
+    expect(icon.parentElement!.children[0]).toBe(icon);
   });
 
   it('WARNING 13: a 401 on create closes the form state, so a reload does not reopen a stale form', async () => {
@@ -517,7 +519,7 @@ describe('re-audit column widths (03.1.1-UI-REVIEW W-1..W-3, quick 261127-cuf)',
     const [, profile, status, , evidence] = [...row.children];
     expect(classes(profile)).toContain('md:min-w-48');
     expect(classes(profile.querySelector('[translate="no"]'))).toContain('md:whitespace-nowrap');
-    expect(classes(status)).toContain('md:min-w-60');
-    expect(classes(evidence)).toContain('md:min-w-36');
+    expect(classes(status).some((c) => c.startsWith('md:min-w-'))).toBe(false);
+    expect(classes(evidence)).toContain('md:min-w-28');
   });
 });

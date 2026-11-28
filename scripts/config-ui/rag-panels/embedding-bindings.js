@@ -582,7 +582,7 @@ class EmbeddingBindingsPanel {
     ]);
 
     const evidence = bindingsEvidenceView(row, this.data.global_active);
-    const status = bindingsEl('td', { cls: cell + ' md:min-w-60' }, [
+    const status = bindingsEl('td', { cls: cell }, [
       label('col.status'),
       bindingsEl(
         'div',
@@ -601,12 +601,13 @@ class EmbeddingBindingsPanel {
     else if (view.kind === 'missing') {
       completeChildren = [
         bindingsEl('div', { cls: 'text-sm', text: view.percent }),
-        bindingsEl('div', { cls: 'flex items-start md:justify-end gap-1 text-xs' }, [bindingsIcon('bi-exclamation-triangle-fill', 'text-warning mt-0.5'), bindingsEl('span', { cls: 'md:whitespace-nowrap', text: view.detail })]),
+        // Inline icon: it flows with the first line of the text, so it never drifts from it when the line wraps.
+        bindingsEl('div', { cls: 'text-xs' }, [bindingsIcon('bi-exclamation-triangle-fill', 'text-warning mr-1'), view.detail]),
       ];
     } else completeChildren = [bindingsEl('div', { cls: 'text-sm', text: view.percent }), bindingsEl('div', { cls: 'text-xs text-base-content/70', text: view.detail })];
     const complete = bindingsEl('td', { cls: cell + ' md:text-right tabular-nums' }, [label('col.complete'), ...completeChildren]);
 
-    const evidenceCell = bindingsEl('td', { cls: cell + ' md:min-w-36' }, [label('col.evidence'), ...this.evidenceNodes(evidence)]);
+    const evidenceCell = bindingsEl('td', { cls: cell + ' md:min-w-28' }, [label('col.evidence'), ...this.evidenceNodes(evidence)]);
     const actions = bindingsEl('td', { cls: cell + ' md:text-right' }, this.actionNodes(row));
     return bindingsEl('tr', { cls: 'flex flex-col gap-2 py-2 max-md:border-b max-md:border-base-300 md:table-row md:py-0' }, [scope, profile, status, complete, evidenceCell, actions]);
   }
