@@ -1,6 +1,6 @@
 export { runRetrieval, runStage, deriveStatus, StageError } from './pipeline';
 export type { StageSpec, StageOutcome } from './pipeline';
-export { parseRetrievalFilters } from './query/filters';
+export { parseRetrievalFilters, requestsCurrentVersions } from './query/filters';
 export { resolveScopesFilter, ScopeFilterError } from './query/scopes';
 export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';

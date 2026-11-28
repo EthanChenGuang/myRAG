@@ -2,7 +2,7 @@ import { z } from 'zod/v3';
 import type { Lang } from '../rewrite-gate';
 import llamaindexCondense from './llamaindex.condense.v1.json';
 import sharedGlossary from './shared.glossary.v1.json';
-import sharedSubqFilters from './shared.subq-filters.v1.json';
+import sharedSubqFilters from './shared.subq-filters.v2.json';
 import sharedSuffix from './shared.suffix.v1.json';
 import sharedTranslate from './shared.translate.v1.json';
 
@@ -170,7 +170,7 @@ function capped(values: readonly string[], pattern: RegExp, cap: number): string
 }
 
 /**
- * D-07, P-18: the versioned addendum (shared.subq-filters.v1) appended to the decomposer prompt in both frameworks while
+ * D-07, P-18: the versioned addendum (shared.subq-filters.v2) appended to the decomposer prompt in both frameworks while
  * RAG_QUERY_SUBQ_FILTERS is effective. It lists the allowed field names and the request tenant's own scope slugs, doc types
  * and enabled languages as JSON, at most `cap` per dimension; a value that is not a plain slug or code is left out, so admin
  * text never reaches the prompt as anything but a slug.

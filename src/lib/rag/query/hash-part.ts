@@ -12,7 +12,7 @@ import llamaindexHydeEn from './prompts/llamaindex.hyde.en.v1.json';
 import llamaindexHydeIt from './prompts/llamaindex.hyde.it.v1.json';
 import llamaindexHydeZh from './prompts/llamaindex.hyde.zh.v1.json';
 import llamaindexSubq from './prompts/llamaindex.subq.v1.json';
-import sharedSubqFilters from './prompts/shared.subq-filters.v1.json';
+import sharedSubqFilters from './prompts/shared.subq-filters.v2.json';
 import sharedSuffix from './prompts/shared.suffix.v1.json';
 import sharedTranslate from './prompts/shared.translate.v1.json';
 

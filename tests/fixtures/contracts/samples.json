@@ -16943,7 +16943,15 @@
           "text": "What does part alpha state?"
         },
         {
-          "filter": null,
+          "filter": {
+            "date_range": null,
+            "doc_types": null,
+            "languages": null,
+            "scopes": null,
+            "versions": {
+              "to": "2024-12-31"
+            }
+          },
           "text": "What does part beta state?"
         }
       ]

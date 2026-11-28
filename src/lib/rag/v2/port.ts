@@ -226,7 +226,9 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
     const pending = embedAll().then(async (vectors) => {
       signal.throwIfAborted();
       const variant = variants[index]!;
-      const request = (variantFilters: RetrievalFilters) =>
+      // P-35: the variant's own version scope on its first search; the retry reads the shared scope, never wider.
+      const ownScope = variant.versionScope ?? ctx.versionScope;
+      const request = (variantFilters: RetrievalFilters, scopeOfSearch: VersionScope | undefined = ownScope) =>
         variantSearchRequest({
           scope,
           variant,
@@ -236,7 +238,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           lexicalEnabled,
           signal,
           chunkingProfileOverride: ctx.chunkingProfileOverride ?? null,
-          ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
+          ...(scopeOfSearch !== undefined ? { versionScope: scopeOfSearch } : {}),
           ...(ctx.identifiersNorm !== undefined ? { identifiersNorm: ctx.identifiersNorm } : {}),
           ...(ctx.lexicalOptions ? { lexicalOptions: ctx.lexicalOptions } : {}),
           ...(ctx.access ? { access: ctx.access } : {}),
@@ -252,7 +254,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
             retryBudget -= 1;
             entry.retried = true;
             signal.throwIfAborted();
-            legs = await backend.search(request(filters));
+            legs = await backend.search(request(filters, ctx.versionScope));
           } else {
             entry.retrySkippedCap = true;
           }

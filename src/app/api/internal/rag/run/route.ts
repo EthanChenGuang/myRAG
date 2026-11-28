@@ -42,6 +42,7 @@ import {
   isCacheHitResult,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
   readGenerationConfig,
@@ -693,12 +694,15 @@ export async function POST(req: NextRequest) {
   const entryProfile = voiceEntry ? 'voice' : 'eval';
 
   let retrievalFilters: RetrievalFilterInput | undefined;
+  let callerVersionsCurrent = false;
   if (options?.retrieval_filters && !voiceEntry) {
-    const filtersParsed = parseRetrievalFilters(toFilterBody(options.retrieval_filters));
+    const filterBody = toFilterBody(options.retrieval_filters);
+    const filtersParsed = parseRetrievalFilters(filterBody);
     if (!filtersParsed.ok) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
     }
     retrievalFilters = filtersParsed.filters;
+    callerVersionsCurrent = requestsCurrentVersions(filterBody);
     if (retrievalFilters?.scopes) {
       try {
         retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
@@ -794,6 +798,7 @@ export async function POST(req: NextRequest) {
       ...(voiceEntry ? { evalEntry: true as const } : {}),
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
+      ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
       ...(retrievalLabeler ? { citationLabeler: retrievalLabeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),

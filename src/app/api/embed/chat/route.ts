@@ -43,6 +43,7 @@ import {
   linkUsageInstructions,
   mintEmbedFeedbackToken,
   parseRetrievalFilters,
+  requestsCurrentVersions,
   resolveScopesFilter,
   ScopeFilterError,
   readFeedbackLoopConfig,
@@ -375,6 +376,7 @@ export async function POST(request: NextRequest) {
 
     // Only the v2 pipeline reads this field; under legacy the body is handled exactly as before
     let retrievalFilters: RetrievalFilterInput | undefined;
+    let callerVersionsCurrent = false;
     if (isV2Pipeline()) {
       const filtersParsed = parseRetrievalFilters(body?.retrievalFilters);
       if (!filtersParsed.ok) {
@@ -384,6 +386,7 @@ export async function POST(request: NextRequest) {
         );
       }
       retrievalFilters = filtersParsed.filters;
+      callerVersionsCurrent = requestsCurrentVersions(body?.retrievalFilters);
     }
 
     const queryLayerOn = isQueryLayerEnabled();
@@ -560,6 +563,7 @@ export async function POST(request: NextRequest) {
         signal: request.signal,
         trace: collector,
         ...(retrievalFilters ? { retrievalFilters } : {}),
+        ...(callerVersionsCurrent ? { callerVersionsCurrent: true as const } : {}),
         ...(calcLabeler ? { citationLabeler: calcLabeler } : {}),
         ...queryLayerInputs,
         ...(cacheContext ? { cacheContext } : {}),
