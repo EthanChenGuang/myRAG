@@ -193,7 +193,7 @@ describe('Rollouts panel', () => {
     const kind = ctx.doc.getElementById('rollouts-form-kind') as FakeElement;
     const embedding = kind.querySelectorAll('option').find((o) => o.getAttribute('value') === 'embedding_profile') as FakeElement;
     expect(embedding.hasAttribute('disabled')).toBe(true);
-    expect(text(ctx.root.querySelector('#rollouts-form'))).toContain('A rollout of this kind is already in progress.');
+    expect((kind as unknown as { value: string }).value).toBe('chunking_profile');
 
     (kind as unknown as { value: string }).value = 'chunking_profile';
     kind.dispatch('change');

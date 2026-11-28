@@ -714,6 +714,8 @@ class RolloutsPanel {
     });
     button.addEventListener('click', () => {
       this.formOpen = !this.formOpen;
+      const busy = this.activeKinds();
+      if (this.formOpen && busy.includes(this.form.kind)) this.form.kind = ROLLOUTS_KINDS.find((kind) => !busy.includes(kind)) || this.form.kind;
       this.formErrors = {};
       this.formRefusal = null;
       this.render();
@@ -755,7 +757,7 @@ class RolloutsPanel {
       const again = this.doc.getElementById('rollouts-form-kind');
       if (again) again.focus();
     });
-    const kindHelp = busy.length > 0 ? this.t('form.kindBusy') : null;
+    const kindHelp = busy.includes(this.form.kind) ? this.t('form.kindBusy') : null;
 
     const candidate = this.el('input', {
       className: 'input input-bordered w-full md:input-sm font-mono',
@@ -906,8 +908,9 @@ class RolloutsPanel {
     return { keepOpen: false };
   }
 
-  badge(tone, icon, word) {
-    return this.el('span', { className: 'badge badge-sm badge-outline badge-' + tone + ' gap-1 shrink-0' }, [ROLLOUTS_UI.ragUiIcon(this.doc, icon), this.el('span', { text: word })]);
+  badge(tone, icon, word, wrap) {
+    const shape = wrap ? ' h-auto min-h-5 whitespace-normal text-left' : ' shrink-0 whitespace-nowrap';
+    return this.el('span', { className: 'badge badge-sm badge-outline badge-' + tone + ' gap-1' + shape }, [ROLLOUTS_UI.ragUiIcon(this.doc, icon), this.el('span', { text: word })]);
   }
 
   stateBadge(state) {
@@ -918,11 +921,11 @@ class RolloutsPanel {
     return this.el('span', { className: 'badge badge-sm badge-outline badge-ghost font-mono', text: String(state), attrs: { translate: 'no' } });
   }
 
-  verdictBadge(verdict) {
-    if (verdict === 'holds') return this.badge('success', 'check-circle', this.t('result.holds'));
-    if (verdict === 'worse') return this.badge('error', 'arrow-down-circle', this.t('result.worse'));
-    if (verdict === 'insufficient') return this.badge('warning', 'hourglass-split', this.t('result.insufficient'));
-    if (verdict === 'unmeasured') return this.badge('ghost', 'dash-circle', this.t('result.unmeasured'));
+  verdictBadge(verdict, wrap) {
+    if (verdict === 'holds') return this.badge('success', 'check-circle', this.t('result.holds'), wrap);
+    if (verdict === 'worse') return this.badge('error', 'arrow-down-circle', this.t('result.worse'), wrap);
+    if (verdict === 'insufficient') return this.badge('warning', 'hourglass-split', this.t('result.insufficient'), wrap);
+    if (verdict === 'unmeasured') return this.badge('ghost', 'dash-circle', this.t('result.unmeasured'), wrap);
     return this.el('span', { className: 'badge badge-sm badge-outline badge-ghost font-mono', text: String(verdict), attrs: { translate: 'no' } });
   }
 
@@ -934,13 +937,14 @@ class RolloutsPanel {
     return Array.isArray(entry.candidate) ? entry.candidate.filter((id) => typeof id === 'string').join(', ') : '';
   }
 
-  valueCell(measure, value, className) {
+  valueCell(measure, value, className, extra) {
     const n = value && Number.isInteger(value.n) ? value.n : 0;
     const formatted = value ? rolloutsFormatValue(measure, value.value, this.locale) : null;
-    if (formatted === null) return this.el('td', { className: 'text-right tabular-nums ' + (className || ''), text: this.t('cell.none') });
+    if (formatted === null) return this.el('td', { className: 'text-right tabular-nums ' + (className || '') }, [this.el('span', { className: 'block', text: this.t('cell.none') }), extra || null]);
     return this.el('td', { className: 'text-right tabular-nums ' + (className || '') }, [
       this.el('span', { className: 'block', text: formatted }),
       this.el('span', { className: 'block text-xs text-base-content/70', text: this.t('cell.n', { n: ROLLOUTS_UI.ragUiFormatNumber(n, this.locale) }) }),
+      extra || null,
     ]);
   }
 
@@ -964,7 +968,7 @@ class RolloutsPanel {
         th(this.t('col.candidate'), 'text-right'),
         th(this.t('col.before'), 'text-right hidden md:table-cell'),
         th(this.t('col.others'), 'text-right hidden lg:table-cell'),
-        th(this.t('col.result'), ''),
+        th(this.t('col.result'), 'hidden md:table-cell'),
       ]),
     ]);
     const body = this.el('tbody');
@@ -982,10 +986,10 @@ class RolloutsPanel {
             measureLabel
               ? this.el('td', { className: 'break-words', text: measureLabel })
               : this.el('td', {}, [this.el('span', { className: 'font-mono text-xs', text: row.measure, attrs: { translate: 'no' } })]),
-            this.valueCell(row.measure, row.candidate),
+            this.valueCell(row.measure, row.candidate, '', this.el('span', { className: 'flex justify-end mt-1 md:hidden' }, [this.verdictBadge(row.verdict, true)])),
             this.valueCell(row.measure, row.before, 'hidden md:table-cell'),
             this.valueCell(row.measure, row.others, 'hidden lg:table-cell'),
-            this.el('td', {}, [this.verdictBadge(row.verdict)]),
+            this.el('td', { className: 'hidden md:table-cell' }, [this.verdictBadge(row.verdict)]),
           ]),
         );
       }
