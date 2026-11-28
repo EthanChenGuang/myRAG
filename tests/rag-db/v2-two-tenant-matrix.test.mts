@@ -848,7 +848,8 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
             await assertOwnRows(label, result, where);
             assertNoForeignText(label, { result, stages: result.stages, rerankRequests: rerank }, where);
             const rerankStage = stage(result, 'rerank');
-            if (variant.hosted) {
+            // G-06: a profile outside AUTO_HOSTED_PROFILES (voice) takes the no-key fallback under auto even with a key.
+            if (variant.hosted && selectModule.AUTO_HOSTED_PROFILES.includes(profile)) {
               assert.ok(rerank.length >= 1, `${where}: auto with a Cohere key reranks on the edge`);
               for (const body of rerank) assertNoForeignText(label, { query: body.query, documents: body.documents }, `${where} rerank input`);
             } else {
