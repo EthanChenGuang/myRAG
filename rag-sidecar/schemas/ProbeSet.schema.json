@@ -11,6 +11,26 @@
       "title": "Query Prompt",
       "type": "string"
     },
+    "roles": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "const": "query",
+          "type": "string"
+        },
+        {
+          "const": "document",
+          "type": "string"
+        },
+        {
+          "const": "query",
+          "type": "string"
+        }
+      ],
+      "title": "Roles",
+      "type": "array"
+    },
     "texts": {
       "items": {
         "type": "string"
@@ -35,6 +55,7 @@
   },
   "required": [
     "texts",
+    "roles",
     "query_prompt",
     "document_prompt",
     "vectors"

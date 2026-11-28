@@ -8,7 +8,9 @@ import {
   LexstatsRpcError,
   checkTenantStats,
   compactTenantStats,
+  disableClusterStats,
   disableTenantStats,
+  enableClusterStats,
   enableTenantStats,
   listStatsTenants,
   rebuildTenantStats,
@@ -24,7 +26,7 @@ export type LexstatsCommand = (typeof LEXSTATS_COMMANDS)[number];
 export type LexstatsTarget = { kind: 'tenant'; tenantKey: string } | { kind: 'all' };
 
 export type ParsedLexstatsArgs =
-  | { ok: true; command: LexstatsCommand; target: LexstatsTarget; repair: boolean; maxRows: number; json: boolean }
+  | { ok: true; command: LexstatsCommand; target: LexstatsTarget; repair: boolean; maxRows: number; json: boolean; cluster: boolean }
   | { ok: false; error: string };
 
 export interface CliIo {
@@ -36,14 +38,20 @@ export interface LexstatsDeps {
   db: LexstatsDb;
   /** The effective RAG_LEXICAL_SCORING mode; under `bm25` a tenant that is not ready fails `check`. */
   scoringMode: 'ts_rank_cd' | 'bm25';
+  /** The effective RAG_LEXICAL_DF_MODE (D-45); under `cluster`, `enable` without --cluster prints a hint and enables nothing more. */
+  dfMode?: 'raw' | 'cluster';
 }
+
+/** Sub-commands that take --cluster (D-49): the cluster-aware corpus chunks_cluster of 0905. */
+const CLUSTER_COMMANDS: readonly LexstatsCommand[] = ['enable', 'rebuild', 'check', 'disable'];
 
 const MAX_ROWS_LIMIT = 50000;
 const COMPACT_LOOP_LIMIT = 100000;
 const PREFIX = '[Lexical Stats]';
 
 export const USAGE =
-  'usage: npm run rag:lexstats -- <enable|rebuild|compact|check|status|disable> [--tenant <key> | --all] [--repair] [--max-rows <n>] [--json]';
+  'usage: npm run rag:lexstats -- <enable|rebuild|compact|check|status|disable> [--tenant <key> | --all] [--cluster] [--repair] [--max-rows <n>] [--json]\n' +
+  '  --cluster (enable, rebuild, check, disable): the cluster-aware statistics of RAG_LEXICAL_DF_MODE=cluster; disable --cluster removes only those';
 
 /** `<command> (--tenant <key> | --all) [--repair] [--max-rows n] [--json]`; --repair only with check, --max-rows only with compact. */
 export function parseLexstatsArgs(argv: string[]): ParsedLexstatsArgs {
@@ -56,7 +64,7 @@ export function parseLexstatsArgs(argv: string[]): ParsedLexstatsArgs {
   let rawMaxRows: string | null = null;
   for (let i = 0; i < rest.length; i += 1) {
     const arg = rest[i] as string;
-    if (arg !== '--tenant' && arg !== '--max-rows' && arg !== '--all' && arg !== '--repair' && arg !== '--json') {
+    if (arg !== '--tenant' && arg !== '--max-rows' && arg !== '--all' && arg !== '--repair' && arg !== '--json' && arg !== '--cluster') {
       return { ok: false, error: `unknown option: ${arg.slice(0, 32)}` };
     }
     if (seen.has(arg)) return { ok: false, error: `${arg} was given twice` };
@@ -74,6 +82,9 @@ export function parseLexstatsArgs(argv: string[]): ParsedLexstatsArgs {
   if (tenantKey === null && !all) return { ok: false, error: 'give --tenant <key> or --all' };
   if (tenantKey !== null && !isTenantKey(tenantKey)) return { ok: false, error: '--tenant needs a tenant key: s:default, u:<uuid> or o:<uuid>' };
   if (command === 'disable' && all) return { ok: false, error: 'disable --all is refused: disable one tenant at a time' };
+
+  const cluster = seen.has('--cluster');
+  if (cluster && !CLUSTER_COMMANDS.includes(command as LexstatsCommand)) return { ok: false, error: '--cluster goes with enable, rebuild, check or disable' };
 
   const repair = seen.has('--repair');
   if (repair && command !== 'check') return { ok: false, error: '--repair only goes with check' };
@@ -93,6 +104,7 @@ export function parseLexstatsArgs(argv: string[]): ParsedLexstatsArgs {
     repair,
     maxRows,
     json: seen.has('--json'),
+    cluster,
   };
 }
 
@@ -123,6 +135,19 @@ function report(io: CliIo, json: boolean, command: LexstatsCommand, tenantKey: s
     fields.chunk_count_diff = r.check.chunkCountDiffWithPending;
     fields.total_len_diff = r.check.totalLenDiffWithPending;
     fields.clean = r.check.clean;
+  }
+  // Cluster fields whenever the tenant keeps cluster statistics (counts and states only, D-34).
+  const clusterStatus = r.status.cluster ?? null;
+  if (clusterStatus || r.check?.cluster) {
+    fields.cluster_status = r.check?.cluster?.status ?? clusterStatus?.status;
+    fields.cluster_dirty = r.check?.cluster?.dirty ?? clusterStatus?.dirty;
+    if (clusterStatus) fields.cluster_oldest_dirty_age_s = clusterStatus.oldestDirtyAgeS;
+  }
+  if (r.check?.cluster) {
+    fields.cluster_df_diff = r.check.cluster.dfDiff;
+    fields.cluster_chunk_count_diff = r.check.cluster.chunkCountDiff;
+    fields.cluster_total_len_diff = r.check.cluster.totalLenDiff;
+    fields.cluster_ledger_diff = r.check.cluster.ledgerDiff;
   }
   Object.assign(fields, r.extra ?? {});
   if (json) {
@@ -155,9 +180,14 @@ async function runTenant(parsed: Extract<ParsedLexstatsArgs, { ok: true }>, tena
   const showKey = parsed.target.kind === 'tenant';
   const emit = (r: TenantReport) => report(io, parsed.json, parsed.command, tenantKey, showKey, r);
 
+  if (parsed.cluster) return runCluster(parsed, tenantKey, io, deps, emit);
+
   switch (parsed.command) {
     case 'enable': {
       const before = await enableTenantStats(db, tenantKey);
+      if (deps.dfMode === 'cluster') {
+        io.err(`${PREFIX} ${tenantHash(tenantKey)} RAG_LEXICAL_DF_MODE=cluster: add --cluster to build the cluster-aware statistics; raw BM25 serves this tenant until then`);
+      }
       let rebuilds = 0;
       if (before !== 'ready') {
         await rebuildTenantStats(db, tenantKey);
@@ -214,6 +244,72 @@ async function runTenant(parsed: Extract<ParsedLexstatsArgs, { ok: true }>, tena
   }
 }
 
+function clusterClean(check: TenantStatsCheck): boolean {
+  return check.clean === true && check.cluster?.status === 'ready';
+}
+
+/**
+ * --cluster (D-49). enable: raw enable when missing, rag_lexstats_cluster_enable, rebuild, check, one more rebuild when the check is not
+ * clean (D-18). rebuild and check need a cluster-enabled tenant; check fails on any cluster difference (--repair rebuilds once).
+ * disable removes only the cluster statistics.
+ */
+async function runCluster(
+  parsed: Extract<ParsedLexstatsArgs, { ok: true }>,
+  tenantKey: string,
+  io: CliIo,
+  deps: LexstatsDeps,
+  emit: (r: TenantReport) => void,
+): Promise<boolean> {
+  const { db } = deps;
+  const notEnabled = async (): Promise<boolean> => {
+    emit({ status: await statusTenantStats(db, tenantKey) });
+    io.err(`${PREFIX} ${tenantHash(tenantKey)} cluster statistics not enabled: run enable --cluster first`);
+    return false;
+  };
+  switch (parsed.command) {
+    case 'enable': {
+      await enableTenantStats(db, tenantKey);
+      await enableClusterStats(db, tenantKey);
+      await rebuildTenantStats(db, tenantKey);
+      let rebuilds = 1;
+      let check = await checkTenantStats(db, tenantKey);
+      if (!clusterClean(check)) {
+        await rebuildTenantStats(db, tenantKey);
+        rebuilds += 1;
+        check = await checkTenantStats(db, tenantKey);
+      }
+      emit({ status: await statusTenantStats(db, tenantKey), check, extra: { rebuilds } });
+      return clusterClean(check);
+    }
+    case 'rebuild': {
+      if (!(await statusTenantStats(db, tenantKey)).cluster) return notEnabled();
+      await rebuildTenantStats(db, tenantKey);
+      const check = await checkTenantStats(db, tenantKey);
+      emit({ status: await statusTenantStats(db, tenantKey), check });
+      return clusterClean(check);
+    }
+    case 'check': {
+      let check = await checkTenantStats(db, tenantKey);
+      if (!check.cluster) return notEnabled();
+      let repaired = false;
+      if (parsed.repair && !clusterClean(check)) {
+        await rebuildTenantStats(db, tenantKey);
+        repaired = true;
+        check = await checkTenantStats(db, tenantKey);
+      }
+      emit({ status: await statusTenantStats(db, tenantKey), check, ...(parsed.repair ? { extra: { repaired } } : {}) });
+      return clusterClean(check);
+    }
+    case 'disable': {
+      const removed = await disableClusterStats(db, tenantKey);
+      emit({ status: await statusTenantStats(db, tenantKey), extra: { cluster_removed: removed } });
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
 /**
  * The command body, for tests: parses the arguments and runs the sub-command per tenant. Exit code 0 when every tenant passed,
  * 1 on drift, a not-ready tenant under bm25 or a failed call (the loop goes on with the next tenant), 2 on bad arguments.
@@ -264,6 +360,10 @@ const consoleIo: CliIo = { out: (line) => console.log(line), err: (line) => cons
 
 /** CLI entry. Needs NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY; works whatever RAG_LEXICAL_SCORING says. */
 export async function main(argv: string[] = process.argv.slice(2), io: CliIo = consoleIo): Promise<number> {
+  if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {
+    io.out(USAGE);
+    return 0;
+  }
   const parsed = parseLexstatsArgs(argv);
   if (!parsed.ok) {
     io.err(`${PREFIX} ${parsed.error}`);
@@ -280,14 +380,17 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
     auth: { persistSession: false, autoRefreshToken: false },
   }) as unknown as LexstatsDb;
   let scoringMode: LexstatsDeps['scoringMode'] = 'ts_rank_cd';
+  let dfMode: NonNullable<LexstatsDeps['dfMode']> = 'raw';
   try {
     const { loadRagConfig } = await import('../config');
     const { getRagDeps } = await import('../deps');
-    scoringMode = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring.mode;
+    const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
+    scoringMode = scoring.mode;
+    dfMode = scoring.dfMode === 'cluster' ? 'cluster' : 'raw';
   } catch {
     io.err(`${PREFIX} RAG configuration not loadable; check treats the scoring mode as ts_rank_cd`);
   }
-  return runLexstatsCli(argv, io, { db, scoringMode });
+  return runLexstatsCli(argv, io, { db, scoringMode, dfMode });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

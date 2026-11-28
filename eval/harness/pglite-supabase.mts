@@ -47,6 +47,8 @@ export interface FixtureDatabase {
   tableSplitTenants?: import('./table-split.mts').TableSplitTenant[];
   /** With q62 items: the isolated tenant of the Phase 6.2 documents (q62-fixtures.mts); the caller closes its database. */
   q62Tenant?: import('./q62-fixtures.mts').Q62Tenant;
+  /** With dominant_language items: the isolated tenant dominated by one language (plan 06.2-41); the caller closes its database. */
+  dominantLanguageTenant?: import('./q62-fixtures.mts').IsolatedFixtureTenant;
   /**
    * Ingest mode only: the golden id of every corpus document (the prechunked derivation from its path) to the id of the document the
    * build wrote from the same file, so item filters name the documents ingest mode actually wrote.
@@ -500,45 +502,86 @@ export async function seedFixtureFeatures(
     report.inputs['table_rows:on'] = sha256Hex('on');
   }
 
-  if (dupClusters) {
-    const { runDupBackfill } = await import('@/lib/rag/dedupe/backfill');
-    const clustered = await runDupBackfill({ db: options.admin, tenantKey, evalRun: true });
-    report.dupClustered = clustered.clustered;
-    const paramsPath = path.join(REPO_ROOT, 'eval/config/dup-cluster-params.json');
-    report.inputs['dup_clusters:eval_run'] = sha256Hex(fs.existsSync(paramsPath) ? fs.readFileSync(paramsPath, 'utf8') : '');
-  }
+  if (dupClusters) report.dupClustered = await runFixtureDupClusters(options.admin, tenantKey, report.inputs);
 
   Object.assign(fixture.sqlSha256, report.inputs);
   return report;
+}
+
+/** rag:dup-clusters with evalRun for one tenant (a fixture threshold entry applies here only); records the dup_clusters:eval_run input. */
+async function runFixtureDupClusters(admin: RpcClient, tenantKey: string, inputs: Record<string, string>): Promise<number> {
+  const { runDupBackfill } = await import('@/lib/rag/dedupe/backfill');
+  const clustered = await runDupBackfill({ db: admin, tenantKey, evalRun: true });
+  const paramsPath = path.join(REPO_ROOT, 'eval/config/dup-cluster-params.json');
+  inputs['dup_clusters:eval_run'] = sha256Hex(fs.existsSync(paramsPath) ? fs.readFileSync(paramsPath, 'utf8') : '');
+  return clustered.clustered;
+}
+
+/**
+ * Plan 04.4-18: the ingest fixture mode builds no duplicate clusters at ingestion (its build env leaves RAG_DUP_CLUSTERS off). For a run
+ * whose effective config has dupClusters on, and only while no chunk of the tenant has a cluster yet, run the same rag:dup-clusters step
+ * as the prechunked mode and record `dup_clusters:eval_run` plus the clustered count. Every other run reads one config value and writes
+ * nothing.
+ */
+export async function seedIngestDupClusters(
+  fixture: { db: PGlite; fixtureUserId: string; sqlSha256: Record<string, string> },
+  options: { deploymentMode: DeploymentMode; admin: RpcClient },
+): Promise<number | null> {
+  const { loadRagConfig } = await import('@/lib/rag/config');
+  const { getRagDeps } = await import('@/lib/rag/deps');
+  if (!loadRagConfig(getRagDeps().ragEnv()).v2.dupClusters) return null;
+  const { mintScope, scopeKey } = await import('@/lib/rag/tenant/scope');
+  const scope = options.deploymentMode === 'multi-tenant' ? mintScope('personal', fixture.fixtureUserId, null) : mintScope('single', null, null);
+  const tenantKey = scopeKey(scope).toLowerCase();
+  const existing = await fixture.db.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM public.document_chunks WHERE tenant_key = $1 AND dup_cluster_id IS NOT NULL',
+    [tenantKey],
+  );
+  if ((existing.rows[0]?.n ?? 0) > 0) return null;
+  const inputs: Record<string, string> = {};
+  const clustered = await runFixtureDupClusters(options.admin, tenantKey, inputs);
+  inputs[`dup_clusters:clustered:${clustered}`] = sha256Hex(String(clustered));
+  Object.assign(fixture.sqlSha256, inputs);
+  return clustered;
 }
 
 /** What lexical statistics seeding did for a bm25 run (D-36); null when the run's effective scoring is ts_rank_cd. */
 export interface RunLexicalStatsReport {
   k1: number;
   b: number;
+  /** The run's effective DF mode (D-44, D-45): `cluster` also enabled and rebuilt corpus chunks_cluster. */
+  dfMode: 'raw' | 'cluster';
   tenants: import('./lexical-stats.mts').TenantLexicalStats[];
 }
 
 /**
- * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures), enable and rebuild the lexical statistics of every
- * fixture tenant, the isolated table_split tenants included, when the run's effective scoring (the app config under the run's
- * environment) is bm25. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
+ * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures and the ingest clustering step), enable and rebuild the
+ * lexical statistics of every fixture tenant, the isolated table_split, q62 and dominant-language tenants included, when the run's effective scoring (the app
+ * config under the run's environment) is bm25; with the effective DF mode `cluster` (plan 04.4-18) the cluster corpus too. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
  * tables stay empty.
  */
 export async function seedRunLexicalStats(fixture: {
   db: PGlite;
   sqlSha256: Record<string, string>;
   tableSplitTenants?: ReadonlyArray<{ db: PGlite; tenantKey: string }>;
+  q62Tenant?: { db: PGlite; tenantKey: string };
+  dominantLanguageTenant?: { db: PGlite; tenantKey: string };
 }): Promise<RunLexicalStatsReport | null> {
   const { loadRagConfig } = await import('@/lib/rag/config');
   const { getRagDeps } = await import('@/lib/rag/deps');
   const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
   if (scoring.mode !== 'bm25') return null;
   const { fixtureTenantKeys, seedFixtureLexicalStats } = await import('./lexical-stats.mts');
-  const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db));
-  for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey])));
+  const seedOptions = scoring.dfMode === 'cluster' ? { cluster: true } : {};
+  const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db), seedOptions);
+  for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
+  // The isolated q62 (06.2-22) and dominant-language (06.2-41) tenants are separate databases; their items search them under bm25 too.
+  for (const tenant of [fixture.q62Tenant, fixture.dominantLanguageTenant]) {
+    if (tenant) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
+  }
   fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
-  return { k1: scoring.k1, b: scoring.b, tenants };
+  if (scoring.dfMode === 'cluster') fixture.sqlSha256['lexical_stats:cluster'] = sha256Hex('cluster');
+  return { k1: scoring.k1, b: scoring.b, dfMode: scoring.dfMode, tenants };
 }
 
 export async function createFixtureDatabase(options: {
@@ -568,6 +611,8 @@ export async function createFixtureDatabase(options: {
   terminologySeed?: readonly TerminologySeedRow[];
   /** Also load the Phase 6.2 documents into their isolated tenant (q62-fixtures.mts), in either fixture mode. */
   q62?: boolean;
+  /** Also load the dominant-language tenant (q62-fixtures.mts, plan 06.2-41), in either fixture mode. */
+  dominantLanguage?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -594,12 +639,14 @@ export async function createFixtureDatabase(options: {
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
       ...(options.templated ? { templated: true } : {}),
       ...(options.q62 ? { q62: true } : {}),
+      ...(options.dominantLanguage ? { dominantLanguage: true } : {}),
     });
     if (options.terminologySeed?.length) {
       try {
         await seedTerminology(built.db, options.terminologySeed);
       } catch (error) {
         await built.q62Tenant?.db.close().catch(() => undefined);
+        await built.dominantLanguageTenant?.db.close().catch(() => undefined);
         await built.db.close().catch(() => undefined);
         throw error;
       }
@@ -630,10 +677,12 @@ export async function createFixtureDatabase(options: {
     throw error;
   }
 
-  if (!options.q62) return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  if (!options.q62 && !options.dominantLanguage) return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: corpus.corpusSha256, sqlSha256 };
+  let q62Tenant: import('./q62-fixtures.mts').Q62Tenant | undefined;
+  let dominantLanguageTenant: import('./q62-fixtures.mts').IsolatedFixtureTenant | undefined;
   try {
-    const { loadQ62PrechunkedTenant, q62CorpusParts } = await import('./q62-fixtures.mts');
-    const q62Tenant = await loadQ62PrechunkedTenant({
+    const fixtures = await import('./q62-fixtures.mts');
+    const deps = {
       deploymentMode,
       createDatabase: () => createEmptyFixtureDatabase(options),
       prechunkedWriter,
@@ -641,11 +690,27 @@ export async function createFixtureDatabase(options: {
       supersedeFixtureLineages,
       runFixtureRelex,
       seedTerminology,
-    });
+    };
     const hash = crypto.createHash('sha256').update(corpus.corpusSha256);
-    for (const part of q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
-    return { db, fixtureUserId: FIXTURE_USER_ID, corpusSha256: hash.digest('hex'), sqlSha256, q62Tenant };
+    if (options.q62) {
+      q62Tenant = await fixtures.loadQ62PrechunkedTenant(deps);
+      for (const part of fixtures.q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
+    }
+    if (options.dominantLanguage) {
+      dominantLanguageTenant = await fixtures.loadIsolatedPrechunkedTenant(fixtures.DOMINANT_LANGUAGE_TENANT, deps);
+      for (const part of fixtures.dominantLanguageCorpusParts()) hash.update(Buffer.from([0])).update(part);
+    }
+    return {
+      db,
+      fixtureUserId: FIXTURE_USER_ID,
+      corpusSha256: hash.digest('hex'),
+      sqlSha256,
+      ...(q62Tenant ? { q62Tenant } : {}),
+      ...(dominantLanguageTenant ? { dominantLanguageTenant } : {}),
+    };
   } catch (error) {
+    await q62Tenant?.db.close().catch(() => undefined);
+    await dominantLanguageTenant?.db.close().catch(() => undefined);
     await db.close().catch(() => undefined);
     throw error;
   }

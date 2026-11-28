@@ -42,6 +42,8 @@ async function loadAdapter() {
     ingest,
     submitIngest,
     buildSourceKey: identity.buildSourceKey,
+    isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+    recomputeDirtyDupClusters: async () => ({ ok: true }),
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
       ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: state.mode }),
     currentIngestConfig: () => {

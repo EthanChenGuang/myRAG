@@ -1,5 +1,5 @@
 {
- "recorded_at_commit": "6fc5abc2fff3f4f6269dd79b55b3c29941a534d6",
+ "recorded_at_commit": "0e6fc3ea9d3c54bf0446b4b0a6cd8d9f5c0d3e99",
  "note": "Recorded with every Phase 5.3 switch unset (prechunked, single-tenant, fake citation generator). Ids, scores and answer hashes only; see the 05.3-48 SUMMARY for why this commit and not the pre-phase commit.",
  "switches": {
   "RAG_MONITOR": "unset",
@@ -5729,6 +5729,48 @@
    "candidates": []
   },
   {
+   "item_id": "xl-dom-en-zh-001",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "xl-dom-en-zh-002",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "xl-dom-en-zh-003",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "xl-dom-it-zh-001",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "xl-dom-it-zh-002",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "xl-dom-it-zh-003",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "xl-en-it-01",
    "refused": false,
    "refusal_reason": null,
@@ -6570,6 +6612,37 @@
      "chunk_id": "7a77f467-3f07-4222-9fcb-5990cdded18c",
      "final_score": 0.29240849561086957,
      "similarity": 0.29240849561086957
+    }
+   ]
+  },
+  {
+   "item_id": "zh-dom-control-001",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "ac33545f4ad01af77eb373156091d672fe08c9d5089b13955c444276869d4efd",
+   "candidates": [
+    {
+     "chunk_id": "759c4f4a-842d-4199-812a-5a729929d2dc",
+     "final_score": 0.7607002795786166,
+     "similarity": 0.7607002795786166
+    },
+    {
+     "chunk_id": "61ad656b-99b2-4b58-afdd-7d0773c06e90",
+     "final_score": 0.2961117768454252,
+     "similarity": 0.2961117768454252
+    }
+   ]
+  },
+  {
+   "item_id": "zh-dom-control-002",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "3740f167f82fa263edb640d3e4c3568a0eebe2bf008c605c35288bfc99127b75",
+   "candidates": [
+    {
+     "chunk_id": "9de27ca2-f007-41c3-a448-c10a5642df38",
+     "final_score": 0.6653225817266977,
+     "similarity": 0.6653225817266977
     }
    ]
   },

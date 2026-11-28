@@ -1478,6 +1478,66 @@
         "text": "How long is a completed 蓝序单 archived?",
         "source_language": null
       }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-en-zh-001",
+      "query": "How often is the anemometer at Vessmar station calibrated?",
+      "output": {
+        "target_language": "zh",
+        "text": "维斯玛站的风速仪多久校准一次？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-en-zh-002",
+      "query": "How often is the rain gauge funnel at Vessmar station cleaned?",
+      "output": {
+        "target_language": "zh",
+        "text": "维斯玛站的雨量计漏斗多久清洁一次？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-en-zh-003",
+      "query": "Below what output voltage is a solar panel at Vessmar station replaced?",
+      "output": {
+        "target_language": "zh",
+        "text": "太阳能板的输出电压低于多少伏时更换整块太阳能板？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-it-zh-001",
+      "query": "Ogni quanti giorni si sostituisce il filtro del sensore di umidità della stazione Vessmar?",
+      "output": {
+        "target_language": "zh",
+        "text": "维斯玛站的湿度传感器滤罩多久更换一次？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-it-zh-002",
+      "query": "A che ora la stazione Vessmar carica i dati ogni giorno?",
+      "output": {
+        "target_language": "zh",
+        "text": "维斯玛站每天几点上传数据？",
+        "source_language": null
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "xl-dom-it-zh-003",
+      "query": "Qual è la capacità della batteria di riserva della stazione Vessmar?",
+      "output": {
+        "target_language": "zh",
+        "text": "维斯玛站的备用电池容量是多少？",
+        "source_language": null
+      }
     }
   ],
   "scenarios": {

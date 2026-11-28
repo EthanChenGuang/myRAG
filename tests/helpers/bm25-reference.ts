@@ -55,3 +55,40 @@ export function bm25Reference(input: Bm25ReferenceInput): number[] {
     return score;
   });
 }
+
+export interface Bm25ClusterDoc {
+  id: string;
+  tokens: readonly string[];
+  cluster?: string | null;
+}
+
+export interface Bm25ClusterReferenceInput {
+  docs: readonly Bm25ClusterDoc[];
+  query: readonly string[];
+  k1: number;
+  b: number;
+}
+
+/**
+ * D-46 statistics over units: a document without a cluster is a unit; per cluster the document with the smallest id is the unit.
+ * N, avgdl and df are computed over the units; every document is scored with its own term frequencies and length.
+ */
+export function bm25ClusterStats(docs: readonly Bm25ClusterDoc[]): Bm25Stats {
+  const units = new Map<string, Bm25ClusterDoc>();
+  for (const doc of docs) {
+    const key = doc.cluster ? `c:${doc.cluster}` : `d:${doc.id}`;
+    const held = units.get(key);
+    if (!held || doc.id < held.id) units.set(key, doc);
+  }
+  return corpusStats([...units.values()].map((u) => u.tokens));
+}
+
+export function bm25ClusterReference(input: Bm25ClusterReferenceInput): number[] {
+  return bm25Reference({
+    docs: input.docs.map((d) => d.tokens),
+    query: input.query,
+    k1: input.k1,
+    b: input.b,
+    stats: bm25ClusterStats(input.docs),
+  });
+}

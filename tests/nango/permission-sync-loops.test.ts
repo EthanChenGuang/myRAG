@@ -177,6 +177,8 @@ async function loadSyncManager(seed: Record<string, Row[]>, opts: { maxFiles?: s
     vi.doMock('@/lib/rag/ingest/queue-config', () => ({ queueConfigFromProcessEnv: () => ({ ingestAsync: false }), resetQueueConfigForTests: () => {} }));
     vi.doMock('@/lib/rag', () => ({
         CONNECTOR_MAX_PRINCIPALS: 5000,
+        isPurgeTombstoned: async () => ({ ok: true, tombstoned: false }),
+        recomputeDirtyDupClusters: async () => ({ ok: true }),
         nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
             ingestScope.nangoOwnerScope({ ownerUserId: input.ownerUserId, deploymentMode: mode }),
         scopeKey: scopeModule.scopeKey,

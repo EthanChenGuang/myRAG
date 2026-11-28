@@ -202,6 +202,8 @@ export interface SyncStats {
   deleted: number;
   /** Documents this sync left with the fallback audience (owner and admins) because their source sharing was unmappable or unreadable. */
   failClosed: number;
+  /** Files an admin purged that still exist at the source; skipped, never re-ingested (D-35). */
+  withdrawn?: number;
 }
 
 /**

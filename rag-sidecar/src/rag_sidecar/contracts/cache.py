@@ -38,7 +38,29 @@ class CachedSourceVersion(_Contract):
     version: int = Field(ge=1)
 
 
+# W-2: the JSON-Schema form of the _storable rules that JSON Schema can state, so gen:schemas carries them into the Zod
+# CachedAnswerSchema; the source_versions membership and uniqueness rules stay Pydantic-only (store-after.ts checks them before storing).
+_STORABLE_JSON_SCHEMA: dict[str, object] = {
+    "allOf": [
+        {
+            "anyOf": [
+                {"type": "object", "properties": {"groundedness": {"type": "object", "properties": {"status": {"const": "scored"}, "label": {"const": "verified"}}, "required": ["status", "label"]}}, "required": ["groundedness"]},
+                {"type": "object", "properties": {"groundedness": {"type": "object", "properties": {"status": {"const": "not_checked"}}, "required": ["status"]}}, "required": ["groundedness"]},
+            ]
+        },
+        {
+            "anyOf": [
+                {"type": "object", "properties": {"is_refusal": {"const": False}}, "required": ["is_refusal"]},
+                {"type": "object", "properties": {"citations": {"type": "array", "maxItems": 0}}},
+            ]
+        },
+    ]
+}
+
+
 class CachedAnswer(_Contract):
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_extra=_STORABLE_JSON_SCHEMA)
+
     answer_text: str = Field(min_length=1)
     citations: list[CitationRecord] = Field(default_factory=list)
     sources: list[CachedSource] = Field(default_factory=list)

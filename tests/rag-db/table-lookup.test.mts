@@ -242,7 +242,7 @@ for (const mode of MODES) {
       assert.equal(await failure(() => lookup(tenantA, ['sorna', 'kibe'], 2, 10, { mode: 'all', from: '2026-01-01' })), '22023');
     });
 
-    test('the identifier filter keeps only rows with a chunk carrying one of the identifiers', async () => {
+    test('the identifier filter keeps only rows of a document carrying one of the identifiers (D-59)', async () => {
       await assertLookupFunction(db);
       await db.query(`UPDATE document_chunks SET identifiers_norm = ARRAY['zq-41'] WHERE id = $1`, [chunks.main]);
       try {
@@ -292,13 +292,15 @@ for (const mode of MODES) {
       }
     });
 
-    test('re-applying 0861, then 0933 (its operator rule, Phase 4.3), keeps one function with the same definition and grants', async () => {
+    test('re-applying 0861, then 0933 and 0936 (their operator rules, Phase 4.3 and 04.2-40), keeps one function with the same definition and grants', async () => {
+      // 0936 also rebuilds rag_bm25_search_chunks and stops with 55000 while 0938's p_df_mode is in place, so the 04.4-17 order applies:
+      // 0932 before 0936, 0938 after it.
       await assertLookupFunction(db);
       const definition = async () =>
         (await db.query<{ def: string; acl: string }>(`SELECT pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p WHERE p.proname = '${FN}'`)).rows;
       const before = await definition();
-      const files = migrationFiles(mode).filter((file) => path.basename(file).startsWith('0861_') || path.basename(file).startsWith('0933_'));
-      assert.equal(files.length, 2);
+      const files = migrationFiles(mode).filter((file) => ['0861_', '0932_', '0933_', '0936_', '0938_'].some((prefix) => path.basename(file).startsWith(prefix)));
+      assert.equal(files.length, 5);
       await applyMigrationFiles(db, files);
       assert.deepEqual(await definition(), before);
     });

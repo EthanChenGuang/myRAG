@@ -1,7 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { RagConfig } from '../config';
-import { dropLexstatsReady, lexstatsReady } from '../lexical/stats';
+import { dropLexstatsReady, lexstatsReadiness } from '../lexical/stats';
 import { accessRpcArgs, sameAccessFilter, type ScopeAccessFilter } from '../tenant/access-filter';
 import { assertTenantScope, scopeKey } from '../tenant/scope';
 import {
@@ -16,6 +17,7 @@ import type {
   BackendCapabilities,
   BackendSearchRequest,
   BackendTranslationSearchRequest,
+  LexicalDfOutcome,
   LexicalScoringOutcome,
   LexicalScoringRequest,
   RankedHit,
@@ -346,17 +348,24 @@ async function hybridRows(client: RpcClient, args: Record<string, unknown>, req:
   return (response.data ?? []) as HybridRow[];
 }
 
-function withScoring(legs: BackendLegs, outcome: LexicalScoringOutcome): BackendLegs {
-  return { ...legs, meta: { denseMode: legs.meta?.denseMode ?? null, ...legs.meta, lexicalScoring: outcome } };
+function withScoring(legs: BackendLegs, outcome: LexicalScoringOutcome, df?: LexicalDfOutcome): BackendLegs {
+  return { ...legs, meta: { denseMode: legs.meta?.denseMode ?? null, ...legs.meta, lexicalScoring: outcome, ...(df ? { lexicalDfMode: df } : {}) } };
 }
 
-type Bm25Outcome = { rows: HybridRow[] } | { fallback: 'stats_unavailable' | 'bm25_failed' };
+type Bm25Outcome = { rows: HybridRow[]; df?: LexicalDfOutcome } | { fallback: 'stats_unavailable' | 'bm25_failed' };
+type Bm25CallOutcome = { rows: HybridRow[] } | { fallback: 'stats_unavailable' | 'bm25_failed' | 'cluster_not_ready' };
 
-async function bm25Rows(client: RpcClient, args: Record<string, unknown>, req: BackendSearchRequest, tenantKey: string): Promise<Bm25Outcome> {
+/** D-34: a log line names a tenant by the first 12 hex characters of its sha256 only. */
+function tenantHash(tenantKey: string): string {
+  return createHash('sha256').update(tenantKey).digest('hex').slice(0, 12);
+}
+
+async function bm25Rows(client: RpcClient, args: Record<string, unknown>, req: BackendSearchRequest, tenantKey: string): Promise<Bm25CallOutcome> {
   try {
     const response = await client.rpc(BM25_RPC, args).abortSignal(req.signal);
     if (req.signal.aborted) return { fallback: 'bm25_failed' };
     if (!response.error) return { rows: (response.data ?? []) as HybridRow[] };
+    if (response.error.message.includes('lexical_cluster_stats_not_ready')) return { fallback: 'cluster_not_ready' };
     if (response.error.message.includes('lexical_stats_not_ready')) {
       dropLexstatsReady(tenantKey);
       return { fallback: 'stats_unavailable' };
@@ -372,6 +381,37 @@ async function bm25Rows(client: RpcClient, args: Record<string, unknown>, req: B
 }
 
 /**
+ * D-49: the BM25 call of one request. dfMode cluster on a cluster-ready tenant sends p_df_mode 'cluster'; a refusal with
+ * lexical_cluster_stats_not_ready drops the cached readiness and retries once without it (raw BM25, cluster_unavailable). A tenant whose
+ * cluster statistics are not ready is served by raw BM25 at once. Without dfMode the arguments are today's.
+ */
+async function bm25Served(
+  client: RpcClient,
+  rawArgs: Record<string, unknown>,
+  req: BackendSearchRequest,
+  tenantKey: string,
+  wantCluster: boolean,
+  clusterReady: boolean,
+): Promise<Bm25Outcome> {
+  const settle = (outcome: Bm25CallOutcome, df?: LexicalDfOutcome): Bm25Outcome => {
+    if ('rows' in outcome) return df ? { rows: outcome.rows, df } : { rows: outcome.rows };
+    return { fallback: outcome.fallback === 'cluster_not_ready' ? 'bm25_failed' : outcome.fallback };
+  };
+  if (!wantCluster) return settle(await bm25Rows(client, rawArgs, req, tenantKey));
+  if (!clusterReady) return settle(await bm25Rows(client, rawArgs, req, tenantKey), 'cluster_unavailable');
+  const started = Date.now();
+  const first = await bm25Rows(client, { ...rawArgs, p_df_mode: 'cluster' }, req, tenantKey);
+  if (!('fallback' in first) || first.fallback !== 'cluster_not_ready') return settle(first, 'cluster');
+  dropLexstatsReady(tenantKey);
+  logger.warn('Document Search', 'cluster statistics not ready; raw BM25 serves', {
+    tenant: tenantHash(tenantKey),
+    code: 'lexical_df_cluster_unavailable',
+    ms: Date.now() - started,
+  });
+  return settle(await bm25Rows(client, rawArgs, req, tenantKey), 'cluster_unavailable');
+}
+
+/**
  * D-22, D-25, D-26: the dense hybrid call (lexical limit 0) and the BM25 call run in parallel. A tenant without ready statistics, or a
  * failed BM25 call, is served by the unchanged ts_rank_cd leg of hybrid_search_chunks; that is degraded scoring, never an error.
  */
@@ -383,19 +423,20 @@ async function searchWithBm25(
   forced?: DenseScanArgs['forced'],
 ): Promise<BackendLegs> {
   const tenantKey = String(args.p_tenant_key);
-  const ready = await lexstatsReady(client, tenantKey, Date.now(), req.signal);
+  const readiness = await lexstatsReadiness(client, tenantKey, Date.now(), req.signal);
   req.signal.throwIfAborted();
-  if (!ready) return withScoring(splitLegs(await hybridRows(client, args, req), forced), 'stats_unavailable');
+  if (!readiness.ready) return withScoring(splitLegs(await hybridRows(client, args, req), forced), 'stats_unavailable');
 
   const denseWanted = typeof args.p_dense_limit === 'number' && args.p_dense_limit > 0;
   const densePending = denseWanted ? hybridRows(client, { ...args, p_lexical_limit: 0 }, req) : Promise.resolve([] as HybridRow[]);
-  const bm25Pending = bm25Rows(client, bm25ArgsFrom(args, scoring, req.lexicalLimit), req, tenantKey);
+  const rawBm25Args = bm25ArgsFrom(args, scoring, req.lexicalLimit);
+  const bm25Pending = bm25Served(client, rawBm25Args, req, tenantKey, scoring.dfMode === 'cluster', readiness.clusterReady);
   // Both are awaited; a dense failure first must not leave the BM25 promise unobserved (it never rejects).
   const [denseRows, bm25] = await Promise.all([densePending, bm25Pending]);
   req.signal.throwIfAborted();
   const dense = splitLegs(denseRows, forced);
   if ('rows' in bm25) {
-    return withScoring({ ...dense, lexical: splitLegs(bm25.rows).lexical }, 'bm25');
+    return withScoring({ ...dense, lexical: splitLegs(bm25.rows).lexical }, 'bm25', bm25.df);
   }
   const lexical = splitLegs(await hybridRows(client, { ...args, p_dense_limit: 0 }, req)).lexical;
   return withScoring({ ...dense, lexical }, bm25.fallback);

@@ -66,6 +66,8 @@ function phase33RpcNames(): Set<string> {
 
 // Phase 4.4 (D-02): with RAG_LEXICAL_SCORING unset nothing enables statistics, so the 0901 triggers stage nothing and no counter exists.
 const LEXICAL_STATS_TABLES = ['rag_lexical_stats_state', 'rag_lexical_stats_pending', 'rag_lexical_df', 'rag_lexical_corpus'] as const;
+// 04.4-16 (D-44): with RAG_LEXICAL_DF_MODE unset no tenant is cluster-enabled, so no marker or ledger row is written.
+const LEXICAL_CLUSTER_TABLES = ['rag_lexical_cluster_dirty', 'rag_lexical_cluster_units'] as const;
 
 const QUEUE_TABLES = [
   'ingestion_jobs',
@@ -475,5 +477,10 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
   test('at the end of the run, with default settings, the four lexical statistics tables hold no row (D-02)', async () => {
     assert.equal(process.env.RAG_LEXICAL_SCORING, undefined, 'the run leaves RAG_LEXICAL_SCORING unset');
     assert.deepEqual(await queueRowCounts(LEXICAL_STATS_TABLES), Object.fromEntries(LEXICAL_STATS_TABLES.map((table) => [table, 0])));
+  });
+
+  test('at the end of the run, with default settings, the cluster marker and ledger tables hold no row (04.4-16, D-44)', async () => {
+    assert.equal(process.env.RAG_LEXICAL_DF_MODE, undefined, 'the run leaves RAG_LEXICAL_DF_MODE unset');
+    assert.deepEqual(await queueRowCounts(LEXICAL_CLUSTER_TABLES), Object.fromEntries(LEXICAL_CLUSTER_TABLES.map((table) => [table, 0])));
   });
 });

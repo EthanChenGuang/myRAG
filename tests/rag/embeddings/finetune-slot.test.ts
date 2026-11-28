@@ -317,6 +317,16 @@ describe('fine-tune slot probe check (06.1 D-24)', () => {
     expect(bad.minCosine as number).toBeLessThan(FINETUNE_PROBE_MIN_COSINE);
   });
 
+  it('reads the probe roles from the generated ProbeSet contract and refuses a card whose roles differ', async () => {
+    expect(FINETUNE_PROBE_ROLES).toEqual(['query', 'document', 'query']);
+    const base = versionRow();
+    registryRows = [{ ...base, probe: { ...(base.probe as Record<string, unknown>), roles: ['query', 'query', 'query'] } }];
+    await expect(checkFinetuneProbe('a', { config: config() })).resolves.toMatchObject({ ok: false, reason: 'malformed' });
+    resetFinetuneProbeCacheForTests();
+    registryRows = [{ ...base, probe: { ...(base.probe as Record<string, unknown>), roles: [...FINETUNE_PROBE_ROLES] } }];
+    await expect(checkFinetuneProbe('a', { config: config() })).resolves.toMatchObject({ ok: true, reason: 'match' });
+  });
+
   it('checkFinetuneProbe reports an unreachable endpoint and an empty base URL as not ok', async () => {
     fake.failNext('ft', 500, 500, 500);
     await expect(checkFinetuneProbe('a', { config: config() })).resolves.toMatchObject({ ok: false, minCosine: null, reason: 'unavailable' });

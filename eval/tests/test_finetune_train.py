@@ -681,3 +681,21 @@ def test_train_lock_pins_the_eval_lock_versions_with_hashes():
         if name in locked:
             assert version in locked[name], (name, version, locked[name])
     assert kit.lock_versions() == {k: pins[v] for k, v in kit.LOCK_PACKAGES.items()}
+
+
+def test_probe_set_embeds_each_probe_with_the_prompt_of_its_role():
+    from rag_sidecar.contracts import finetune as contracts
+
+    roles = ("query", "document", "query")
+    default = next(m for m in load_finetune_config().base_models if m.default)
+    assert default.query_prompt != default.document_prompt
+    model = FakeModel()
+    probe = train.probe_set(model, default)
+    import numpy as np
+
+    for index, (role, text) in enumerate(zip(roles, contracts.PROBE_TEXTS)):
+        prompt = default.query_prompt if role == "query" else default.document_prompt
+        expected = model.encode([text], prompt=prompt, normalize_embeddings=True)[0]
+        assert np.allclose(probe.vectors[index], expected, atol=1e-6), index
+    assert getattr(contracts, "PROBE_ROLES", None) == roles
+    assert tuple(getattr(probe, "roles", ())) == roles

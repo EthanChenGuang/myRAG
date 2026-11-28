@@ -39,6 +39,8 @@ export interface TenantStatsStatus {
   lexemeCount: number;
   pending: number;
   oldestPendingAgeS: number | null;
+  /** D-46 to D-49 (0905): present only for a cluster-enabled tenant. */
+  cluster?: { status: LexstatsState; dirty: number; oldestDirtyAgeS: number | null };
 }
 
 export interface TenantStatsCheck {
@@ -52,6 +54,8 @@ export interface TenantStatsCheck {
   totalLenDiffWithPending: number | null;
   /** null when the tenant keeps no statistics. */
   clean: boolean | null;
+  /** 0905: present only for a cluster-enabled tenant; any non-zero difference makes clean false. */
+  cluster?: { status: LexstatsState; dirty: number; dfDiff: number; chunkCountDiff: number; totalLenDiff: number; ledgerDiff: number };
 }
 
 export interface TenantStatsRebuild {
@@ -111,6 +115,9 @@ export async function statusTenantStats(db: LexstatsDb, tenantKey: string): Prom
     lexemeCount: num(r.lexeme_count),
     pending: num(r.pending),
     oldestPendingAgeS: numOrNull(r.oldest_pending_age_s),
+    ...(stateOf(r.cluster_status)
+      ? { cluster: { status: stateOf(r.cluster_status) as LexstatsState, dirty: num(r.cluster_dirty), oldestDirtyAgeS: numOrNull(r.cluster_oldest_dirty_age_s) } }
+      : {}),
   };
 }
 
@@ -126,7 +133,31 @@ export async function checkTenantStats(db: LexstatsDb, tenantKey: string): Promi
     totalLenDiff: numOrNull(r.total_len_diff),
     totalLenDiffWithPending: numOrNull(r.total_len_diff_with_pending),
     clean: typeof r.clean === 'boolean' ? r.clean : null,
+    ...(stateOf(r.cluster_status)
+      ? {
+          cluster: {
+            status: stateOf(r.cluster_status) as LexstatsState,
+            dirty: num(r.cluster_dirty),
+            dfDiff: num(r.cluster_df_diff),
+            chunkCountDiff: num(r.cluster_chunk_count_diff),
+            totalLenDiff: num(r.cluster_total_len_diff),
+            ledgerDiff: num(r.cluster_ledger_diff),
+          },
+        }
+      : {}),
   };
+}
+
+/** 0905: marks the tenant cluster-enabled (`building`); needs the tenant's state row (55000 otherwise). Returns the cluster state. */
+export async function enableClusterStats(db: LexstatsDb, tenantKey: string): Promise<LexstatsState> {
+  const state = stateOf(await call(db, 'rag_lexstats_cluster_enable', { p_tenant_key: tenantKey }));
+  if (!state) throw new LexstatsRpcError('rag_lexstats_cluster_enable', 'bad_answer');
+  return state;
+}
+
+/** 0905: removes the tenant's cluster corpus, markers and ledger; corpus chunks is untouched. Returns whether it was enabled. */
+export async function disableClusterStats(db: LexstatsDb, tenantKey: string): Promise<boolean> {
+  return (await call(db, 'rag_lexstats_cluster_disable', { p_tenant_key: tenantKey })) === true;
 }
 
 /** Removes every statistics row of the tenant; returns whether a state row existed. */

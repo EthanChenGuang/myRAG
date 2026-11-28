@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal, tokenizer
+from rag_eval.calibrate import cache, dup_clusters, groundedness, groundedness_judge, refusal, scope, tokenizer
 from rag_eval.calibrate.refusal import CalibrationError, run_refusal_calibration
 from rag_eval.harness_runner import HarnessError
 from rag_eval.paths import resolve_cli_path
@@ -159,6 +159,32 @@ def _cache(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _scope(args: argparse.Namespace) -> int:
+    try:
+        result = scope.run_scope_calibration(
+            _run_dir(args.report),
+            out_path=resolve_cli_path(args.out),
+            golden_path=resolve_cli_path(args.golden),
+            source=args.source,
+            separation_report=resolve_cli_path(args.separation_report) if args.separation_report is not None else None,
+            profile_id=args.profile,
+        )
+    except (scope.ScopeCalibrationError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    cells = " ".join(
+        f"{cell.rag_mode}={cell.status}"
+        + (f"(t={cell.threshold:.4f},m={cell.margin:.3f})" if cell.threshold is not None and cell.margin is not None else "")
+        for cell in result.cells
+    )
+    skipped = " ".join(f"{reason}={count}" for reason, count in sorted(result.excluded.items()))
+    print(f"scope calibration ({result.source}, {result.profile_id}): rows={result.rows} {cells}")
+    if skipped:
+        print(f"excluded: {skipped}")
+    print(f"wrote {result.out_path}")
+    return EXIT_OK
+
+
 def _run_dir(path: Path) -> Path:
     return path if path.is_absolute() or path.exists() else resolve_cli_path(path)
 
@@ -194,7 +220,7 @@ def _tokenizer(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster, semantic-cache and tokenizer calibration"
+        prog="rag_eval.calibrate", description="myRAG refusal, groundedness, duplicate-cluster, semantic-cache, scope gate and tokenizer calibration"
     )
     commands = parser.add_subparsers(dest="command", required=True)
     cmd = commands.add_parser("refusal", help="fit per-cell refusal thresholds on dev, check once on the frozen holdout")
@@ -272,6 +298,18 @@ def main(argv: list[str] | None = None) -> int:
         help="RAG_SEMANTIC_CACHE_MAX_DISTANCE, used when the profile has no calibrated entry",
     )
     cmd.set_defaults(handler=_cache)
+    cmd = commands.add_parser(
+        "scope", help="fit the scope gate threshold and margin per embedding profile and RAG mode on dev, check on the holdout"
+    )
+    cmd.add_argument("--report", required=True, type=Path, help="output directory of a score-only eval run (traces.jsonl, run.json)")
+    cmd.add_argument("--out", type=Path, default=scope.SCOPE_GATE_PATH, help="calibration file (default eval/config/scope-gate.json)")
+    cmd.add_argument("--golden", type=Path, default=refusal.DEFAULT_GOLDEN)
+    cmd.add_argument(
+        "--source", choices=("auto", "live"), default="auto", help="auto: fixture for a fixture-embedder run; live needs --separation-report"
+    )
+    cmd.add_argument("--separation-report", type=Path, default=None, help="real-embedder separation report.json (D-34 review gate)")
+    cmd.add_argument("--profile", default=None, help="embedding profile id; must be the scored run's profile")
+    cmd.set_defaults(handler=_scope)
     cmd = commands.add_parser("tokenizer", help="fit per-family token estimate factors from recorded eval runs")
     cmd.add_argument("--runs", required=True, nargs="+", type=Path, help="one or more eval run output directories (traces.jsonl)")
     cmd.add_argument(

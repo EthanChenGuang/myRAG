@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import type { NextRequest } from 'next/server';
 import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { isSharePointEnabled, SHAREPOINT_PROVIDERS } from '@/lib/nango/sharepoint/config';
+import { PROVIDER_CONFIG } from '@/lib/nango/types';
 
 interface ConnectorStats {
   connected_users: number;
@@ -46,7 +48,12 @@ const featureSettingsStore: Record<string, boolean> = {
   show_on_dashboard: true,
 };
 
-const SUPPORTED_PROVIDERS = ['google-drive', 'dropbox', 'notion'];
+const BASE_PROVIDERS = ['google-drive', 'dropbox', 'notion'];
+
+/** D-24: SharePoint Online and OneDrive for Business are listed only while their switch is on. */
+function supportedProviders(): string[] {
+  return isSharePointEnabled() ? [...BASE_PROVIDERS, ...SHAREPOINT_PROVIDERS] : BASE_PROVIDERS;
+}
 
 const EMPTY_STATS: ConnectorStats = { connected_users: 0, last_sync: null, total_syncs: 0, failed_syncs: 0 };
 
@@ -88,8 +95,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const supported = supportedProviders();
     const providers: ConnectorProvider[] = (configs || [])
-      .filter((config: any) => SUPPORTED_PROVIDERS.includes(config.provider))
+      .filter((config: any) => supported.includes(config.provider))
       .map((config: any) => ({
         provider: config.provider,
         enabled: config.enabled,
@@ -100,6 +108,22 @@ export async function GET(request: NextRequest) {
         max_files_per_sync: config.max_files_per_sync || 100,
         stats: statsMap[config.provider] || { ...EMPTY_STATS },
       }));
+
+    if (isSharePointEnabled()) {
+      for (const provider of SHAREPOINT_PROVIDERS) {
+        if (providers.some((entry) => entry.provider === provider)) continue;
+        providers.push({
+          provider,
+          enabled: true,
+          show_on_dashboard: true,
+          button_label: PROVIDER_CONFIG[provider].displayName,
+          description: PROVIDER_CONFIG[provider].description,
+          supported_file_types: [],
+          max_files_per_sync: 100,
+          stats: statsMap[provider] || { ...EMPTY_STATS },
+        });
+      }
+    }
 
     const response: ConnectorConfigResponse = {
       view: isAdmin ? 'admin' : 'public',
@@ -135,7 +159,7 @@ export async function PUT(request: NextRequest) {
     // Update each provider configuration
     if (body.providers && Array.isArray(body.providers)) {
       for (const provider of body.providers) {
-        if (!provider || !SUPPORTED_PROVIDERS.includes(provider.provider)) {
+        if (!provider || !supportedProviders().includes(provider.provider)) {
           return Response.json({ error: 'Unsupported connector provider' }, { status: 400 });
         }
         const { error } = await supabase

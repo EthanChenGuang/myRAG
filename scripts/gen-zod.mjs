@@ -98,6 +98,11 @@ function inline(node, defs, stack = []) {
     for (const [key, value] of Object.entries(node)) {
       if (key !== '$defs') out[key] = inline(value, defs, stack);
     }
+    // A fixed-length tuple (JSON Schema 2020-12 prefixItems, as Pydantic writes it) in the draft-07 form json-schema-to-zod reads.
+    if (Array.isArray(out.prefixItems) && out.items === undefined && out.minItems === out.prefixItems.length && out.maxItems === out.prefixItems.length) {
+      out.items = out.prefixItems;
+      delete out.prefixItems;
+    }
     if (out.oneOf && out.discriminator) {
       out.anyOf = out.oneOf;
       delete out.oneOf;

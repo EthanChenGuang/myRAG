@@ -398,6 +398,8 @@ RAG_LEXICAL_SCORING=ts_rank_cd
 RAG_LEXICAL_BM25_K1=1.2
 # BM25 length normalisation, 0 to 1
 RAG_LEXICAL_BM25_B=0.75
+# BM25 document frequency: raw, or cluster to count a duplicate cluster once (needs bm25 and RAG_DUP_CLUSTERS=true)
+RAG_LEXICAL_DF_MODE=raw
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 RAG_VERSION_SCOPE=false
 # Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
@@ -649,6 +651,8 @@ RAG_SOURCE_RECHECK=false
 RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
+# Source sync: files one Purge-mode connection may purge per UTC day from its change feed; the rest wait for confirmation (0 = off)
+RAG_SOURCE_PURGE_DAILY_CAP=0
 # Create image chunks from PDF pages: true | false
 RAG_PDF_IMAGE_CHUNKS=false
 # Prompt injection scan on ingested text: off | quarantine

@@ -373,7 +373,10 @@ describe('eval route query-layer overrides (D-38)', () => {
 
   it('builds the queryLayer override only in the eval route', () => {
     const apiRoot = path.resolve(__dirname, '../src/app/api');
-    const builders = routeFiles(apiRoot).filter((file) => /\bqueryLayer\s*[:=]|toQueryLayerOverrides/.test(readFileSync(file, 'utf8')));
+    // A status field that reports the effective config (scope-gate admin route, 06.2-38) builds no override.
+    const builders = routeFiles(apiRoot).filter((file) =>
+      /\bqueryLayer\s*[:=](?!\s*config\.queryLayer\.enabled\b)|toQueryLayerOverrides/.test(readFileSync(file, 'utf8')),
+    );
     expect(builders.map((file) => path.relative(apiRoot, file))).toEqual([path.join('internal', 'rag', 'run', 'route.ts')]);
   });
 });

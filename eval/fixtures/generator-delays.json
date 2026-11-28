@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "description": "Phase 6.2 D-20, D-35 (plan 06.2-29): per-model wait in milliseconds before the fixture generators (stub and fake) answer, so generation p95 per routing tier is deterministic. Keys are the two D-35 routing ids; any other model waits default_ms. Fixture values, not measurements; the latency proof is live verification.",
+  "default_ms": 0,
+  "models": {
+    "anthropic/claude-haiku-5.5": 40,
+    "anthropic/claude-sonnet-5.5": 160
+  }
+}

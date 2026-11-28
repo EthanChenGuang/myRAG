@@ -29,8 +29,11 @@ export const DEFAULT_B = 0.75;
 export const LEGS_FILE = 'lexical-legs.jsonl';
 export const MANIFEST_FILE = 'manifest.json';
 export const TS_RANK_CD_ARM = 'ts_rank_cd';
+/** Plan 04.4-18: document-frequency modes of the bm25 arms; `cluster` reads corpus chunks_cluster (p_df_mode cluster, 0938). */
+export const DF_MODES = ['raw', 'cluster'] as const;
+export type LexicalDfModeArg = (typeof DF_MODES)[number];
 
-export type LexicalLegErrorCode = 'lexical_stats_not_ready' | 'rpc_failed' | 'bad_arguments' | 'out_not_ignored' | 'missing_environment';
+export type LexicalLegErrorCode = 'lexical_stats_not_ready' | 'lexical_cluster_stats_not_ready' | 'rpc_failed' | 'bad_arguments' | 'out_not_ignored' | 'missing_environment';
 
 export class LexicalLegError extends Error {
   constructor(
@@ -86,6 +89,8 @@ export interface LexicalLegsInput {
   lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>;
   limit?: number;
   profileId?: string;
+  /** Plan 04.4-18: `cluster` sends p_df_mode cluster on every bm25 call and needs the tenant's cluster statistics ready. */
+  dfMode?: LexicalDfModeArg;
 }
 
 export interface LexicalLegsResult {
@@ -147,13 +152,17 @@ async function call(rpc: RpcClient, fn: string, args: Record<string, unknown>): 
   return response.data;
 }
 
-/** The statistics the bm25 arms need: state ready with at least one counted chunk, else lexical_stats_not_ready. */
-export async function assertLexicalStatsReady(rpc: RpcClient, tenantKey: string): Promise<void> {
+/**
+ * The statistics the bm25 arms need: state ready with at least one counted chunk, else lexical_stats_not_ready; for the cluster DF mode
+ * also cluster_status ready, else lexical_cluster_stats_not_ready (the live tool never falls back to raw on its own).
+ */
+export async function assertLexicalStatsReady(rpc: RpcClient, tenantKey: string, dfMode: LexicalDfModeArg = 'raw'): Promise<void> {
   const status = scalarOf(await call(rpc, 'rag_lexstats_status', { p_tenant_key: tenantKey }), 'rag_lexstats_status') as
-    | { state?: unknown; chunk_count?: unknown }
+    | { state?: unknown; chunk_count?: unknown; cluster_status?: unknown }
     | null
     | undefined;
   if (!status || status.state !== 'ready' || !(Number(status.chunk_count) > 0)) throw new LexicalLegError('lexical_stats_not_ready');
+  if (dfMode === 'cluster' && status.cluster_status !== 'ready') throw new LexicalLegError('lexical_cluster_stats_not_ready');
 }
 
 /** The hybrid arguments of a lexical-only call (dense limit 0, no embedding, no filter), the shape buildRpcArgs gives such a request. */
@@ -177,7 +186,8 @@ export async function runLexicalLegs(input: LexicalLegsInput): Promise<LexicalLe
   const profileId = input.profileId ?? LEGACY_PROFILE_ID;
   if (!isTenantKey(input.tenantKey)) throw new LexicalLegError('bad_arguments', 'a tenant key is s:default, u:<uuid> or o:<uuid>');
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new LexicalLegError('bad_arguments', 'the limit is an integer from 1 to 200');
-  if (input.arms.some((arm) => arm.scoring === 'bm25')) await assertLexicalStatsReady(input.rpc, input.tenantKey);
+  const cluster = input.dfMode === 'cluster';
+  if (input.arms.some((arm) => arm.scoring === 'bm25')) await assertLexicalStatsReady(input.rpc, input.tenantKey, cluster ? 'cluster' : 'raw');
   const options: LexicalOptionsSummary = { stem_it: false, dictionary_version: null, identifier_patterns: 0, quantity: false };
   const items: LexicalLegItemResult[] = [];
   for (const item of input.items) {
@@ -195,7 +205,10 @@ export async function runLexicalLegs(input: LexicalLegsInput): Promise<LexicalLe
         arm.scoring === 'ts_rank_cd'
           ? lexicalHits(await call(input.rpc, 'hybrid_search_chunks', hybridArgs))
           : lexicalHits(
-              await call(input.rpc, 'rag_bm25_search_chunks', bm25ArgsFrom(hybridArgs, { mode: 'bm25', k1: arm.k1 ?? DEFAULT_K1, b: arm.b ?? DEFAULT_B }, limit)),
+              await call(input.rpc, 'rag_bm25_search_chunks', {
+                ...bm25ArgsFrom(hybridArgs, { mode: 'bm25', k1: arm.k1 ?? DEFAULT_K1, b: arm.b ?? DEFAULT_B }, limit),
+                ...(cluster ? { p_df_mode: 'cluster' } : {}),
+              }),
             );
     }
     items.push({ item_id: item.id, language: item.language, token_count: tokens.length, arms });
@@ -213,10 +226,24 @@ export interface LexicalLegArgs {
   b: number[];
   limit: number;
   profile: string;
+  /** `['raw']` (default) writes to --out as before; any other list writes one directory per mode, <out>/<mode>. */
+  dfModes: LexicalDfModeArg[];
 }
 
 const USAGE =
-  'usage: node --import tsx eval/harness/lexical-leg-run.mts --golden <file> --tenant <key> --out <dir> [--k1 a,b] [--b a,b] [--limit 50] [--profile <id>]';
+  'usage: node --import tsx eval/harness/lexical-leg-run.mts --golden <file> --tenant <key> --out <dir> [--k1 a,b] [--b a,b] [--limit 50] [--profile <id>] [--df-mode raw,cluster]';
+
+function dfModeList(value: string): LexicalDfModeArg[] {
+  const parts = value.split(',').map((part) => part.trim());
+  if (parts.some((part) => !(DF_MODES as readonly string[]).includes(part))) throw new LexicalLegError('bad_arguments', '--df-mode takes raw, cluster or raw,cluster');
+  const unique = [...new Set(parts)] as LexicalDfModeArg[];
+  return DF_MODES.filter((mode) => unique.includes(mode));
+}
+
+/** The output directory of one DF mode: --out itself for the default raw-only run, else <out>/<mode>. */
+export function dfModeOutDir(out: string, dfModes: readonly LexicalDfModeArg[], mode: LexicalDfModeArg): string {
+  return dfModes.length === 1 && dfModes[0] === 'raw' ? out : path.join(out, mode);
+}
 
 function numberList(value: string, flag: string): number[] {
   const parts = value.split(',').map((part) => part.trim());
@@ -229,7 +256,7 @@ export function parseLexicalLegArgs(argv: readonly string[]): LexicalLegArgs {
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i]!;
-    if (!['--golden', '--tenant', '--out', '--k1', '--b', '--limit', '--profile'].includes(flag)) {
+    if (!['--golden', '--tenant', '--out', '--k1', '--b', '--limit', '--profile', '--df-mode'].includes(flag)) {
       throw new LexicalLegError('bad_arguments', `unknown argument ${flag.startsWith('--') ? flag : '(value)'}`);
     }
     const value = argv[i + 1];
@@ -252,6 +279,7 @@ export function parseLexicalLegArgs(argv: readonly string[]): LexicalLegArgs {
     b: values.has('--b') ? numberList(values.get('--b')!, '--b') : [DEFAULT_B],
     limit,
     profile: values.get('--profile') ?? LEGACY_PROFILE_ID,
+    dfModes: values.has('--df-mode') ? dfModeList(values.get('--df-mode')!) : ['raw'],
   };
 }
 
@@ -298,6 +326,8 @@ export interface LexicalLegManifest {
   profile_id: string;
   limit: number;
   arms: LexicalLegArm[];
+  /** Plan 04.4-18: present only in a per-mode directory (a --df-mode list other than the default raw). */
+  df_mode?: LexicalDfModeArg;
   lexical_options: LexicalOptionsSummary;
   item_count: number;
   empty_token_items: number;
@@ -344,7 +374,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), io: 
   }
   const started = Date.now();
   try {
-    assertGitIgnored(args.out);
+    for (const mode of args.dfModes) assertGitIgnored(dfModeOutDir(args.out, args.dfModes, mode));
     const { items, sha256 } = readLexicalLegItems(path.resolve(REPO_ROOT, args.golden));
     const { createClient } = await import('@supabase/supabase-js');
     const rpc = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) as unknown as RpcClient;
@@ -356,28 +386,42 @@ export async function main(argv: readonly string[] = process.argv.slice(2), io: 
     const { queryLanguage } = await import('../../src/lib/rag/query/language');
     const config = loadRagConfig(getRagDeps().ragEnv());
     const scope = storeScopeForTenantKey(args.tenant);
-    const result = await runLexicalLegs({
-      rpc,
-      tenantKey: args.tenant,
-      items,
-      arms,
-      limit: args.limit,
-      profileId: args.profile,
-      // The pipeline's resolution (LANG-07): only while a lexical switch is on, with the detected query language.
-      lexicalOptionsFor: lexicalOptionsOn(config)
-        ? async (question) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options
-        : undefined,
-    });
-    const manifest = writeLexicalLegs(path.resolve(REPO_ROOT, args.out), result, {
-      schema_version: 1,
-      created_at: new Date().toISOString(),
-      eval_set_sha256: sha256,
-      tenant_hash: tenantHash(args.tenant),
-      profile_id: args.profile,
-      limit: args.limit,
-      arms,
-    });
-    io.out(`${PREFIX} ${manifest.item_count} item(s), ${arms.length} arm(s), ${manifest.empty_token_items} without tokens, ${Date.now() - started} ms`);
+    const perMode = !(args.dfModes.length === 1 && args.dfModes[0] === 'raw');
+    // Every mode is computed before anything is written (no partial output).
+    const results: Array<{ mode: LexicalDfModeArg; result: LexicalLegsResult }> = [];
+    for (const mode of args.dfModes) {
+      results.push({
+        mode,
+        result: await runLexicalLegs({
+          rpc,
+          tenantKey: args.tenant,
+          items,
+          arms,
+          limit: args.limit,
+          profileId: args.profile,
+          ...(mode === 'cluster' ? { dfMode: 'cluster' as const } : {}),
+          // The pipeline's resolution (LANG-07): only while a lexical switch is on, with the detected query language.
+          lexicalOptionsFor: lexicalOptionsOn(config)
+            ? async (question) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options
+            : undefined,
+        }),
+      });
+    }
+    for (const { mode, result } of results) {
+      const manifest = writeLexicalLegs(path.resolve(REPO_ROOT, dfModeOutDir(args.out, args.dfModes, mode)), result, {
+        schema_version: 1,
+        created_at: new Date().toISOString(),
+        eval_set_sha256: sha256,
+        tenant_hash: tenantHash(args.tenant),
+        profile_id: args.profile,
+        limit: args.limit,
+        arms,
+        ...(perMode ? { df_mode: mode } : {}),
+      });
+      io.out(
+        `${PREFIX} ${perMode ? `df ${mode}: ` : ''}${manifest.item_count} item(s), ${arms.length} arm(s), ${manifest.empty_token_items} without tokens, ${Date.now() - started} ms`,
+      );
+    }
     return 0;
   } catch (error) {
     io.err(`${PREFIX} failed: ${error instanceof LexicalLegError ? error.message : error instanceof Error ? error.name : 'unknown'} after ${Date.now() - started} ms`);

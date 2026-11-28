@@ -58,6 +58,36 @@
       "title": "Dropped",
       "type": "object"
     },
+    "dropped_by_language": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "propertyNames": {
+          "enum": [
+            "shape",
+            "language",
+            "verbatim_copy",
+            "near_duplicate",
+            "not_answerable",
+            "low_confidence",
+            "golden_overlap",
+            "unknown_chunk_ref"
+          ]
+        },
+        "type": "object"
+      },
+      "propertyNames": {
+        "enum": [
+          "zh",
+          "en",
+          "it"
+        ]
+      },
+      "title": "Dropped By Language",
+      "type": "object"
+    },
     "judge_skipped": {
       "title": "Judge Skipped",
       "type": "boolean"
@@ -77,6 +107,7 @@
     "kept",
     "dropped",
     "by_language",
+    "dropped_by_language",
     "round_trip",
     "judge_skipped"
   ],

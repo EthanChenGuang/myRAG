@@ -1190,6 +1190,18 @@
       "help": "0.3 means 30%. A full listing that would remove more than this share of a connection's documents pauses for confirmation. At 1 the pause never applies."
     },
     {
+      "name": "RAG_SOURCE_PURGE_DAILY_CAP",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": false,
+      "group": "data",
+      "label": "Daily purge limit per connection",
+      "type": "number",
+      "requires": [],
+      "default": "0",
+      "help": "Files the source reports as deleted that one connection in Purge mode may purge per day (UTC). Above it, the rest wait in a paused run for confirmation. 0 turns the limit off."
+    },
+    {
       "name": "NEXT_PUBLIC_NANGO_SHAREPOINT_ENABLED",
       "status": "managed",
       "knownGaps": [],
@@ -1733,6 +1745,25 @@
       ],
       "default": "0.75",
       "help": "Length normalisation, from 0 (none) to 1 (full). Used only with bm25."
+    },
+    {
+      "name": "RAG_LEXICAL_DF_MODE",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true,
+      "group": "retrieval",
+      "label": "BM25 document frequency",
+      "type": "enum",
+      "options": [
+        "raw",
+        "cluster"
+      ],
+      "requires": [
+        "RAG_LEXICAL_SCORING=bm25",
+        "RAG_DUP_CLUSTERS=true"
+      ],
+      "default": "raw",
+      "help": "Counts a duplicate cluster once in BM25 document frequency. Needs BM25 scoring and duplicate clusters."
     },
     {
       "name": "RAG_MAX_OUTPUT_TOKENS",

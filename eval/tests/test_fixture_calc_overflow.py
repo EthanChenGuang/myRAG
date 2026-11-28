@@ -375,7 +375,9 @@ PRE_ITEM_SETS = {
 }
 NEW_CATEGORY_SLICES = ("category:multi_step_calc", "category:context_overflow")
 # Slices that also hold new items; their pre-existing items are compared one by one.
-MIXED_SLICES = ("overall", "language:en", "language:it", "language:zh")
+# Plan 06.2-41 adds a gated en->zh cross_lingual item served from the dominant-language tenant; the per-item check covers
+# the pre-existing items of these slices.
+MIXED_SLICES = ("overall", "language:en", "language:it", "language:zh", "category:cross_lingual", "pair:en->zh")
 # The one pre-existing item that moved, and only in the ingest tier: its gold chunk (p52-rules-v2.zh.md) and the stale
 # version's chunk (p52-rules-v1.zh.md) have exactly the same similarity, the search orders by distance with no
 # tie-break, and the larger index returns the tied pair in the other order. No new document is among its candidates.

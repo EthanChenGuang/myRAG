@@ -17,7 +17,7 @@ export { queryTurnInputs, ragTurnMetadataFromPlan } from './query/turn-metadata'
 export type { QueryTurnInputs, RagTurnMetadata } from './query/turn-metadata';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting } from './deps';
+export { currentAttributeFilterMode, currentContextTokenBudget, currentLexicalVersion, currentModelRouting, currentModelRoutingConfig } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';
@@ -326,6 +326,15 @@ export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export { answerStructureFor, answerStructureStage, decomposedAnswerEffective, decomposedAnswerFor } from './generation/decomposed-turn';
 export { isOutOfScopeResult, scopeGateNoticeFor, type ScopeNotice } from './generation/scope-notice';
+export {
+  initialModelRoute,
+  resolveRequestedModel,
+  routeModel,
+  type ModelRouteDecision,
+  type ModelRouteTrace,
+  type RequestedModelResolution,
+} from './generation/model-router';
+export { effectiveQueryParams } from './query/query-params';
 export type { DecomposedAnswerInput } from './generation/decomposed-answer';
 export type { AnswerStructure } from './generation/answer-structure';
 export {
@@ -905,6 +914,7 @@ export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './moni
 export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
 export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
 export { DRAIN_DEFAULT_BUDGET_MS, drainSlice, drainUntilEmpty } from './sync/drain';
+export { toStageRetrievalOverrides } from './v2/overrides';
 export type { DrainSliceOptions, DrainUntilEmptyOptions } from './sync/drain';
 export { RECONCILE_DEFAULT_BUDGET_MS, reconcileSlice } from './sync/reconcile';
 export type { ReconcileSliceOptions, ReconcileSliceResult } from './sync/reconcile';
@@ -950,6 +960,7 @@ export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
 export { getCentroidSnapshot, invalidateCentroidCache, refreshCentroidSnapshot, SCOPE_CENTROID_CACHE_TTL_MS } from './scope/centroids';
 export type { CentroidSnapshot, ScopeCentroid, ScopeGroupKind } from './scope/centroids';
 export { rebuildScopeCentroids, ScopeRebuildError } from './scope/build';
+export { scopeGateCalibrationView } from './scope/calibration';
 export type { ScopeRebuildCounts, ScopeRebuildOptions, ScopeRebuildResult } from './scope/build';
 export {
   addScopeExample,

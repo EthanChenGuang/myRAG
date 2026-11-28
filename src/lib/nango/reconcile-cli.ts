@@ -75,7 +75,9 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         });
         io.out(
             `${TAG} processed=${result.processed} removed=${result.removed} paused=${result.paused} incomplete=${result.incomplete} ` +
-                `failed=${result.failed} skipped=${result.skipped} overdue=${result.overdue}`
+                `failed=${result.failed} skipped=${result.skipped} overdue=${result.overdue} ` +
+                `purge_retried=${result.purgeRetried} purge_still_pending=${result.purgeStillPending} purge_rescrubbed=${result.purgeRescrubbed} ` +
+                `purge_skipped=${result.purgeSkipped} purge_failed=${result.purgeFailed}`
         );
         return 0;
     } catch (error) {

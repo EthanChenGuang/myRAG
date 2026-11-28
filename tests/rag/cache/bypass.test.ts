@@ -263,3 +263,30 @@ describe('version scope (D-14, D-47)', () => {
     expect(checkBypassReason(malformed)).toBe('invalid_facts');
   });
 });
+
+describe('W-1: request retrieval filters', () => {
+  const q = 'What does the sample widget report to the operator?';
+
+  it.each([
+    [{ dateRange: { from: '2026-01-01' } }],
+    [{ dateRange: { to: '2026-06-30' } }],
+    [{ sources: ['sample-source'] }],
+    [{ documentIds: ['00000000-0000-4000-8000-00000000d001'] }],
+    [{ docTypes: ['report'] }],
+    [{ languages: ['en'] }],
+    [{ invoice: { amountMin: 1 } }],
+    [{ scopes: ['area:alpha'] }],
+    [{ scopes: ['area:alpha'], scopesIncludeUntagged: true as const }],
+    [{ attributes: { area: ['alpha'] } }],
+  ])('bypasses check and store for %j', (retrievalFilters) => {
+    expect(checkBypassReason(facts(q, { retrievalFilters }))).toBe('retrieval_filters');
+    expect(storeBypassReason(storeFacts(q, { retrievalFilters }))).toBe('retrieval_filters');
+  });
+
+  it('absent, empty or only a version scope (handled by version_scope) keeps today\'s result', () => {
+    for (const retrievalFilters of [undefined, {}, { versionScope: 'all' as const }, { sources: [] }, { attributes: {} }, { invoice: {} }]) {
+      expect(checkBypassReason(facts(q, { retrievalFilters }))).toBeNull();
+      expect(storeBypassReason(storeFacts(q, { retrievalFilters }))).toBeNull();
+    }
+  });
+});

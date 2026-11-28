@@ -1,0 +1,9 @@
+{
+  "name": "q62-scope-score",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "true",
+    "RAG_SCOPE_GATE": "true"
+  },
+  "overrides": null
+}

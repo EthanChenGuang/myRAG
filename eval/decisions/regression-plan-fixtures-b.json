@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "stage": "b",
+  "split": "test",
+  "primary_metric": "recall_at_10+correct_refusal_rate",
+  "configs": [
+    {
+      "name": "b.incumbent",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "auto",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "false",
+        "RAG_INJECTION_CHECK": "off",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536"
+      }
+    },
+    {
+      "name": "b.pgvector.c1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "b.weaviate.c1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "weaviate",
+        "embedding_profile": "openai-3-small-1536",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "b.qdrant.c1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "qdrant",
+        "embedding_profile": "openai-3-small-1536",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "b.pgvector.c2",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "b.weaviate.c2",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "weaviate",
+        "embedding_profile": "bge-m3-1024",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "b.qdrant.c2",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "qdrant",
+        "embedding_profile": "bge-m3-1024",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "ablate.rag_pipeline",
+      "env": {
+        "RAG_PIPELINE": "legacy"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_lexical_search",
+      "env": {
+        "RAG_LEXICAL_SEARCH": "false"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_refusal_threshold",
+      "env": {
+        "RAG_REFUSAL_THRESHOLD": "false"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_context_edge_order",
+      "env": {
+        "RAG_CONTEXT_EDGE_ORDER": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_context_compression",
+      "env": {
+        "RAG_CONTEXT_COMPRESSION": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_parent_child",
+      "env": {
+        "RAG_PARENT_CHILD": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_hnsw_iterative_scan",
+      "env": {
+        "RAG_HNSW_ITERATIVE_SCAN": "relaxed_order"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_lexical_translation",
+      "env": {
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_LEXICAL_TRANSLATION": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_query_layer",
+      "env": {
+        "RAG_QUERY_LAYER": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_query_framework",
+      "env": {
+        "RAG_QUERY_LAYER": "true",
+        "RAG_QUERY_FRAMEWORK": "langchain"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_query_hyde",
+      "env": {
+        "RAG_QUERY_LAYER": "true",
+        "RAG_QUERY_HYDE": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_citations",
+      "env": {
+        "RAG_CITATIONS": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_groundedness",
+      "env": {
+        "RAG_GROUNDEDNESS": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_context_tagging",
+      "env": {
+        "RAG_CONTEXT_TAGGING": "true"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_injection_check",
+      "env": {
+        "RAG_INJECTION_CHECK": "drop"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_ingest_pipeline",
+      "env": {
+        "RAG_INGEST_PIPELINE": "unified"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "ablate.rag_embedding_profiles",
+      "env": {
+        "RAG_EMBEDDING_PROFILES": "on"
+      },
+      "overrides": {}
+    },
+    {
+      "name": "confirm",
+      "env": {},
+      "overrides": {}
+    }
+  ],
+  "incumbent_config": "b.incumbent",
+  "gated_slice_prefixes": [
+    "overall",
+    "language:",
+    "category:",
+    "pair:"
+  ],
+  "alpha": 0.05,
+  "min_gate_n": 10,
+  "test_split_budget": 25,
+  "created_at": "2026-11-28T01:40:17Z"
+}

@@ -5,6 +5,7 @@ import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
 import { syncDocumentsForConnection } from '@/lib/nango/sync-manager';
 import { isSharePointBlocked, isSharePointProvider, sharePointIntegrationKey } from '@/lib/nango/sharepoint/config';
 import { parseSourceScope, type DriveSelection } from '@/lib/nango/sharepoint/scope';
+import { cardReconcileStates } from '@/lib/nango/source-sync-admin';
 import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
@@ -88,11 +89,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // D-26: the read-only reconcile state of the card; left out when the runs cannot be read.
+    const reconcileStates = connections && connections.length > 0
+      ? await cardReconcileStates(connections, { admin: supabaseAdmin })
+      : null;
+
     // Map Nango connection status to our records
-    const enrichedConnections = connections?.map((conn: { connection_id: string }) => ({
-      ...conn,
-      is_valid: validConnectionIds.has(conn.connection_id),
-    })) || [];
+    const enrichedConnections = connections?.map((conn: { id?: unknown; connection_id: string }) => {
+      const reconcileState = typeof conn.id === 'string' ? reconcileStates?.get(conn.id) : undefined;
+      return {
+        ...conn,
+        is_valid: validConnectionIds.has(conn.connection_id),
+        ...(reconcileState !== undefined ? { reconcile_state: reconcileState } : {}),
+      };
+    }) || [];
 
     return NextResponse.json({
       connections: enrichedConnections,

@@ -1,4 +1,5 @@
 import hashlib
+import json
 
 import pytest
 from rag_sidecar.contracts.finetune import DatasetManifest, ExportedChunk
@@ -285,6 +286,24 @@ def test_filter_report_counts_every_reason_and_language_and_writes_kept_files(tm
     manifest = bundle.read_manifest(run_dir)
     assert manifest.files[filters.KEPT_FILE] == bundle.sha256_file(run_dir / filters.KEPT_FILE)
     assert manifest.files[filters.TEST_KEPT_FILE] == bundle.sha256_file(run_dir / filters.TEST_KEPT_FILE)
+
+
+def test_filter_report_breaks_each_drop_reason_down_by_language(tmp_path):
+    from rag_sidecar.contracts.finetune import FilterReport
+
+    run_dir, _, _ = _filter_bundle(tmp_path)
+    filters.run_filter(run_dir, budget_usd=1.0, llm=_fake([]), config=_priced())
+    raw = json.loads((run_dir / filters.REPORT_FILE).read_text())
+    cross = raw.get("dropped_by_language")
+    assert isinstance(cross, dict), "FilterReport has no dropped_by_language"
+    report = FilterReport.model_validate(raw)
+    assert set(cross) == set(report.by_language)
+    for language, reasons in cross.items():
+        assert set(reasons) == set(report.dropped)
+        assert sum(reasons.values()) == report.by_language[language].dropped
+    for reason, total in report.dropped.items():
+        assert sum(cross[language][reason] for language in cross) == total
+    assert sum(v for v in cross["zh"].values()) == 1 and sum(v for v in cross["it"].values()) == 1
 
 
 def test_filter_stdout_and_report_contain_no_query_or_chunk_text(tmp_path, capsys):

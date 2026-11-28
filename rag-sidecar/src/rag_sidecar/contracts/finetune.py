@@ -25,6 +25,12 @@ PROBE_TEXTS: tuple[str, str, str] = (
     "探针句二：用于核对向量接口的一句中性短文。",
     "Frase di prova tre: una breve frase neutra per verificare l'endpoint dei vettori.",
 )
+ProbeRole = Literal["query", "document"]
+# The prompt each probe text is embedded with, by training and by the slot provider's probe check (D-24): the first and third as
+# queries, the second as a document, so a drift of either serving prompt fails the probe. The one definition; the TypeScript side
+# reads it from the generated ProbeSet schema.
+PROBE_ROLES: tuple[ProbeRole, ProbeRole, ProbeRole] = ("query", "document", "query")
+_ProbeRoles = tuple[tuple(Literal[role] for role in PROBE_ROLES)]  # type: ignore[misc]
 
 SHA256_PATTERN = r"^[a-f0-9]{64}$"
 REVISION_PATTERN = r"^[a-f0-9]{40}$"
@@ -376,8 +382,24 @@ class FilterReport(_Contract):
     kept: Count
     dropped: dict[DropReason, Count]
     by_language: dict[Language, LanguageFilterCounts]
+    # Each drop reason per query language; it sums to `dropped` per reason and to `by_language[...].dropped` per language.
+    dropped_by_language: dict[Language, dict[DropReason, Count]]
     round_trip: Literal["not_applied"]
     judge_skipped: bool
+
+    @model_validator(mode="after")
+    def _cross_tab(self) -> "FilterReport":
+        if not set(self.dropped_by_language) <= set(self.by_language):
+            raise ValueError("dropped_by_language names a language that by_language does not")
+        for language, reasons in self.dropped_by_language.items():
+            if sum(reasons.values()) != self.by_language[language].dropped:
+                raise ValueError(f"dropped_by_language[{language}] does not sum to by_language[{language}].dropped")
+        reasons_seen = {reason for reasons in self.dropped_by_language.values() for reason in reasons} | set(self.dropped)
+        for reason in reasons_seen:
+            total = sum(reasons.get(reason, 0) for reasons in self.dropped_by_language.values())
+            if total != self.dropped.get(reason, 0):
+                raise ValueError(f"dropped_by_language does not sum to dropped[{reason}]")
+        return self
 
 
 # --- pairs and mining ----------------------------------------------------------------------------------------
@@ -541,6 +563,7 @@ class OfflineEvalReport(_Contract):
 
 class ProbeSet(_Contract):
     texts: list[str] = Field(min_length=3, max_length=3)
+    roles: _ProbeRoles  # type: ignore[valid-type]
     query_prompt: str = Field(max_length=1024)
     document_prompt: str = Field(max_length=1024)
     vectors: list[list[float]] = Field(min_length=3, max_length=3)

@@ -211,12 +211,16 @@ export type RerankerSetting = RerankerKind | 'auto';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
 export type LexicalScoringMode = 'ts_rank_cd' | 'bm25';
+/** D-44: raw counts every chunk in BM25 document frequency; cluster counts a duplicate cluster once (corpus chunks_cluster). */
+export type LexicalDfMode = 'raw' | 'cluster';
 export interface LexicalScoringConfig {
   mode: LexicalScoringMode;
   k1: number;
   b: number;
+  /** Effective: cluster only with bm25 effective and RAG_DUP_CLUSTERS on (D-45). */
+  dfMode: LexicalDfMode;
 }
-export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75 });
+export const LEXICAL_SCORING_DEFAULTS: Readonly<LexicalScoringConfig> = Object.freeze({ mode: 'ts_rank_cd', k1: 1.2, b: 0.75, dfMode: 'raw' });
 export type BgeM3Serving = 'hosted' | 'sidecar';
 /** Which OpenAI-compatible host answers hosted BGE-M3 calls; openrouter pins its upstream to DeepInfra. */
 export type BgeM3Via = 'deepinfra' | 'openrouter';
@@ -395,6 +399,7 @@ export interface RagEnvInput {
   RAG_LEXICAL_SCORING?: string;
   RAG_LEXICAL_BM25_K1?: string;
   RAG_LEXICAL_BM25_B?: string;
+  RAG_LEXICAL_DF_MODE?: string;
   RAG_VERSION_SCOPE?: string;
   RAG_EMBED_VERSION_SCOPE?: string;
   RAG_TABLE_LOOKUP?: string;
@@ -739,9 +744,28 @@ function parseLexicalScoring(env: RagEnvInput, pipeline: 'legacy' | 'v2', lexica
       RAG_PIPELINE: pipeline,
       RAG_LEXICAL_SEARCH: lexicalSearch ? 'true' : 'false',
     });
-    return { mode: 'ts_rank_cd', k1, b };
+    return { mode: 'ts_rank_cd', k1, b, dfMode: 'raw' };
   }
-  return { mode: requested, k1, b };
+  return { mode: requested, k1, b, dfMode: 'raw' };
+}
+
+/** D-44, D-45: an invalid value is raw; cluster needs bm25 as the effective scoring and RAG_DUP_CLUSTERS on, otherwise raw. */
+function parseLexicalDfMode(env: RagEnvInput, scoring: LexicalScoringMode, dupClusters: boolean, warnings: string[]): LexicalDfMode {
+  const requested = parseNamedChoice<LexicalDfMode>('RAG_LEXICAL_DF_MODE', env.RAG_LEXICAL_DF_MODE, ['raw', 'cluster'], 'raw', warnings);
+  if (requested !== 'cluster') return 'raw';
+  if (scoring !== 'bm25') {
+    problem(warnings, 'lexical-df-mode-needs-bm25', 'RAG_LEXICAL_DF_MODE=cluster needs RAG_LEXICAL_SCORING=bm25 to be effective; using raw', {
+      RAG_LEXICAL_SCORING: scoring,
+    });
+    return 'raw';
+  }
+  if (!dupClusters) {
+    problem(warnings, 'lexical-df-mode-needs-dup-clusters', 'RAG_LEXICAL_DF_MODE=cluster needs RAG_DUP_CLUSTERS=true; using raw', {
+      RAG_DUP_CLUSTERS: 'false',
+    });
+    return 'raw';
+  }
+  return 'cluster';
 }
 
 function parseOnOff(raw: string | undefined, name: string, warnings: string[]): boolean {
@@ -1307,6 +1331,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_LEXICAL_SCORING ?? '',
     env.RAG_LEXICAL_BM25_K1 ?? '',
     env.RAG_LEXICAL_BM25_B ?? '',
+    env.RAG_LEXICAL_DF_MODE ?? '',
     env.RAG_VERSION_SCOPE ?? '',
     env.RAG_EMBED_VERSION_SCOPE ?? '',
     env.RAG_TABLE_LOOKUP ?? '',
@@ -1452,6 +1477,8 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     ...parseTuningSwitches(env, lexicalSearch, warnings),
     attributeFilter: parseAttributeFilter(env, pipeline, docAttributes, warnings),
   };
+
+  v2.lexicalScoring.dfMode = parseLexicalDfMode(env, v2.lexicalScoring.mode, v2.dupClusters, warnings);
 
   const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
   applyV2DisabledStages(v2, disabledStages);

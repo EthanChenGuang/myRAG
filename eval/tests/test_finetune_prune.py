@@ -83,19 +83,22 @@ def test_prune_old_bundle_loses_text_files_and_keeps_reports(tmp_path, capsys):
     assert SENTENCE not in out
 
 
-def test_prune_age_is_the_later_of_created_at_and_file_mtimes(tmp_path):
+def test_prune_age_counts_from_the_manifest_created_at_not_file_mtimes(tmp_path):
     run_dir = _bundle(tmp_path, "run-touched", age_days=40)
     recent = (NOW - timedelta(days=2)).timestamp()
-    os.utime(run_dir / "dev.jsonl", (recent, recent))
-    assert prune.run_prune(tmp_path, older_than_days=30, now=NOW).deleted == {}
-    assert (run_dir / "chunks.jsonl").is_file()
+    for path in run_dir.rglob("*"):
+        os.utime(path, (recent, recent))
+    assert prune.run_prune(tmp_path, older_than_days=30, now=NOW).deleted == {"run-touched": sorted(TEXT_FILES)}
+    assert not (run_dir / "chunks.jsonl").exists()
 
     other = _bundle(tmp_path / "second", "run-new-manifest", age_days=40)
     manifest = bundle.read_manifest(other)
     bundle.write_manifest(other, manifest.model_copy(update={"created_at": "2026-11-25T00:00:00Z"}))
     stamp = (NOW - timedelta(days=40)).timestamp()
-    os.utime(other / "manifest.json", (stamp, stamp))
+    for path in other.rglob("*"):
+        os.utime(path, (stamp, stamp))
     assert prune.run_prune(tmp_path / "second", older_than_days=30, now=NOW).deleted == {}
+    assert (other / "chunks.jsonl").is_file()
 
 
 def test_prune_tenant_removes_bundles_listing_it_regardless_of_age(tmp_path, capsys):

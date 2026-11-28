@@ -79,7 +79,10 @@ def _fixture_files():
     # 06.2-34: the twelve q62 documents of the isolated Phase 6.2 tenant and their manifest.
     q62 = sorted((FIXTURES / "q62-corpus").rglob("*.md")) + [FIXTURES / "q62-corpus" / "manifest.json"]
     assert len(q62) == 12 + 1
-    return corpus + ingest + parse_files + q62
+    # 06.2-41: the ten documents of the isolated dominant-language tenant (zh 8, en 1, it 1) and their manifest.
+    dominant = sorted((FIXTURES / "q62-dominant-corpus").rglob("*.md")) + [FIXTURES / "q62-dominant-corpus" / "manifest.json"]
+    assert len(dominant) == 10 + 1
+    return corpus + ingest + parse_files + q62 + dominant
 
 
 def test_fixture_text_has_only_reserved_phone_numbers():

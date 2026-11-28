@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { listConnectionFiles, removeOrphans, type ListableConnectionRow } from './sync-manager';
 import { connectionTenantKey, recordReconcileRun } from './source-deletions';
 import { raiseSourceAlert } from './source-alerts';
+import { rescrubRecentPurges, retryPendingPurgeObjects, type RescrubResult, type RetryPendingResult } from '@/lib/rag';
 
 type SupabaseAdmin = NonNullable<ReturnType<typeof getSupabaseAdmin>>;
 
@@ -28,6 +29,11 @@ export interface SourceReconcileDeps {
     admin?: SupabaseAdmin;
     /** The canary passes the fake connector; defaults to listConnectionFiles. */
     listFiles?: (connection: ReconcileConnectionRow) => Promise<{ fileIds: string[]; complete: boolean }>;
+    /** The purge follow-ups (D-15, C-10); default to the purge library. */
+    purge?: {
+        retry: (input: { limit?: number; signal: AbortSignal }) => Promise<RetryPendingResult>;
+        rescrub: (input: { signal: AbortSignal }) => Promise<RescrubResult>;
+    };
 }
 
 export interface SourceReconcileOptions {
@@ -56,6 +62,79 @@ export interface SourceReconcileResult {
     skipped: number;
     /** Overdue alerts raised (D-10, D-39). */
     overdue: number;
+    /** Pending purge objects (and cache invalidations) removed by this run's retry (D-15). */
+    purgeRetried: number;
+    /** Pending purge objects still waiting after the retry. */
+    purgeStillPending: number;
+    /** Chat messages scrubbed again for purges of the last 7 days (C-10). */
+    purgeRescrubbed: number;
+    /** Purge follow-up steps (retry, re-scrub) not run because the deadline passed or the run was aborted. */
+    purgeSkipped: number;
+    /** Purge follow-up steps that failed; the connection reconciliation still ran. */
+    purgeFailed: number;
+}
+
+/** Pending purge records retried per run (D-15). */
+const PURGE_RETRY_LIMIT = 50;
+
+function isAbortError(error: unknown): boolean {
+    const name = (error as { name?: unknown } | null)?.name;
+    return name === 'AbortError' || name === 'TimeoutError';
+}
+
+/**
+ * The purge follow-ups at the start of a run (D-15, C-10): re-scrub recent purges, then retry pending objects, so the
+ * check the retry stores sees the scrubbed chats. Each step gets at most half the time left, so the connection loop
+ * keeps its share; a step with no time left is skipped and counted.
+ */
+async function runPurgeFollowUps(
+    purge: NonNullable<SourceReconcileDeps['purge']>,
+    now: () => number,
+    deadlineAt: number,
+    outer: AbortSignal | undefined,
+    result: SourceReconcileResult
+): Promise<void> {
+    const steps: Array<(signal: AbortSignal) => Promise<void>> = [
+        async (signal) => {
+            const rescrubbed = await purge.rescrub({ signal });
+            if (!rescrubbed.ok) throw Object.assign(new Error('purge_rescrub_failed'), { code: rescrubbed.reason });
+            result.purgeRescrubbed += rescrubbed.scrubbed;
+        },
+        async (signal) => {
+            const retried = await purge.retry({ limit: PURGE_RETRY_LIMIT, signal });
+            if (!retried.ok) throw Object.assign(new Error('purge_retry_failed'), { code: retried.reason });
+            result.purgeRetried += retried.cleared;
+            result.purgeStillPending += retried.stillPending;
+        },
+    ];
+    for (const step of steps) {
+        const left = deadlineAt - now();
+        if (outer?.aborted || left <= 0) {
+            result.purgeSkipped += 1;
+            continue;
+        }
+        const timeout = AbortSignal.timeout(Math.max(1, Math.floor(left / 2)));
+        const signal = outer ? AbortSignal.any([outer, timeout]) : timeout;
+        try {
+            await step(signal);
+        } catch (error) {
+            if (isAbortError(error) || signal.aborted) {
+                result.purgeSkipped += 1;
+            } else {
+                result.purgeFailed += 1;
+                logger.warn(SOURCE_RECONCILE, 'Purge follow-up failed', { code: errorCode(error), error: error instanceof Error ? error.name : 'unknown' });
+            }
+        }
+    }
+    if (result.purgeRetried + result.purgeStillPending + result.purgeRescrubbed + result.purgeSkipped + result.purgeFailed > 0) {
+        logger.info(SOURCE_RECONCILE, 'Purge follow-ups', {
+            retried: result.purgeRetried,
+            stillPending: result.purgeStillPending,
+            rescrubbed: result.purgeRescrubbed,
+            skipped: result.purgeSkipped,
+            failed: result.purgeFailed,
+        });
+    }
 }
 
 /** A database read failed; the CLI exits 1 and the route answers 503. */
@@ -176,7 +255,28 @@ export async function runSourceReconcile(options: SourceReconcileOptions): Promi
         throw new SourceReconcileDatabaseError('admin_unavailable');
     }
     const listFiles = options.deps?.listFiles ?? listConnectionFiles;
-    const result: SourceReconcileResult = { processed: 0, removed: 0, paused: 0, incomplete: 0, failed: 0, skipped: 0, overdue: 0 };
+    const result: SourceReconcileResult = {
+        processed: 0,
+        removed: 0,
+        paused: 0,
+        incomplete: 0,
+        failed: 0,
+        skipped: 0,
+        overdue: 0,
+        purgeRetried: 0,
+        purgeStillPending: 0,
+        purgeRescrubbed: 0,
+        purgeSkipped: 0,
+        purgeFailed: 0,
+    };
+
+    await runPurgeFollowUps(
+        options.deps?.purge ?? { retry: retryPendingPurgeObjects, rescrub: rescrubRecentPurges },
+        now,
+        deadlineAt,
+        options.signal,
+        result
+    );
 
     const rows = await loadConnections(admin, options.connectionId);
     const due = dueConnections(rows, startedAt, configuredDays('RAG_SOURCE_RECONCILE_INTERVAL_DAYS'));

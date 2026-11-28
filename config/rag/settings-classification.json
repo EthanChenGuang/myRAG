@@ -451,6 +451,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_LEXICAL_DF_MODE",
+      "side": "query"
+    },
+    {
       "name": "RAG_LEXICAL_DICTIONARY",
       "side": "ingestion",
       "mechanism": "relex"
@@ -836,6 +840,10 @@
     },
     {
       "name": "RAG_SOURCE_OPEN_SIGNAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SOURCE_PURGE_DAILY_CAP",
       "side": "query"
     },
     {

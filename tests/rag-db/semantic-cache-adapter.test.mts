@@ -7,6 +7,9 @@ import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supab
 import { createPgvectorSemanticCache } from '@/lib/rag/cache/pgvector';
 import type { CacheQuery } from '@/lib/rag/cache/types';
 import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
+import type { AnswerGroundedness } from '@/lib/rag/generation/groundedness';
+
+type CachedAnswerFields = Omit<CachedAnswer, 'groundedness' | 'is_refusal'> & { groundedness: AnswerGroundedness; is_refusal: boolean };
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 
 const USER_B = '00000000-0000-4000-8000-0000000021b2';
@@ -49,8 +52,8 @@ function serviceRoleRpc(db: PGlite): RpcClient {
   };
 }
 
-function answer(text: string, overrides: Partial<CachedAnswer> = {}): CachedAnswer {
-  return {
+function answer(text: string, overrides: Partial<CachedAnswerFields> = {}): CachedAnswer {
+  const built: CachedAnswerFields = {
     answer_language: 'en',
     answer_text: text,
     created_at: '2026-11-25T00:00:00.000Z',
@@ -71,6 +74,7 @@ function answer(text: string, overrides: Partial<CachedAnswer> = {}): CachedAnsw
     trace_id: 'trace-placeholder',
     ...overrides,
   };
+  return built as CachedAnswer;
 }
 
 function query(scope: TenantScope, overrides: Partial<CacheQuery> = {}): CacheQuery {

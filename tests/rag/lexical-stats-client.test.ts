@@ -4,6 +4,7 @@ import {
   LEXSTATS_READY_TTL_MS,
   countReadyLexstatsTenants,
   dropLexstatsReady,
+  lexstatsReadiness,
   lexstatsReady,
   resetLexstatsCacheForTests,
 } from '@/lib/rag/lexical/stats';
@@ -141,5 +142,34 @@ describe('countReadyLexstatsTenants', () => {
   it('returns null on an error or a rejected call', async () => {
     await expect(countReadyLexstatsTenants(countClient({ count: null, error: { code: '42P01' } }).client as never)).resolves.toBeNull();
     await expect(countReadyLexstatsTenants(countClient(new Error('down')).client as never)).resolves.toBeNull();
+  });
+});
+
+describe('lexstatsReadiness (04.4-17, D-49)', () => {
+  it('reads cluster readiness from the same status answer: ready only with cluster_status ready and ready raw statistics', async () => {
+    const cases: Array<[Record<string, unknown> | null, { ready: boolean; clusterReady: boolean }]> = [
+      [{ state: 'ready', chunk_count: 3, cluster_status: 'ready' }, { ready: true, clusterReady: true }],
+      [{ state: 'ready', chunk_count: 3, cluster_status: 'building' }, { ready: true, clusterReady: false }],
+      [{ state: 'ready', chunk_count: 3 }, { ready: true, clusterReady: false }],
+      [{ state: 'building', chunk_count: 3, cluster_status: 'ready' }, { ready: false, clusterReady: false }],
+      [null, { ready: false, clusterReady: false }],
+    ];
+    for (const [data, want] of cases) {
+      resetLexstatsCacheForTests();
+      const { client, calls } = statusClient(() => ({ data, error: null }));
+      await expect(lexstatsReadiness(client, KEY_A, 1_000)).resolves.toEqual(want);
+      await expect(lexstatsReady(client, KEY_A, 1_001)).resolves.toBe(want.ready);
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  it('dropLexstatsReady forgets both answers', async () => {
+    let cluster = 'ready';
+    const { client, calls } = statusClient(() => ({ data: { state: 'ready', chunk_count: 3, cluster_status: cluster }, error: null }));
+    await expect(lexstatsReadiness(client, KEY_A, 1_000)).resolves.toEqual({ ready: true, clusterReady: true });
+    cluster = 'building';
+    dropLexstatsReady(KEY_A);
+    await expect(lexstatsReadiness(client, KEY_A, 1_001)).resolves.toEqual({ ready: true, clusterReady: false });
+    expect(calls).toHaveLength(2);
   });
 });

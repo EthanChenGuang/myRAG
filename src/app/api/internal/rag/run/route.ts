@@ -12,6 +12,12 @@ import {
   CORE_STAGES,
   countTokens,
   createCitationSession,
+  currentModelRoutingConfig,
+  effectiveQueryParams,
+  initialModelRoute,
+  resolveRequestedModel,
+  routeModel,
+  type ModelRouteTrace,
   createCitationRecheck,
   scheduleSecurityEvent,
   scopeAccessFilter,
@@ -98,6 +104,7 @@ import {
   PromptOrderError,
   type BudgetMessage,
   type PromptBudgetPlan,
+  toStageRetrievalOverrides,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -134,27 +141,7 @@ type RetrievalFiltersInput = NonNullable<RagRunRequest['options']>['retrieval_fi
 type RetrievalOverrides = NonNullable<StageOverrides['retrievalOverrides']>;
 
 function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): RetrievalOverrides | undefined {
-  if (!input) return undefined;
-  const out: RetrievalOverrides = {};
-  if (input.candidate_pool_size != null) out.candidatePoolSize = input.candidate_pool_size;
-  if (input.rerank_input_cap != null) out.rerankInputCap = input.rerank_input_cap;
-  if (input.final_top_k != null) out.finalTopK = input.final_top_k;
-  if (input.rrf_k != null) out.rrfK = input.rrf_k;
-  if (input.leg_weights != null) {
-    out.legWeights = {
-      dense: input.leg_weights.dense,
-      lexical: input.leg_weights.lexical,
-      exactId: input.leg_weights.exact_id,
-      ...(input.leg_weights.domain != null ? { domain: input.leg_weights.domain } : {}),
-    };
-  }
-  if (input.rerank_model != null) out.rerankModel = input.rerank_model;
-  if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
-    out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
-  }
-  if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
-  if (input.backend != null) out.backend = input.backend;
-  return Object.keys(out).length > 0 ? out : undefined;
+  return toStageRetrievalOverrides(input);
 }
 
 function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string, unknown> {
@@ -791,7 +778,14 @@ export async function POST(req: NextRequest) {
   const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
 
   try {
-    const generatorModel = includeAnswer && !voiceEntry ? resolveGeneratorModel(options?.generator_model) : null;
+    // Phase 6.2 D-19, D-20: a selected_model is resolved once here (auto never reaches a helper); without it the eval is unchanged
+    const modelRouting = includeAnswer && !voiceEntry && options?.selected_model ? currentModelRoutingConfig() : null;
+    const modelSelection = modelRouting
+      ? resolveRequestedModel(options?.selected_model, modelRouting, resolveGeneratorModel(options?.generator_model))
+      : null;
+    let modelRoute: ModelRouteTrace | null = modelSelection && modelRouting ? initialModelRoute(modelSelection, modelRouting) : null;
+    const generatorModel =
+      includeAnswer && !voiceEntry ? (modelSelection?.modelId ?? resolveGeneratorModel(options?.generator_model)) : null;
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
     // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
     const generationConfig = readGenerationConfig();
@@ -808,6 +802,9 @@ export async function POST(req: NextRequest) {
             config: { ...generationConfig, citations: true },
             facts: claudeFacts,
             ...(citationRecheck ? { recheck: citationRecheck } : {}),
+            ...(modelSelection?.routable && modelRouting
+              ? { routingCandidates: [modelRouting.fastModel, modelRouting.qualityModel] }
+              : {}),
           })
         : null;
     // Phase 5.2 D-07, D-64: the eval turn; with every 5.2 switch off it changes neither the prompt, the limit nor the answer
@@ -886,7 +883,11 @@ export async function POST(req: NextRequest) {
     const cacheOverride = !voiceEntry && cacheOverrideOn(options);
     const cacheContext: RetrievalCacheContext | undefined = cacheOverride
       ? {
-          generatorModel: generatorModel ?? resolveGeneratorModel(options?.generator_model),
+          // F-8: an Auto turn's key part is the selection and both routing ids; the routed model is unknown at check time
+          generatorModel:
+            modelSelection?.routable && modelRouting
+              ? `auto|${modelRouting.fastModel}|${modelRouting.qualityModel}`
+              : (generatorModel ?? resolveGeneratorModel(options?.generator_model)),
           systemPromptHash: hashSystemPromptTemplate(`${resolveEvalPromptTemplate()}\u0000citations:${citationSession?.strategy ?? 'none'}`),
           webSearch: false,
           mcpTools: false,
@@ -973,6 +974,22 @@ export async function POST(req: NextRequest) {
         // D-84: the request would not fit the window, so it is not sent; the eval records the structured error
         answerError = PROMPT_BUDGET_EXCEEDED;
       } else if (generatorModel !== null && !serverRefused) {
+        // Phase 6.2 D-20: a routable Auto turn is routed after retrieval and before generation; others keep the resolved model
+        let answerModel = generatorModel;
+        if (modelSelection?.routable && modelRouting) {
+          const decision = routeModel({
+            query,
+            classification,
+            plan: result.queryPlan,
+            contextTokens: countTokens(result.context),
+            params: effectiveQueryParams('eval', options?.query_params),
+            ids: modelRouting,
+          });
+          answerModel = decision.modelId;
+          modelRoute = { tier: decision.tier, rule: decision.rule, selection: 'auto' };
+          citationSession?.setFinalModel(answerModel);
+          console.log('[Model Routing]', { tier: decision.tier, rule: decision.rule });
+        }
         // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
         collector.markRequestStart(requestReceivedAt);
         await awaitPreGenerationDelay();
@@ -988,7 +1005,7 @@ export async function POST(req: NextRequest) {
           });
           if (decision.offer) {
             const canUseTools =
-              evalModelToolCapability(generatorModel) ?? turnCanUseTools({ provider: env.NEXT_PUBLIC_AI_PROVIDER, modelId: generatorModel });
+              evalModelToolCapability(answerModel) ?? turnCanUseTools({ provider: env.NEXT_PUBLIC_AI_PROVIDER, modelId: answerModel });
             calcMode = canUseTools ? 'tool' : 'trailing_block';
             claudeFacts.calculation = true;
             console.log('[Calc]', { offered: true, mode: calcMode, reason: decision.reason });
@@ -1021,7 +1038,7 @@ export async function POST(req: NextRequest) {
               (result.status === 'ok' || result.status === 'degraded') &&
               (result.blocks ?? []).some((block) => !block.isImage),
             userMaxTokens: false,
-            reasoning: generatorModel.includes('gpt-5'),
+            reasoning: answerModel.includes('gpt-5'),
             approvalContinuation: false,
           });
         }
@@ -1044,7 +1061,7 @@ export async function POST(req: NextRequest) {
         let budgetRequest: EvalBudgetInput | null = null;
         if (budgetPlan && budgetInput && answerTurn) {
           let plan = budgetPlan;
-          const reserve = answerTurn.maxOutputTokens(evalModelOutputLimit(generatorModel));
+          const reserve = answerTurn.maxOutputTokens(evalModelOutputLimit(answerModel));
           if (reserve > budgetInput.answerReserve) {
             budgetInput = { ...budgetInput, answerReserve: reserve };
             plan = planPromptBudget({ ...budgetInput, documentTarget: 0 });
@@ -1112,7 +1129,7 @@ export async function POST(req: NextRequest) {
               conversation: budgetConversation,
               context: result.context,
               ragMode,
-              generatorModel,
+              generatorModel: answerModel,
               decorateSystemPrompt,
               ...(answerLanguage ? { answerLanguage } : {}),
               ...(decomposedAnswer ? { decomposedAnswer } : {}),
@@ -1351,6 +1368,7 @@ export async function POST(req: NextRequest) {
         ...(result.scopeGate ? { scope_gate: result.scopeGate } : {}),
         ...(result.searchesCounted !== undefined ? { searches_counted: result.searchesCounted } : {}),
         ...(result.speculative ? { speculative: result.speculative } : {}),
+        ...(modelRoute ? { model_route: modelRoute } : {}),
         ...(result.sourceRecheck ? { stale_index_drop: result.sourceRecheck.dropped } : {}),
         ...(answerStructure ? { answer_structure: answerStructure } : {}),
         ...(injection ? { injection } : {}),

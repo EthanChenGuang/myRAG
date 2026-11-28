@@ -18,7 +18,17 @@ import { RunConfigError } from './run-config.mts';
 import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem, loadTemplatedFixtures, type TemplatedFixture } from './templated-fixtures.mts';
 import { phase33ProcessEnv, phase33SeedParts, seedTemplatedTenant } from './templated-seed.mts';
-import { isQ62Item, loadQ62IngestTenant, q62CorpusParts, type Q62Tenant } from './q62-fixtures.mts';
+import {
+  DOMINANT_LANGUAGE_TENANT,
+  dominantLanguageCorpusParts,
+  isDominantLanguageItem,
+  isQ62Item,
+  loadIsolatedIngestTenant,
+  loadQ62IngestTenant,
+  q62CorpusParts,
+  type IsolatedFixtureTenant,
+  type Q62Tenant,
+} from './q62-fixtures.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IngestInput } from '@/lib/rag/ingest/types';
@@ -146,15 +156,18 @@ export function ingestModeGoldenPaths(): string[] {
  * How golden items are routed by category: table_split items run against their isolated tenants (table-split.mts) and q62 items
  * (scoped_compound, glossary, version_compare, or tagged off_domain) against the isolated q62 tenant (q62-fixtures.mts), both after
  * every other item, so the other items run exactly as they did before those documents existed (research Pitfall 10, 6.2 P-25).
+ * Items tagged dominant_language run last, against the dominant-language tenant only (plan 06.2-41).
  */
 export function partitionIngestModeItems<T extends { category: string; tags?: readonly string[] | null }>(
   items: T[],
-): { main: T[]; tableSplit: T[]; templated: T[]; q62: T[] } {
+): { main: T[]; tableSplit: T[]; templated: T[]; q62: T[]; dominantLanguage: T[] } {
+  const dominant = (item: T) => !isTableSplitItem(item) && isDominantLanguageItem(item);
   return {
-    main: items.filter((item) => !isTableSplitItem(item) && !isQ62Item(item)),
+    main: items.filter((item) => !isTableSplitItem(item) && !isQ62Item(item) && !dominant(item)),
     tableSplit: items.filter((item) => isTableSplitItem(item)),
     templated: items.filter((item) => isTemplatedItem(item)),
-    q62: items.filter((item) => !isTableSplitItem(item) && isQ62Item(item)),
+    q62: items.filter((item) => !isTableSplitItem(item) && isQ62Item(item) && !dominant(item)),
+    dominantLanguage: items.filter(dominant),
   };
 }
 
@@ -193,6 +206,7 @@ function ingestCorpusSha256(
   templated: TemplatedFixture[] = [],
   seedParts: readonly string[] = [],
   q62 = false,
+  dominantLanguage = false,
 ): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
@@ -203,6 +217,7 @@ function ingestCorpusSha256(
   for (const name of Object.keys(ingestEnv ?? {}).sort()) hash.update(Buffer.from([0])).update(`ingest_env:${name}=${ingestEnv?.[name]}`);
   for (const part of seedParts) hash.update(Buffer.from([0])).update(part);
   if (q62) for (const part of q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
+  if (dominantLanguage) for (const part of dominantLanguageCorpusParts()) hash.update(Buffer.from([0])).update(part);
   return hash.digest('hex');
 }
 
@@ -441,17 +456,25 @@ export async function buildIngestFixtureDatabase(options: {
   templatedFixtureIds?: string[];
   /** After the fixture tenant is filled, load the Phase 6.2 documents into the isolated q62 tenant (q62-fixtures.mts); inline only. */
   q62?: boolean;
+  /** After the fixture tenant is filled, load the dominant-language tenant (q62-fixtures.mts, plan 06.2-41); inline only. */
+  dominantLanguage?: boolean;
 }): Promise<
   FixtureDatabase & {
     buildState: IngestFixtureBuildState;
     routingSummary?: IngestRoutingSummary;
     tableSplitTenants?: TableSplitTenant[];
     q62Tenant?: Q62Tenant;
+    dominantLanguageTenant?: IsolatedFixtureTenant;
   }
 > {
   const { deploymentMode, routing } = options;
   const tableSplit = options.tableSplit === true;
   const q62 = options.q62 === true;
+  const dominantLanguage = options.dominantLanguage === true;
+  if (dominantLanguage && routing) throw new Error('[Ingest Mode] the dominant-language tenant is loaded by inline ingest(); drop its items under --routing');
+  if (dominantLanguage && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
+    throw new Error('[Ingest Mode] the dominant-language tenant is loaded only by a build in one pass');
+  }
   if (q62 && routing) throw new Error('[Ingest Mode] the q62 tenant is loaded by inline ingest(); drop its items under --routing');
   if (q62 && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
     throw new Error('[Ingest Mode] the q62 tenant is loaded only by a build in one pass');
@@ -509,6 +532,7 @@ export async function buildIngestFixtureDatabase(options: {
     templatedFixtures,
     seedParts,
     q62,
+    dominantLanguage,
   );
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
@@ -532,6 +556,7 @@ export async function buildIngestFixtureDatabase(options: {
   let routingSummary: IngestRoutingSummary | undefined;
   let tableSplitTenants: TableSplitTenant[] | undefined;
   let q62Tenant: Q62Tenant | undefined;
+  let dominantLanguageTenant: IsolatedFixtureTenant | undefined;
   const harnessEnv: Record<string, string> = {
     RAG_INGEST_PIPELINE: 'unified',
     RAG_PARSER: 'llamaparse',
@@ -756,6 +781,21 @@ export async function buildIngestFixtureDatabase(options: {
       if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the q62 tenant reached LlamaParse');
     }
 
+    if (dominantLanguage) {
+      dominantLanguageTenant = await loadIsolatedIngestTenant(DOMINANT_LANGUAGE_TENANT, {
+        edge,
+        homeDb: empty.db,
+        deploymentMode,
+        createDatabase: createIngestDatabase,
+        ingest,
+        buildSourceKey,
+        mintScope,
+        scopeKey,
+        seedTerminology,
+      });
+      if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the dominant-language tenant reached LlamaParse');
+    }
+
     if (edge.errors.length > 0) {
       const sample = edge.errors
         .slice(0, 3)
@@ -766,6 +806,7 @@ export async function buildIngestFixtureDatabase(options: {
   } catch (error) {
     for (const tenant of tableSplitTenants ?? []) await tenant.db.close().catch(() => undefined);
     await q62Tenant?.db.close().catch(() => undefined);
+    await dominantLanguageTenant?.db.close().catch(() => undefined);
     await runCleanups(cleanups);
     await uninstall?.().catch(() => undefined);
     uninstall = undefined;
@@ -792,6 +833,7 @@ export async function buildIngestFixtureDatabase(options: {
     ...(routingSummary ? { routingSummary } : {}),
     ...(tableSplitTenants ? { tableSplitTenants } : {}),
     ...(q62Tenant ? { q62Tenant } : {}),
+    ...(dominantLanguageTenant ? { dominantLanguageTenant } : {}),
   };
 }
 

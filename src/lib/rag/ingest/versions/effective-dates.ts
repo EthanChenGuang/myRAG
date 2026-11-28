@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { getRagDeps } from '../../deps';
 import { getIngestDeps } from '../deps';
+import { scheduleRedisvlInvalidation } from '../../cache/emit';
 
 /**
  * Effective dates (DATA-20, D-43, D-50). The dates are a filter column only: setting them copies them to the chunks and clears the
@@ -353,6 +354,7 @@ export async function applyEffectiveDates(
   const id = row ? text(row, 'document_id') : null;
   if (!row || id === null || text(row, 'outcome') !== 'set') return { ok: false, reason: 'unavailable' };
   console.log('[RAG Admin] effective dates set', { documentId: id, chunks: numberOf(row.chunks_updated) ?? 0 });
+  scheduleRedisvlInvalidation(input.tenantKey, [id]);
   const saved = { ok: true as const, documentId: id, effectiveFrom: dateOf(row.effective_from), effectiveTo: dateOf(row.effective_to), origin: 'admin' as const };
   if (label === undefined) return saved;
   const labelled = await setVersionLabel(documentId, input.tenantKey, label, input.signal);
@@ -461,7 +463,9 @@ export async function recordExtractedEffectiveDates(input: {
     if (!result.ok) return result;
     const outcome = result.rows[0] ? text(result.rows[0], 'outcome') : null;
     if (outcome === 'kept_admin') return { ok: true, decision: 'keep_admin', outcome: 'kept_admin' };
-    return outcome === 'set' ? { ok: true, decision, outcome: 'applied' } : { ok: false, reason: 'unavailable' };
+    if (outcome !== 'set') return { ok: false, reason: 'unavailable' };
+    scheduleRedisvlInvalidation(input.tenantKey, [documentId]);
+    return { ok: true, decision, outcome: 'applied' };
   }
 
   const quote = typeof input.proposal.evidenceQuote === 'string' ? input.proposal.evidenceQuote.slice(0, MAX_EVIDENCE_LENGTH) : null;

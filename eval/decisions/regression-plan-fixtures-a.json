@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "stage": "a",
+  "split": "dev",
+  "primary_metric": "recall_at_10+correct_refusal_rate",
+  "configs": [
+    {
+      "name": "a.openai-3-small-1536.none",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "none",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536"
+      }
+    },
+    {
+      "name": "a.openai-3-small-1536.local_bm25",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "local_bm25",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536"
+      }
+    },
+    {
+      "name": "a.openai-3-small-1536.auto",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "auto",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536"
+      }
+    },
+    {
+      "name": "a.openai-3-small-1536.cohere-fake-quality-v1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "a.bge-m3-1024.none",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "none",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024"
+      }
+    },
+    {
+      "name": "a.bge-m3-1024.local_bm25",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "local_bm25",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024"
+      }
+    },
+    {
+      "name": "a.bge-m3-1024.auto",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "auto",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024"
+      }
+    },
+    {
+      "name": "a.bge-m3-1024.cohere-fake-quality-v1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024",
+        "rerank_model": "fake-quality-v1"
+      }
+    }
+  ],
+  "incumbent_config": "a.openai-3-small-1536.auto",
+  "gated_slice_prefixes": [
+    "overall",
+    "language:",
+    "category:",
+    "pair:"
+  ],
+  "alpha": 0.05,
+  "min_gate_n": 10,
+  "test_split_budget": 0,
+  "created_at": "2026-11-28T01:12:11Z"
+}

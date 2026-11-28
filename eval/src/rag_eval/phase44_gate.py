@@ -35,14 +35,17 @@ from rag_eval.phase_compare import (
     LatencyBudgetSpec,
     RunOutput,
     RunRequest,
+    SliceGateRule,
     _Model,
     _read_model,
     _write_text,
     default_command_runner,
     default_runner,
+    is_below_min_n,
     latency_budget_check,
     materialise_run_config,
     paired_all_zero_check,
+    with_min_gate_n,
 )
 from rag_eval.phase_compare import RunSpec as CompareRunSpec
 
@@ -135,6 +138,7 @@ class Phase44GateSpec(_Model):
     report_only: list[ReportOnlyPair] = Field(default_factory=list)
     commands: dict[str, list[str]] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
+    no_slice_drop_rule: SliceGateRule = Field(default_factory=SliceGateRule)
 
     @model_validator(mode="after")
     def _references(self) -> Phase44GateSpec:
@@ -220,6 +224,8 @@ class OverlapRow(_Model):
 
 class OverlapReport(_Model):
     schema_version: Literal[1] = 1
+    #: plan 04.4-18: written only by a run whose effective DF mode is cluster; absent for raw runs.
+    df_mode: Literal["cluster"] | None = None
     tenant_hash: str
     k: int = Field(ge=1)
     capped_candidate_limit: int = Field(ge=0)
@@ -253,6 +259,7 @@ class GateOutcome(_Model):
     runs: list[str]
     numbers: dict[str, Number] = Field(default_factory=dict)
     offenders: list[str] = Field(default_factory=list)
+    below_min_n: list[str] = Field(default_factory=list)
 
 
 class ReportOnlyOutcome(_Model):
@@ -317,7 +324,9 @@ def _latency(output: RunOutput, budgets: LatencyBudgets, profile: LatencyProfile
 
 
 def _outcome(name: str, decision: str, runs: list[str], numbers: dict[str, Number], offenders: list[str]) -> GateOutcome:
-    return GateOutcome(name=name, decision=decision, passed=not offenders, runs=runs, numbers=numbers, offenders=offenders)
+    gated = [line for line in offenders if not is_below_min_n(line)]
+    below = [line for line in offenders if is_below_min_n(line)]
+    return GateOutcome(name=name, decision=decision, passed=not gated, runs=runs, numbers=numbers, offenders=gated, below_min_n=below)
 
 
 def off_identity_gate(
@@ -368,11 +377,30 @@ def on_gate(gate: OnGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig, 
     return _outcome("on", gate.decision, runs, numbers, offenders)
 
 
-def cap_agreement_gate(gate: CapAgreementGate, overlaps: Mapping[str, OverlapReport]) -> GateOutcome:
+def expected_df_mode(config: Mapping[str, Any]) -> Literal["cluster"] | None:
+    """The DF mode a run's overlap file must carry: cluster only when the run config makes it effective (bm25 and RAG_DUP_CLUSTERS, D-45)."""
+    env = config.get("env") or {}
+    if env.get("RAG_LEXICAL_DF_MODE", "raw").strip().lower() != "cluster":
+        return None
+    if env.get("RAG_LEXICAL_SCORING", OFF_ENV["RAG_LEXICAL_SCORING"]).strip().lower() != BM25:
+        return None
+    if env.get("RAG_DUP_CLUSTERS", "false").strip().lower() != "true":
+        return None
+    return "cluster"
+
+
+def cap_agreement_gate(
+    gate: CapAgreementGate,
+    overlaps: Mapping[str, OverlapReport],
+    expected_df_modes: Mapping[str, Literal["cluster"] | None] | None = None,
+) -> GateOutcome:
     offenders: list[str] = []
     numbers: dict[str, Number] = {}
     for name in gate.runs:
         report = overlaps[name]
+        wanted = (expected_df_modes or {}).get(name)
+        if report.df_mode != wanted:
+            offenders.append(f"{name}: overlap measured with df_mode {report.df_mode or 'raw'}, the run serves {wanted or 'raw'}")
         numbers[f"{name}.mean_overlap_at_k"] = report.mean_overlap_at_k
         numbers[f"{name}.min_overlap_at_k"] = report.min_overlap_at_k
         numbers[f"{name}.measured"] = report.measured
@@ -418,7 +446,7 @@ def run_phase44_gates(
     if not isinstance(spec, Phase44GateSpec):
         spec = _read_model(Phase44GateSpec, str(spec), "gate spec")
     selected = _selection(only)
-    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    noise = with_min_gate_n(_read_model(NoiseConfig, spec.noise, "noise config"), spec.no_slice_drop_rule.min_gate_n)
     budgets = _read_model(LatencyBudgets, spec.budgets, "latency budgets")
     by_name = {run.name: run for run in spec.runs}
     needed = {name for gate in selected for name in runs_for(spec, gate)}
@@ -457,7 +485,7 @@ def run_phase44_gates(
         elif name == "on":
             gates.append(on_gate(g.on, outputs, noise, budgets, spec.budgets))
         elif name == "cap_agreement":
-            gates.append(cap_agreement_gate(g.cap_agreement, overlaps))
+            gates.append(cap_agreement_gate(g.cap_agreement, overlaps, {name: expected_df_mode(configs[name]) for name in g.cap_agreement.runs}))
     report_only = [report_only_pair(pair, outputs, noise) for pair in spec.report_only if pair.run in outputs and pair.reference in outputs]
     runs = [
         RunSummary(
@@ -514,6 +542,8 @@ def render_markdown(result: Phase44Gates) -> str:
             lines += ["", "| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(g.numbers.items()))]
         if g.offenders:
             lines += ["", "Offenders:", *(f"- {offender}" for offender in g.offenders)]
+        if g.below_min_n:
+            lines += ["", "Below min_gate_n (reported, not gated):", *(f"- {line}" for line in g.below_min_n)]
     if result.report_only:
         lines += ["", "## Report-only (not gated)"]
         for r in result.report_only:

@@ -35,7 +35,7 @@ import {
 // 06.1-17 Task 2: the slot never crosses tenants (D-28), and with RAG_FINETUNE=off nothing differs from a database without 065x (D-02).
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
-const FINETUNE_MIGRATION = /\/065\d_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FINETUNE_MIGRATION = /\/(065\d|0992)_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const VERSION = 'ft-neutral-canary-v1';
 const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
@@ -169,7 +169,7 @@ interface Observation {
 async function databaseWithoutFinetune(mode: DeploymentMode): Promise<PGlite> {
   const files = migrationFiles(mode);
   const kept = files.filter((file) => !FINETUNE_MIGRATION.test(`/${file}`));
-  assert.equal(files.length - kept.length, 4, 'migrations 0651-0654 are left out');
+  assert.equal(files.length - kept.length, 5, 'migrations 0651-0654 and the 0992 purge hook are left out');
   const { db } = await createEmptyFixtureDatabase({
     deploymentMode: mode,
     migrations: false,

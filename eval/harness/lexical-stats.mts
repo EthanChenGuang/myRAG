@@ -20,6 +20,9 @@ export interface TenantLexicalStats {
   state: string;
   chunk_count: number;
   clean: boolean;
+  /** Plan 04.4-18, cluster DF mode only: units counted in corpus chunks_cluster and rows of the unit ledger (numbers only). */
+  cluster_units?: number;
+  cluster_ledger_rows?: number;
 }
 
 function statusOf(value: unknown): Record<string, unknown> {
@@ -41,24 +44,43 @@ export async function fixtureTenantKeys(db: PGlite): Promise<string[]> {
   return rows.rows.map((row) => row.tenant_key);
 }
 
-/** Enable, rebuild and check every tenant; throws when a tenant does not end ready and clean. */
-export async function seedFixtureLexicalStats(db: PGlite, tenantKeys: readonly string[]): Promise<TenantLexicalStats[]> {
+/**
+ * Enable, rebuild and check every tenant; throws when a tenant does not end ready and clean. With `cluster` (plan 04.4-18, effective DF
+ * mode cluster) the tenant is also cluster-enabled (0905) before the rebuild, which then builds corpus chunks_cluster and the unit
+ * ledger; the check then covers both corpora and the cluster status must end ready.
+ */
+export async function seedFixtureLexicalStats(
+  db: PGlite,
+  tenantKeys: readonly string[],
+  options: { cluster?: boolean } = {},
+): Promise<TenantLexicalStats[]> {
   const out: TenantLexicalStats[] = [];
   for (const tenantKey of tenantKeys) {
     const report = await serviceRole(db, async (tx) => {
       await tx.query('SELECT public.rag_lexstats_enable($1)', [tenantKey]);
+      if (options.cluster) await tx.query('SELECT public.rag_lexstats_cluster_enable($1)', [tenantKey]);
       await tx.query('SELECT public.rag_lexstats_rebuild($1)', [tenantKey]);
       const status = statusOf((await tx.query<{ s: unknown }>('SELECT public.rag_lexstats_status($1) AS s', [tenantKey])).rows[0]?.s);
       const check = statusOf((await tx.query<{ c: unknown }>('SELECT public.rag_lexstats_check($1) AS c', [tenantKey])).rows[0]?.c);
-      return { status, check };
+      if (!options.cluster) return { status, check, cluster: null };
+      const units = await tx.query<{ n: number }>(
+        "SELECT COALESCE(sum(chunk_count), 0)::int AS n FROM public.rag_lexical_corpus WHERE tenant_key = $1 AND corpus = 'chunks_cluster'",
+        [tenantKey],
+      );
+      const ledger = await tx.query<{ n: number }>('SELECT count(*)::int AS n FROM public.rag_lexical_cluster_units WHERE tenant_key = $1', [tenantKey]);
+      return { status, check, cluster: { units: Number(units.rows[0]?.n ?? 0), ledger: Number(ledger.rows[0]?.n ?? 0) } };
     });
     const entry: TenantLexicalStats = {
       tenant_key: tenantKey,
       state: String(report.status.state ?? ''),
       chunk_count: Number(report.status.chunk_count ?? 0),
       clean: report.check.clean === true,
+      ...(report.cluster ? { cluster_units: report.cluster.units, cluster_ledger_rows: report.cluster.ledger } : {}),
     };
     if (entry.state !== 'ready' || !entry.clean) throw new Error(`[Fixture DB] lexical statistics did not end ready and clean (${entry.state || 'none'})`);
+    if (options.cluster && report.status.cluster_status !== 'ready') {
+      throw new Error(`[Fixture DB] cluster lexical statistics did not end ready (${String(report.status.cluster_status ?? 'none')})`);
+    }
     out.push(entry);
   }
   return out;
@@ -78,6 +100,8 @@ export interface OverlapRow {
 
 export interface OverlapReport {
   schema_version: 1;
+  /** Plan 04.4-18: present only for a run whose effective DF mode is cluster (both calls then send p_df_mode cluster). */
+  df_mode?: 'cluster';
   tenant_hash: string;
   k: number;
   capped_candidate_limit: number;
@@ -104,9 +128,18 @@ export async function fixtureOverlapAtK(
   tenantKey: string,
   questions: readonly OverlapQuestion[],
   k: number = OVERLAP_K,
-  options: { lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>; profileId?: string; tenantHash?: string; k1?: number; b?: number } = {},
+  options: {
+    lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>;
+    profileId?: string;
+    tenantHash?: string;
+    k1?: number;
+    b?: number;
+    /** Plan 04.4-18 (gate c): `cluster` scores both the capped and the uncapped call on corpus chunks_cluster. */
+    dfMode?: 'raw' | 'cluster';
+  } = {},
 ): Promise<OverlapReport> {
   const cap = bm25CandidateLimit(k);
+  const cluster = options.dfMode === 'cluster';
   const items: OverlapRow[] = [];
   for (const question of questions) {
     const tokens = queryLexicalTokens(question.question, options.lexicalOptionsFor ? await options.lexicalOptionsFor(question.question) : undefined);
@@ -116,7 +149,7 @@ export async function fixtureOverlapAtK(
     }
     const base = lexicalOnlyHybridArgs(tenantKey, options.profileId ?? LEGACY_PROFILE_ID, tokens, k);
     delete base.p_dense_limit;
-    const common = { ...base, p_k1: options.k1 ?? 1.2, p_b: options.b ?? 0.75 };
+    const common = { ...base, p_k1: options.k1 ?? 1.2, p_b: options.b ?? 0.75, ...(cluster ? { p_df_mode: 'cluster' } : {}) };
     const capped = await bm25Top(db, { ...common, p_candidate_limit: cap }, k);
     const uncapped = await bm25Top(db, { ...common, p_candidate_limit: 0 }, k);
     const kept = new Set(capped);
@@ -129,6 +162,7 @@ export async function fixtureOverlapAtK(
   const measured = items.map((row) => row.overlap).filter((value): value is number => value !== null);
   return {
     schema_version: 1,
+    ...(cluster ? { df_mode: 'cluster' as const } : {}),
     tenant_hash: options.tenantHash ?? '',
     k,
     capped_candidate_limit: cap,
@@ -266,7 +300,15 @@ export async function fixtureLexicalTies(
   questions: readonly TieQuestion[],
   categories: readonly string[],
   k: number = TIES_K,
-  options: { lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>; profileId?: string; tenantHash?: string; k1?: number; b?: number } = {},
+  options: {
+    lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>;
+    profileId?: string;
+    tenantHash?: string;
+    k1?: number;
+    b?: number;
+    /** Plan 04.4-18: `cluster` scores the bm25 arm on corpus chunks_cluster. */
+    dfMode?: 'raw' | 'cluster';
+  } = {},
 ): Promise<TieReport> {
   const wanted = new Set(categories);
   const items: TieRow[] = [];
@@ -279,7 +321,13 @@ export async function fixtureLexicalTies(
     const bmHits =
       tokens.length === 0
         ? []
-        : await scoredLexical(db, 'rag_bm25_search_chunks', { ...bm25Base, p_k1: options.k1 ?? 1.2, p_b: options.b ?? 0.75, p_candidate_limit: bm25CandidateLimit(k) }, k);
+        : await scoredLexical(db, 'rag_bm25_search_chunks', {
+              ...bm25Base,
+              p_k1: options.k1 ?? 1.2,
+              p_b: options.b ?? 0.75,
+              p_candidate_limit: bm25CandidateLimit(k),
+              ...(options.dfMode === 'cluster' ? { p_df_mode: 'cluster' } : {}),
+            }, k);
     items.push({ item_id: question.id, category: question.category, token_count: tokens.length, arms: { bm25: armTieStats(bmHits), ts_rank_cd: armTieStats(tsHits) } });
   }
   return { schema_version: 1, tenant_hash: options.tenantHash ?? '', k, near_duplicate_jaccard: NEAR_DUP_JACCARD, categories: [...categories], items };

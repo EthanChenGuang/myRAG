@@ -439,3 +439,119 @@ describe('pgvector backend with lexicalScoring and an access filter (04.3-03, 09
     for (const call of hybrid) expect(call.args.p_access_keys).toEqual(['all', GROUP]);
   });
 });
+
+describe('pgvector backend with lexicalScoring dfMode cluster (04.4-17, D-49)', () => {
+  const CLUSTER = { ...SCORING, dfMode: 'cluster' as const };
+  const CLUSTER_READY: Handler = () => ({ data: { state: 'ready', chunk_count: 10, pending: 0, cluster_status: 'ready' }, error: null });
+  const CLUSTER_BUILDING: Handler = () => ({ data: { state: 'ready', chunk_count: 10, pending: 0, cluster_status: 'building' }, error: null });
+  const { p_dense_limit: _d, p_iterative_scan: _i, p_exact_scan_cutoff: _e, ...BM25_BASE } = DEFAULT_ARGS;
+  const RAW_BM25_ARGS = { ...BM25_BASE, p_k1: 1.4, p_b: 0.6, p_candidate_limit: 500 };
+
+  it('raw (no dfMode): the BM25 arguments and the meta are those of today, even for a cluster-ready tenant', async () => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: CLUSTER_READY,
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0')], error: null }),
+      rag_bm25_search_chunks: () => ({ data: [row('lexical', 1, 'c1')], error: null }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: SCORING }));
+    expect(calls.find((call) => call.fn === 'rag_bm25_search_chunks')?.args).toEqual(RAW_BM25_ARGS);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25' });
+  });
+
+  it('cluster-ready tenant: the BM25 call carries p_df_mode cluster and the meta reports cluster', async () => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: CLUSTER_READY,
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0')], error: null }),
+      rag_bm25_search_chunks: () => ({ data: [row('lexical', 1, 'c1')], error: null }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(calls.map((call) => call.fn)).toEqual(['rag_lexstats_status', 'hybrid_search_chunks', 'rag_bm25_search_chunks']);
+    expect(calls[2]?.args).toEqual({ ...RAW_BM25_ARGS, p_df_mode: 'cluster' });
+    expect(legs.lexical.map((hit) => hit.chunkId)).toEqual(['c1']);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25', lexicalDfMode: 'cluster' });
+  });
+
+  it.each([
+    ['building', CLUSTER_BUILDING],
+    ['not enabled (no cluster keys)', READY],
+  ])('cluster statistics %s: raw BM25 without p_df_mode, meta cluster_unavailable, one status read', async (_name, status) => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: status,
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0')], error: null }),
+      rag_bm25_search_chunks: () => ({ data: [row('lexical', 1, 'c1')], error: null }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(calls.filter((call) => call.fn === 'rag_lexstats_status')).toHaveLength(1);
+    expect(calls.find((call) => call.fn === 'rag_bm25_search_chunks')?.args).toEqual(RAW_BM25_ARGS);
+    expect(legs.lexical.map((hit) => hit.chunkId)).toEqual(['c1']);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25', lexicalDfMode: 'cluster_unavailable' });
+  });
+
+  it('lexical_cluster_stats_not_ready: one retry without p_df_mode, meta cluster_unavailable, and the cache entry is refreshed', async () => {
+    let statusReads = 0;
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: () => {
+        statusReads += 1;
+        return statusReads === 1 ? CLUSTER_READY({}) : CLUSTER_BUILDING({});
+      },
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0')], error: null }),
+      rag_bm25_search_chunks: (args) =>
+        args.p_df_mode === 'cluster'
+          ? { data: null, error: { message: 'lexical_cluster_stats_not_ready: the tenant has no ready cluster statistics', code: '55000' } }
+          : { data: [row('lexical', 1, 'c4')], error: null },
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    const bm25Calls = calls.filter((call) => call.fn === 'rag_bm25_search_chunks');
+    expect(bm25Calls.map((call) => call.args)).toEqual([{ ...RAW_BM25_ARGS, p_df_mode: 'cluster' }, RAW_BM25_ARGS]);
+    expect(calls.filter((call) => call.fn === 'hybrid_search_chunks')).toHaveLength(1);
+    expect(legs.lexical.map((hit) => hit.chunkId)).toEqual(['c4']);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25', lexicalDfMode: 'cluster_unavailable' });
+    // The next request reads the status again and, now building, sends no p_df_mode.
+    await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(statusReads).toBe(2);
+    expect(calls.filter((call) => call.fn === 'rag_bm25_search_chunks').at(-1)?.args).toEqual(RAW_BM25_ARGS);
+  });
+
+  it('the raw retry failing too goes to the ts_rank_cd leg with bm25_failed and no DF code; never more than two BM25 calls', async () => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: CLUSTER_READY,
+      hybrid_search_chunks: (args) => ({ data: args.p_dense_limit === 0 ? [row('lexical', 1, 'c7')] : [row('dense', 1, 'c1')], error: null }),
+      rag_bm25_search_chunks: (args) =>
+        args.p_df_mode === 'cluster'
+          ? { data: null, error: { message: 'lexical_cluster_stats_not_ready', code: '55000' } }
+          : { data: null, error: { message: 'boom', code: 'XX000' } },
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(calls.filter((call) => call.fn === 'rag_bm25_search_chunks')).toHaveLength(2);
+    expect(legs.dense.map((hit) => hit.chunkId)).toEqual(['c1']);
+    expect(legs.lexical.map((hit) => hit.chunkId)).toEqual(['c7']);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25_failed' });
+  });
+
+  it.each([
+    ['raw statistics not ready', NOT_READY, 'stats_unavailable'],
+  ])('%s under cluster: today\'s ts_rank_cd leg and code, no DF code', async (_name, status, outcome) => {
+    const { client, calls } = fakeClient({ rag_lexstats_status: status, hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0'), row('lexical', 1, 'c2')], error: null }) });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(calls.map((call) => call.fn)).toEqual(['rag_lexstats_status', 'hybrid_search_chunks']);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: outcome });
+  });
+
+  it('another BM25 error on the cluster call: ts_rank_cd leg with bm25_failed, no retry and no DF code', async () => {
+    const { client, calls } = fakeClient({
+      rag_lexstats_status: CLUSTER_READY,
+      hybrid_search_chunks: () => ({ data: [row('dense', 1, 'c0')], error: null }),
+      rag_bm25_search_chunks: () => ({ data: null, error: { message: 'boom', code: 'XX000' } }),
+    });
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    const legs = await backend.search(baseRequest({ lexicalScoring: CLUSTER }));
+    expect(calls.filter((call) => call.fn === 'rag_bm25_search_chunks')).toHaveLength(1);
+    expect(legs.meta).toEqual({ denseMode: 'ann', lexicalScoring: 'bm25_failed' });
+  });
+});

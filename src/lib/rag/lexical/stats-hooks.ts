@@ -27,15 +27,20 @@ function logOnce(tenantKey: string, rpc: string, code: string): void {
   console.warn(`[Lexical Stats] ${hash} ${rpc} failed (${code}); the write is kept and the next publish, relex or rag:lexstats run catches up`);
 }
 
-async function scoringMode(config: Pick<RagConfig, 'v2'> | undefined): Promise<string> {
+async function lexicalScoring(config: Pick<RagConfig, 'v2'> | undefined): Promise<{ mode: string; dfMode: string }> {
   try {
-    if (config) return config.v2.lexicalScoring?.mode ?? 'ts_rank_cd';
     // Loaded on use: the fixture harness imports the write paths before the app environment is set.
-    const [{ loadRagConfig }, { getRagDeps }] = await Promise.all([import('../config'), import('../deps')]);
-    return loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring?.mode ?? 'ts_rank_cd';
+    const scoring = config
+      ? config.v2.lexicalScoring
+      : await Promise.all([import('../config'), import('../deps')]).then(([{ loadRagConfig }, { getRagDeps }]) => loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring);
+    return { mode: scoring?.mode ?? 'ts_rank_cd', dfMode: scoring?.dfMode ?? 'raw' };
   } catch {
-    return 'ts_rank_cd';
+    return { mode: 'ts_rank_cd', dfMode: 'raw' };
   }
+}
+
+async function scoringMode(config: Pick<RagConfig, 'v2'> | undefined): Promise<string> {
+  return (await lexicalScoring(config)).mode;
 }
 
 /**
@@ -97,6 +102,18 @@ export async function afterLexicalWrite(deps: LexicalWriteDeps, tenantKey: strin
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
+}
+
+/**
+ * D-48, D-49: after `npm run rag:dup-clusters` changed a tenant's clusters, and only while bm25 is effective with RAG_LEXICAL_DF_MODE=cluster,
+ * the same best-effort follow-up as a publish (enable when missing, one compaction batch, which reconciles the cluster markers). Returns
+ * whether it ran; never throws.
+ */
+export async function afterDupClusterWrite(deps: LexicalWriteDeps, tenantKey: string): Promise<boolean> {
+  const scoring = await lexicalScoring(deps.config);
+  if (scoring.mode !== 'bm25' || scoring.dfMode !== 'cluster') return false;
+  await afterLexicalWrite(deps, tenantKey);
+  return true;
 }
 
 export function resetLexicalWriteLogForTests(): void {

@@ -1,8 +1,8 @@
 """python -m rag_eval.finetune prune: retention for fine-tune bundles (FT-10; D-29, D-31).
 
 Bundles are the run directories directly under --root (default eval/out/finetune) that hold a valid manifest.json; other
-directories are left alone. A bundle is pruned when its last activity, the later of the manifest's created_at and the newest
-file mtime in the bundle, is more than --older-than-days ago (default finetune.json retention.retention_days, 30), or, with
+directories are left alone. A bundle is pruned when its manifest's created_at is more than --older-than-days ago (default
+finetune.json retention.retention_days, 30); reading or touching files does not extend it. Or, with
 --tenant <key>, whenever its manifest lists that tenant, whatever its age (D-29 revocation; bundles of other tenants only are
 untouched).
 
@@ -63,15 +63,9 @@ def _created_at(value: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def last_activity(run_dir: Path, created_at: str) -> datetime:
-    newest = _created_at(created_at)
-    for path in _files(run_dir):
-        try:
-            mtime = datetime.fromtimestamp(path.lstat().st_mtime, tz=UTC)
-        except OSError:
-            continue
-        newest = max(newest, mtime)
-    return newest
+def created_at(created: str) -> datetime:
+    """The bundle's age reference (W3): the manifest's created_at, never file mtimes."""
+    return _created_at(created)
 
 
 def prune_bundle(run_dir: Path) -> list[str]:
@@ -124,7 +118,7 @@ def run_prune(
         if tenant is not None:
             selected = tenant in manifest.tenant_keys
         else:
-            selected = last_activity(run_dir, manifest.created_at) < cutoff
+            selected = created_at(manifest.created_at) < cutoff
         if not selected:
             continue
         deleted = prune_bundle(run_dir)

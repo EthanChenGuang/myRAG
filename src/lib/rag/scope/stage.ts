@@ -11,6 +11,8 @@ export interface ScopeGateStageInput {
   /** The profile the query embeddings were made with; the snapshot and the calibration cell are read for it. */
   embeddingProfileId: string;
   ragMode: RagMode;
+  /** 06.2-26: true for the eval profile only; a fixture calibration decides nothing else. */
+  evalRun?: boolean;
   /** The variants the embed stage embedded, index-aligned with embeddings. */
   variants: readonly QueryVariant[];
   embeddings: readonly QueryEmbedding[];
@@ -43,7 +45,7 @@ export function runScopeGateStage(input: ScopeGateStageInput): ScopeGateResult {
   const scored = scoreScope({
     queryVectors: scoredVectors(input.variants, input.embeddings),
     snapshot,
-    cell: scopeGateCalibrationFor(input.embeddingProfileId, input.ragMode),
+    cell: scopeGateCalibrationFor(input.embeddingProfileId, input.ragMode, { evalRun: input.evalRun === true }),
     flags: { translateSkipped: translateSkipped(input.queryPlan) },
   });
   return { ...scored, latency_ms: Math.max(0, performance.now() - started) };

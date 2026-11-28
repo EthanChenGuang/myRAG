@@ -16,8 +16,19 @@ import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem } from './templated-fixtures.mts';
 import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
-import { closeQ62Tenant, isQ62Item, Q62_USER_ID, withQ62Tenant, type Q62Tenant } from './q62-fixtures.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import {
+  closeIsolatedTenant,
+  closeQ62Tenant,
+  DOMINANT_LANGUAGE_USER_ID,
+  isDominantLanguageItem,
+  isQ62Item,
+  Q62_USER_ID,
+  withIsolatedTenant,
+  withQ62Tenant,
+  type IsolatedFixtureTenant,
+  type Q62Tenant,
+} from './q62-fixtures.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedIngestDupClusters, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
@@ -28,8 +39,10 @@ import {
 } from './fake-citation-generator.mts';
 import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
 import { installFakeModelWindows } from './fake-small-window.mts';
+import { withGeneratorDelays } from './generator-delays.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
+import { PGVECTOR_SNAPSHOT, prepareExternalBackends, type ExternalBackendId, type PrepareExternalBackendsOptions } from './external-backends.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
@@ -58,6 +71,8 @@ export interface EvalRequestOptions {
   query_params?: NonNullable<RagRunRequest['options']>['query_params'];
   /** Phase 6.2 D-16: run each request through the voice entry point (retrieval only). */
   entry_profile?: 'voice';
+  /** Phase 6.2 D-19, D-20: the model selection (an id or auto) the eval route resolves and routes; absent keeps today's model. */
+  selected_model?: NonNullable<RagRunRequest['options']>['selected_model'];
 }
 
 /** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
@@ -131,6 +146,15 @@ export interface InProcessEval {
   tableSplitTenants?: TableSplitTenant[];
   /** Set when the session was prepared for q62 items (either fixture mode). */
   q62Tenant?: Q62Tenant;
+  /** Set when the session was prepared for dominant_language items (either fixture mode, plan 06.2-41). */
+  dominantLanguageTenant?: IsolatedFixtureTenant;
+  /**
+   * Drops the in-process per-tenant-key caches the isolated tenants would otherwise share with the main tenant (single-tenant mode keys
+   * every fixture database `s:default`): today the KB language shares that XLG-01 reads.
+   */
+  resetTenantCaches?: () => void;
+  /** Plan 06.2-26: set when RAG_SCOPE_GATE is effective; loads the served tenant's centroid snapshot before a request. */
+  primeScopeGate?: (userId: string | null) => Promise<void>;
   /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
   ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
@@ -139,6 +163,8 @@ export interface InProcessEval {
   fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
   /** D-36: set when the run's effective lexical scoring is bm25 and the fixture tenants' statistics were rebuilt. */
   lexicalStats?: import('./pglite-supabase.mts').RunLexicalStatsReport;
+  /** D-06: the backend the session serves and its index settings (pgvector unless an external backend was prepared). */
+  backendSnapshot?: import('./external-backends.mts').RunBackendSnapshot;
   close: () => Promise<void>;
 }
 
@@ -170,6 +196,8 @@ export interface RunEvalOptions {
   ingestBuildEnv?: Record<string, string>;
   /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
   retainInProcess?: InProcessEval;
+  /** Test seams for the external-backend seed (plan 07-25); never set by the CLI. */
+  externalBackendTestHooks?: Pick<PrepareExternalBackendsOptions, 'wrapStore' | 'indexStateForTests'>;
   /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
   runConfig?: RunConfig;
   /** Sets options.citations on every request; implies includeAnswer. */
@@ -385,6 +413,8 @@ export async function prepareInProcessEval(options: {
   tableSplitDocType?: string;
   /** Also load the isolated q62 tenant of the Phase 6.2 documents (q62-fixtures.mts), in either fixture mode. */
   q62?: boolean;
+  /** Also load the dominant-language tenant (q62-fixtures.mts, plan 06.2-41), in either fixture mode. */
+  dominantLanguage?: boolean;
   /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
@@ -394,6 +424,10 @@ export async function prepareInProcessEval(options: {
    * list seeds nothing. A caller-built ingestFixture is seeded only when it holds no layer of these rows yet.
    */
   terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
+  /** D-12, D-17: external backends the run's overrides select; seeded through the outbox and reconciled before the first request. */
+  externalBackends?: readonly ExternalBackendId[];
+  /** Test seams of prepareExternalBackends (writer recording, forced index state). */
+  externalBackendTestHooks?: Pick<PrepareExternalBackendsOptions, 'wrapStore' | 'indexStateForTests'>;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -418,6 +452,8 @@ export async function prepareInProcessEval(options: {
   }
   const q62 = options.q62 === true;
   if (q62 && ingestRouting) throw new Error('[Eval Harness] q62 items do not run under --routing');
+  const dominantLanguage = options.dominantLanguage === true;
+  if (dominantLanguage && ingestRouting) throw new Error('[Eval Harness] dominant_language items do not run under --routing');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -426,6 +462,7 @@ export async function prepareInProcessEval(options: {
       `user:${FIXTURE_USER_ID}`,
       ...(tableSplit && deploymentMode === 'multi-tenant' ? [`user:${TABLE_SPLIT_USER_ID}`] : []),
       ...(q62 && deploymentMode === 'multi-tenant' ? [`user:${Q62_USER_ID}`] : []),
+      ...(dominantLanguage && deploymentMode === 'multi-tenant' ? [`user:${DOMINANT_LANGUAGE_USER_ID}`] : []),
       ...allowedScopes,
     ].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
@@ -448,6 +485,7 @@ export async function prepareInProcessEval(options: {
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
       ...(terminologySeed.length ? { terminologySeed } : {}),
       ...(q62 ? { q62: true } : {}),
+      ...(dominantLanguage ? { dominantLanguage: true } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
@@ -459,6 +497,14 @@ export async function prepareInProcessEval(options: {
       await fixture.db.close().catch(() => undefined);
     }
     throw new Error('[Eval Harness] the fixture was built without the q62 tenant');
+  }
+  if (dominantLanguage && !fixture.dominantLanguageTenant) {
+    if (!ingestFixture) {
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await fixture.db.close().catch(() => undefined);
+    }
+    throw new Error('[Eval Harness] the fixture was built without the dominant-language tenant');
   }
   let edge: FakeEdge | undefined;
   try {
@@ -509,9 +555,53 @@ export async function prepareInProcessEval(options: {
           ),
         );
       }
+      const dominantTenant = fixture.dominantLanguageTenant;
+      if (dominantTenant) {
+        await withIsolatedTenant(startedEdge, fixture.db, dominantTenant, () =>
+          seedFixtureFeatures(
+            { db: dominantTenant.db, fixtureUserId: DOMINANT_LANGUAGE_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
     } catch (error) {
       if (ownsEdge) await startedEdge.close().catch(() => undefined);
       await closeQ62Tenant(fixture.q62Tenant);
+      await closeIsolatedTenant(fixture.dominantLanguageTenant);
+      await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  // Plan 04.4-18: the ingest mode clusters at ingestion only with RAG_DUP_CLUSTERS in its build env, which it leaves off; a run whose
+  // effective config turns the switch on gets the prechunked mode's rag:dup-clusters step on the database this build made.
+  if (!ingestFixture && fixtureMode === 'ingest') {
+    try {
+      const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+      await seedIngestDupClusters(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+      const q62Tenant = fixture.q62Tenant;
+      if (q62Tenant) {
+        await withQ62Tenant(startedEdge, fixture.db, q62Tenant, () =>
+          seedIngestDupClusters(
+            { db: q62Tenant.db, fixtureUserId: Q62_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
+      const dominantTenant = fixture.dominantLanguageTenant;
+      if (dominantTenant) {
+        await withIsolatedTenant(startedEdge, fixture.db, dominantTenant, () =>
+          seedIngestDupClusters(
+            { db: dominantTenant.db, fixtureUserId: DOMINANT_LANGUAGE_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await closeIsolatedTenant(fixture.dominantLanguageTenant);
       await fixture.db.close().catch(() => undefined);
       throw error;
     }
@@ -527,7 +617,61 @@ export async function prepareInProcessEval(options: {
     throw error;
   }
 
+  // Plan 06.2-26: the scope gate scores only against built centroids; nothing is built while RAG_SCOPE_GATE is off.
+  let scopeGateFixture: import('./scope-gate-fixture.mts').ScopeGateFixture | null = null;
+  try {
+    const { prepareScopeGateFixture } = await import('./scope-gate-fixture.mts');
+    scopeGateFixture = await prepareScopeGateFixture({
+      edge: startedEdge,
+      homeDb: fixture.db,
+      deploymentMode,
+      fixtureUserId: fixture.fixtureUserId,
+      isolated: [
+        ...(fixture.q62Tenant ? [{ name: 'q62', tenant: fixture.q62Tenant, userId: Q62_USER_ID }] : []),
+        ...(fixture.dominantLanguageTenant
+          ? [{ name: 'dominant_language', tenant: fixture.dominantLanguageTenant, userId: DOMINANT_LANGUAGE_USER_ID }]
+          : []),
+      ],
+    });
+    if (scopeGateFixture) console.log('[Eval Harness] scope gate centroids built', { tenants: scopeGateFixture.built });
+  } catch (error) {
+    if (ownsEdge) await startedEdge.close().catch(() => undefined);
+    await closeQ62Tenant(fixture.q62Tenant);
+    await closeIsolatedTenant(fixture.dominantLanguageTenant);
+    if (ownsDb) await fixture.db.close().catch(() => undefined);
+    throw error;
+  }
+
+  let externalBackends: Awaited<ReturnType<typeof prepareExternalBackends>> | null = null;
+  if (options.externalBackends?.length) {
+    try {
+      const { LEGACY_PROFILE } = await import('../../src/lib/rag/embeddings/active-profile.ts');
+      const q62Tenant = fixture.q62Tenant;
+      const dominantTenant = fixture.dominantLanguageTenant;
+      externalBackends = await prepareExternalBackends({
+        db: fixture.db,
+        edge: startedEdge,
+        backends: options.externalBackends,
+        profileId: embeddingProfileId ?? LEGACY_PROFILE.id,
+        extraDatabases: [
+          ...(q62Tenant ? [{ db: q62Tenant.db, serve: <T,>(fn: () => Promise<T>) => withQ62Tenant(startedEdge, fixture.db, q62Tenant, fn) }] : []),
+          ...(dominantTenant
+            ? [{ db: dominantTenant.db, serve: <T,>(fn: () => Promise<T>) => withIsolatedTenant(startedEdge, fixture.db, dominantTenant, fn) }]
+            : []),
+        ],
+        ...options.externalBackendTestHooks,
+      });
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await closeIsolatedTenant(fixture.dominantLanguageTenant);
+      if (ownsDb) await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
   const route = await import('../../src/app/api/internal/rag/run/route.ts');
+  const kbLanguages = fixture.q62Tenant || fixture.dominantLanguageTenant ? await import('../../src/lib/rag/query/kb-languages.ts') : null;
 
   let translatorModule: typeof import('../../src/lib/rag/query/translate.ts') | null = null;
   if (shouldInstallFixtureTranslator(envOverrides)) {
@@ -569,13 +713,18 @@ export async function prepareInProcessEval(options: {
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
     ...(fixture.q62Tenant ? { q62Tenant: fixture.q62Tenant } : {}),
+    ...(fixture.dominantLanguageTenant ? { dominantLanguageTenant: fixture.dominantLanguageTenant } : {}),
+    ...(kbLanguages ? { resetTenantCaches: () => kbLanguages.resetKbLanguageCacheForTests() } : {}),
+    ...(scopeGateFixture ? { primeScopeGate: scopeGateFixture.prime } : {}),
     ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
     ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
     ...(lexicalStats ? { lexicalStats } : {}),
+    backendSnapshot: externalBackends?.snapshot ?? PGVECTOR_SNAPSHOT,
     close: async () => {
+      await externalBackends?.close();
       restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
       floorModule.resetEvalScoreCalibration();
@@ -583,9 +732,37 @@ export async function prepareInProcessEval(options: {
       if (ownsDb) {
         await closeTableSplitTenants(fixture.tableSplitTenants);
         await closeQ62Tenant(fixture.q62Tenant);
+        await closeIsolatedTenant(fixture.dominantLanguageTenant);
         await fixture.db.close().catch(() => undefined);
       }
     },
+  };
+}
+
+/** D-17: the ingest-time switches of a run config; in ingest mode they apply to the fixture build, before the corpus loads. */
+const INGEST_TIME_SWITCHES = ['RAG_INGEST_PIPELINE', 'RAG_EMBEDDING_PROFILES'] as const;
+
+function ingestTimeEnv(env: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of INGEST_TIME_SWITCHES) if (env?.[name] !== undefined) out[name] = env[name];
+  return out;
+}
+
+function externalBackendOf(overrides: EvalRequestOptions['retrieval_overrides'] | undefined): ExternalBackendId | null {
+  const backend = overrides?.backend;
+  return backend === 'weaviate' || backend === 'qdrant' ? backend : null;
+}
+
+async function externalSnapshot(backend: ExternalBackendId, embeddingProfile: string | null) {
+  const { backendIndexParams } = await import('../../src/lib/rag/backend/index-params.ts');
+  const params = backendIndexParams(backend, embeddingProfile ?? 'openai-3-small-1536');
+  return {
+    backend,
+    backend_impl: 'real' as const,
+    collection: params?.collection ?? null,
+    hnsw_m: params?.hnsw_m ?? PGVECTOR_SNAPSHOT.hnsw_m,
+    hnsw_ef_construction: params?.hnsw_ef ?? PGVECTOR_SNAPSHOT.hnsw_ef_construction,
+    lexical_mode: params?.lexical_mode ?? PGVECTOR_SNAPSHOT.lexical_mode,
   };
 }
 
@@ -690,6 +867,7 @@ async function writeLexicalOverlap(session: InProcessEval, deploymentMode: Deplo
       tenantHash: tenantHash(tenantKey),
       k1: stats.k1,
       b: stats.b,
+      ...(stats.dfMode === 'cluster' ? { dfMode: 'cluster' as const } : {}),
       ...(lexicalOptionsOn(config)
         ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
         : {}),
@@ -730,6 +908,7 @@ async function writeLexicalTies(session: InProcessEval, deploymentMode: Deployme
       tenantHash: tenantHash(tenantKey),
       k1: stats.k1,
       b: stats.b,
+      ...(stats.dfMode === 'cluster' ? { dfMode: 'cluster' as const } : {}),
       ...(lexicalOptionsOn(config)
         ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
         : {}),
@@ -836,6 +1015,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
   }
 
+  const externalBackend = externalBackendOf(requestOptions.retrieval_overrides);
+
   const goldenFilter = goldenFilterFor(includeDrafts);
   const allItems = readGolden(goldenPath);
   // table_split items need the isolated tenants of the inline ingest fixture mode; every other run leaves them out.
@@ -846,7 +1027,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const items = selectGolden(allItems, goldenFilter).filter(
     (item) =>
       (tableSplitRunnable || (!isTableSplitItem(item) && !isTemplatedItem(item))) &&
-      (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)),
+      (q62Runnable || isTableSplitItem(item) || !isQ62Item(item)) &&
+      (q62Runnable || isTableSplitItem(item) || !isDominantLanguageItem(item)),
   );
   const routed = partitionIngestModeItems(items);
   if (items.length === 0) {
@@ -901,9 +1083,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         // Plan 03.3-23 (D-36): the Phase 3.3 switches the run sets to a non-default value are layered into the ingest build, which
         // then seeds the fixture tenant's rule data; a run that only restates the defaults layers nothing.
         const phase33Env = phase33BuildEnv({ ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) });
+        const layeredEnv = { ...phase33Env, ...ingestTimeEnv(runConfig?.env) };
         const buildEnv =
-          fixtureMode === 'ingest' && (Object.keys(phase33Env).length > 0 || options.ingestBuildEnv)
-            ? { ...phase33Env, ...options.ingestBuildEnv }
+          fixtureMode === 'ingest' && (Object.keys(layeredEnv).length > 0 || options.ingestBuildEnv)
+            ? { ...layeredEnv, ...options.ingestBuildEnv }
             : options.ingestBuildEnv;
         if (fixtureMode !== 'ingest' && Object.keys(phase33Env).some((name) => !(PHASE33_PROCESS_SWITCHES as readonly string[]).includes(name))) {
           console.log('[Eval Harness] phase33_seed_skipped_prechunked: the prechunked build seeds no Phase 3.3 rule data');
@@ -920,6 +1103,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
           ...(routed.templated.length > 0 ? { templated: true } : {}),
           ...(routed.q62.length > 0 ? { q62: true } : {}),
+          ...(routed.dominantLanguage.length > 0 ? { dominantLanguage: true } : {}),
           ...(buildEnv ? { ingestBuildEnv: buildEnv } : {}),
           ...((runConfig && Object.keys(runConfig.env).length > 0) || envOverlay
             ? { envOverrides: { ...(runConfig?.env ?? {}), ...(envOverlay ?? {}) } }
@@ -932,28 +1116,32 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
               ? { appEnv: options.appEnv }
               : {}),
           ...(requestOptions.query_layer === true ? { queryLayer: true } : {}),
+          ...(externalBackend ? { externalBackends: [externalBackend] } : {}),
+          ...(externalBackend && options.externalBackendTestHooks ? { externalBackendTestHooks: options.externalBackendTestHooks } : {}),
         });
         inProcess = prepared;
       }
       if (stubInjectionAnswers) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
-        answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+        answerModule.setEvalLanguageModelFactory(withGeneratorDelays(() => createStubLanguageModel()));
       } else if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
-          answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+          answerModule.setEvalLanguageModelFactory(withGeneratorDelays(() => createStubLanguageModel()));
         } else if (generator === 'fake' && answers) {
           // D-13: the directive is read from the template the route assembles under this run's env (research F-5).
           const noAnswerQuestions = new Map(items.filter((item) => !item.answerable).map((item) => [item.question, item.language]));
           // A run config's Phase 5.2 fake still answers by its id; every other id gets the instruction-sensitive generator.
           answerModule.setEvalLanguageModelFactory(
-            evalFakeLanguageModelFactory(items, {
-              noAnswerQuestions,
-              promptTemplate: answerModule.resolveEvalPromptTemplate(),
-            }),
+            withGeneratorDelays(
+              evalFakeLanguageModelFactory(items, {
+                noAnswerQuestions,
+                promptTemplate: answerModule.resolveEvalPromptTemplate(),
+              }),
+            ),
           );
         } else if (generator === 'fake') {
-          answerModule.setEvalLanguageModelFactory(evalFakeLanguageModelFactory(items));
+          answerModule.setEvalLanguageModelFactory(withGeneratorDelays(evalFakeLanguageModelFactory(items)));
         } else {
           const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
@@ -1017,10 +1205,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     const q62Tenant = routed.q62.length > 0 ? inProcess?.q62Tenant : undefined;
     if (routed.q62.length > 0 && !q62Tenant) throw new Error('[Eval Harness] q62 items need a session prepared with the q62 tenant');
+    const dominantTenant = routed.dominantLanguage.length > 0 ? inProcess?.dominantLanguageTenant : undefined;
+    if (routed.dominantLanguage.length > 0 && !dominantTenant) {
+      throw new Error('[Eval Harness] dominant_language items need a session prepared with the dominant-language tenant');
+    }
     // Routing by category: the other items first, exactly as before, then each table_split item against its tenant, then the q62 items
-    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant.
-    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62]) {
-      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item);
+    // (scoped_compound, glossary, version_compare, tagged off_domain) against the q62 tenant, then the items tagged dominant_language
+    // against the dominant-language tenant (plan 06.2-41).
+    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit, ...routed.q62, ...routed.dominantLanguage]) {
+      const routedDominant = !isTableSplitItem(item) && isDominantLanguageItem(item);
+      const routedQ62 = !isTableSplitItem(item) && isQ62Item(item) && !routedDominant;
       // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
       const documentIds =
         fixtureMode === 'ingest'
@@ -1028,7 +1222,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
             ? NO_INGEST_DOCUMENT_IDS
             : routedQ62
               ? (q62Tenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
-              : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+              : routedDominant
+                ? (dominantTenant?.documentIds ?? NO_INGEST_DOCUMENT_IDS)
+                : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
           : undefined;
       const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
@@ -1044,6 +1240,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         options.user_id = Q62_USER_ID;
         options.organization_id = null;
       }
+      if (inProcess && deploymentMode === 'multi-tenant' && routedDominant) {
+        options.user_id = DOMINANT_LANGUAGE_USER_ID;
+        options.organization_id = null;
+      }
       const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
       if (stubAnswer) options.generator_model = STUB_GENERATOR_MODEL;
       const payload = {
@@ -1057,12 +1257,21 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         ...(includeAnswer || stubAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
+      const primeScopeGate = inProcess?.primeScopeGate;
+      const sendItem = primeScopeGate
+        ? async () => {
+            await primeScopeGate(options.user_id ?? null);
+            return send(payload);
+          }
+        : () => send(payload);
       const { status, body } =
         tableTenants && inProcess && isTableSplitItem(item)
-          ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, () => send(payload))
+          ? await withTableSplitTenant(inProcess.edge, inProcess.fixtureDb, tableTenants, item, sendItem)
           : q62Tenant && inProcess && routedQ62
-            ? await withQ62Tenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, () => send(payload))
-            : await send(payload);
+            ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, q62Tenant, sendItem, inProcess.resetTenantCaches)
+            : dominantTenant && inProcess && routedDominant
+              ? await withIsolatedTenant(inProcess.edge, inProcess.fixtureDb, dominantTenant, sendItem, inProcess.resetTenantCaches)
+              : await sendItem();
       if (status !== 200) {
         const detail = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : 'no error body';
         throw new Error(`[Eval Harness] item ${item.id}: route returned ${status} (${detail})`);
@@ -1141,6 +1350,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         ...(runConfig.chunkingProfiles?.length ? { chunking_profiles: runConfig.chunkingProfiles } : {}),
       }
     : null;
+  // D-06: the in-process session records what it served; a --base-url run serves the deployment's real store.
+  const backendSnapshot =
+    inProcess?.backendSnapshot ?? (externalBackend ? { ...PGVECTOR_SNAPSHOT, ...(await externalSnapshot(externalBackend, embeddingProfile)) } : PGVECTOR_SNAPSHOT);
   const effectiveConfigHash = configHash(firstEffectiveConfig);
   const runConfigHash = crypto
     .createHash('sha256')
@@ -1156,6 +1368,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         deployment_mode: effectiveDeploymentMode,
         ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
         ...(envOverlay ? { env_overlay: envOverlay } : {}),
+        // A pgvector run keeps its hash; an external run's hash names the implementation it measured.
+        ...(backendSnapshot.backend !== 'pgvector' ? { backend_snapshot: backendSnapshot } : {}),
       }),
       'utf8',
     )
@@ -1182,6 +1396,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),
+    backend_snapshot: backendSnapshot,
   });
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);

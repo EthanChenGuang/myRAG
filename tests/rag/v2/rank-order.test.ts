@@ -13,6 +13,7 @@ import { hit } from '../fusion/helpers';
 import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
 const calls = vi.hoisted(() => [] as string[]);
+const diversifyOptions = vi.hoisted(() => [] as Array<{ lambda: number; windowFactor: number }>);
 
 vi.mock('@/lib/rag/refusal/gate', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/refusal/gate')>();
@@ -31,6 +32,7 @@ vi.mock('@/lib/rag/v2/diversify', async (importOriginal) => {
     ...actual,
     diversify: (...args: Parameters<typeof actual.diversify>) => {
       calls.push('diversify');
+      diversifyOptions.push({ lambda: args[1].lambda, windowFactor: args[1].windowFactor });
       return actual.diversify(...args);
     },
   };
@@ -117,7 +119,10 @@ function orderedReranker(): Reranker {
   };
 }
 
-async function run(diversity: string, options: { coverage?: boolean; finalTopK?: number; identifiers?: boolean } = {}) {
+async function run(
+  diversity: string,
+  options: { coverage?: boolean; finalTopK?: number; identifiers?: boolean; diversityOverride?: { mmr_lambda?: number; mmr_window_factor?: number } } = {},
+) {
   const env: Record<string, string> = {
     ...BASE_ENV,
     RAG_RESULT_DIVERSITY: diversity,
@@ -139,7 +144,9 @@ async function run(diversity: string, options: { coverage?: boolean; finalTopK?:
     referenced: null,
     signal,
     collector,
-    stageOverrides: { retrievalOverrides: { rerankModel: 'fake-quality-v1' } },
+    stageOverrides: {
+      retrievalOverrides: { rerankModel: 'fake-quality-v1', ...(options.diversityOverride ? { diversity: options.diversityOverride } : {}) },
+    },
     variants: VARIANTS,
     finalTopK: options.finalTopK ?? 2,
     ...(coverage ? { queryPlan: PLAN, coverage: { enabled: true, topK: options.finalTopK ?? 2 } } : {}),
@@ -155,6 +162,7 @@ function ids(rows: FusedHit[]): string[] {
 describe('rank stage order with diversify (D-21, D-48, D-38 h)', () => {
   beforeEach(() => {
     calls.length = 0;
+    diversifyOptions.length = 0;
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -220,6 +228,14 @@ describe('rank stage order with diversify (D-21, D-48, D-38 h)', () => {
     expect(mmr.out.decision).toEqual(off.out.decision);
     expect(collapse.out.gate).toEqual(off.out.gate);
     expect(ids(collapse.out.preRefusalHits)).toEqual(ids(off.out.preRefusalHits));
+  });
+
+  it('an eval diversity override reaches the diversify stage, as it reaches the hash (04.2-06 hand-off, 07-25)', async () => {
+    await run('mmr', { diversityOverride: { mmr_lambda: 0.4, mmr_window_factor: 2 } });
+    expect(diversifyOptions).toEqual([{ lambda: 0.4, windowFactor: 2 }]);
+    diversifyOptions.length = 0;
+    await run('mmr');
+    expect(diversifyOptions).toEqual([{ lambda: 0.7, windowFactor: 3 }]);
   });
 
   it('with diversity off the survivors equal the input order', async () => {

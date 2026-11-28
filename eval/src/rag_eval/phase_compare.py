@@ -43,6 +43,7 @@ from rag_eval.calibrate.refusal import (
     _gate_decided,
     fit_threshold,
 )
+from rag_eval.gate import _report_slices as report_slices
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
 from rag_eval.harness_runner import (
@@ -86,6 +87,8 @@ JSON_NAME = "comparison.json"
 MARKDOWN_NAME = "comparison.md"
 
 CATEGORY_PREFIX = "category:"
+MIN_GATE_N = 10
+BELOW_MIN_N = "below_min_n"
 FLOOR_REASONS = ("above_similarity_floor", "below_similarity_floor")
 RATE_TOLERANCE = 1e-9
 LIVE_PLAN = "04-43"
@@ -113,6 +116,20 @@ ALIGNED_NOTE = (
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class SliceGateRule(_Model):
+    """The no-slice-drop rule of the phase gates. Version 2 (owner decision 2026-11-28, option (a)): a slice with fewer
+    than min_gate_n scored items is reported as below_min_n and never decides the gate. Version 1 had no minimum."""
+
+    version: Literal[2] = 2
+    min_gate_n: int = Field(default=MIN_GATE_N, ge=1)
+
+
+class GateNoise(NoiseConfig):
+    """The noise config with the spec's min_gate_n, so every slice comparison of a gate run applies the same rule."""
+
+    min_gate_n: int = Field(default=MIN_GATE_N, ge=1)
 
 
 class RunSpec(_Model):
@@ -159,6 +176,7 @@ class ComparisonCommands(_Model):
 class ComparisonSpec(_Model):
     schema_version: Literal[1] = 1
     noise: str
+    no_slice_drop_rule: SliceGateRule = Field(default_factory=SliceGateRule)
     baselines: dict[FixtureMode, str]
     calibration_result: str
     calibration_outcome: str
@@ -256,6 +274,7 @@ class RecommendedCheck(_Model):
     drops: list[GateOffender]
     report_only: list[ReportOnlyMove]
     refusal: RefusalComparison
+    below_min_n: list[str] = Field(default_factory=list)
 
 
 class StrictImprovement(_Model):
@@ -288,6 +307,7 @@ class SwitchResult(_Model):
     failures: list[str]
     drops: list[GateOffender]
     measures: dict[str, float | None]
+    below_min_n: list[str] = Field(default_factory=list)
 
 
 class SelectiveModeMetrics(_Model):
@@ -472,9 +492,55 @@ def _slice_noise(noise: NoiseConfig) -> NoiseConfig:
     )
 
 
+def with_min_gate_n(noise: NoiseConfig, min_gate_n: int) -> GateNoise:
+    return GateNoise(**noise.model_dump(), min_gate_n=min_gate_n)
+
+
+def min_gate_n_of(noise: NoiseConfig) -> int:
+    return getattr(noise, "min_gate_n", MIN_GATE_N)
+
+
+def _slice_n(slices: Mapping[str, SliceMetrics], slice_name: str, metric: str) -> int | None:
+    cell = getattr(slices.get(slice_name), metric, None)
+    return cell.n if cell is not None else None
+
+
+def apply_min_gate_n(gate: GateResult, report: EvalReport, min_gate_n: int) -> GateResult:
+    """Noise-band offenders on a slice with fewer than min_gate_n scored items move to `skipped` as below_min_n notes."""
+    slices = report_slices(report)
+    kept: list[GateOffender] = []
+    notes: list[str] = []
+    for offender in gate.offenders:
+        n = _slice_n(slices, offender.slice, offender.metric) if offender.kind == "noise_band" else None
+        if n is not None and n < min_gate_n:
+            notes.append(
+                f"{offender.slice}:{offender.metric} {BELOW_MIN_N} (n={n} < min_gate_n={min_gate_n}, reported, not gated): "
+                f"{offender.observed:.4f} vs threshold {offender.threshold:.4f}, reference {offender.baseline_mean:.4f}"
+            )
+        else:
+            kept.append(offender)
+    if not notes:
+        return gate
+    passed = not gate.mismatches and not kept
+    return gate.model_copy(update={"offenders": kept, "skipped": [*gate.skipped, *notes], "passed": passed})
+
+
+def below_min_n_notes(gate: GateResult) -> list[str]:
+    return [line for line in gate.skipped if BELOW_MIN_N in line]
+
+
+def is_below_min_n(line: str) -> bool:
+    return BELOW_MIN_N in line
+
+
+def note_slice(line: str) -> str:
+    """The slice a below_min_n note names (notes start with `<slice>:<metric> below_min_n`)."""
+    return line.split(f" {BELOW_MIN_N}", 1)[0].rsplit(":", 1)[0]
+
+
 def slice_drops(observed: EvalReport, reference: Baseline, noise: NoiseConfig) -> GateResult:
     aligned = reference.model_copy(update={"request_options": observed.request_options})
-    return evaluate_gate(observed, aligned, _slice_noise(noise))
+    return apply_min_gate_n(evaluate_gate(observed, aligned, _slice_noise(noise)), observed, min_gate_n_of(noise))
 
 
 # ---------- rule (a)
@@ -650,6 +716,7 @@ def _recommended_check(output: RunOutput, reference: Baseline, noise: NoiseConfi
         drops=drops,
         report_only=moves,
         refusal=refusal,
+        below_min_n=below_min_n_notes(gate),
     )
 
 
@@ -716,8 +783,10 @@ def recommended_rule(
 # ---------- rule (c)
 
 
-def _switch(on: str, off: str, failures: list[str], drops: list[GateOffender], measures: dict[str, float | None]) -> SwitchResult:
-    return SwitchResult(on=on, off=off, passed=not failures, failures=failures, drops=drops, measures=measures)
+def _switch(
+    on: str, off: str, failures: list[str], drops: list[GateOffender], measures: dict[str, float | None], below: list[str] | None = None
+) -> SwitchResult:
+    return SwitchResult(on=on, off=off, passed=not failures, failures=failures, drops=drops, measures=measures, below_min_n=below or [])
 
 
 def _drop_failures(gate: GateResult) -> list[str]:
@@ -746,7 +815,7 @@ def parent_child_rule(on_run: RunOutput, off_run: RunOutput, noise: NoiseConfig,
         "context_tokens_on": context_tokens_mean(on_run),
         "context_tokens_off": context_tokens_mean(off_run),
     }
-    return _switch(on_name, off_name, failures, list(gate.offenders), measures)
+    return _switch(on_name, off_name, failures, list(gate.offenders), measures, below_min_n_notes(gate))
 
 
 def compression_rule(on_run: RunOutput, off_run: RunOutput, noise: NoiseConfig, *, on_name: str, off_name: str) -> SwitchResult:
@@ -765,7 +834,7 @@ def compression_rule(on_run: RunOutput, off_run: RunOutput, noise: NoiseConfig, 
         "overall_recall_at_10_delta": _delta(_metric(on_run.report, "overall", "recall_at_10"), _metric(off_run.report, "overall", "recall_at_10")),
         "overall_mrr_delta": _delta(_metric(on_run.report, "overall", "mrr"), _metric(off_run.report, "overall", "mrr")),
     }
-    return _switch(on_name, off_name, failures, list(gate.offenders), measures)
+    return _switch(on_name, off_name, failures, list(gate.offenders), measures, below_min_n_notes(gate))
 
 
 def translation_rule(on_run: RunOutput, off_run: RunOutput, *, on_name: str, off_name: str) -> SwitchResult:
@@ -1050,7 +1119,7 @@ def run_phase_comparison(
 ) -> PhaseComparison:
     if not isinstance(spec, ComparisonSpec):
         spec = _read_model(ComparisonSpec, str(spec), "comparison spec")
-    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    noise = with_min_gate_n(_read_model(NoiseConfig, spec.noise, "noise config"), spec.no_slice_drop_rule.min_gate_n)
     baselines = {mode: _read_model(Baseline, path, f"{mode} baseline") for mode, path in spec.baselines.items()}
     decision = _read_model(ChunkingDecision, spec.chunking_decision, "chunking decision")
     sweep = _read_model(ChunkingSweepReport, spec.chunking_sweep, "chunking sweep")
@@ -1632,6 +1701,7 @@ class SwitchComparisonSpec(_Model):
     schema_version: Literal[2]
     phase: str = Field(pattern=r"^\d{2}(\.\d+)*$")
     noise: str
+    no_slice_drop_rule: SliceGateRule = Field(default_factory=SliceGateRule)
     baselines: dict[FixtureMode, str]
     runs: list[SwitchRun] = Field(min_length=1)
     commands: dict[str, list[str]] = Field(default_factory=dict)
@@ -1773,7 +1843,7 @@ def no_slice_drop_check(output: RunOutput, baseline: Baseline, noise: NoiseConfi
     gate = slice_drops(output.report, baseline, noise)
     detail = [*gate.mismatches] + [
         f"{o.slice}:{o.metric} {o.observed:.4f} < {o.threshold:.4f} (baseline {o.baseline_mean:.4f})" for o in gate.offenders
-    ]
+    ] + below_min_n_notes(gate)
     return CheckResult(name="no_slice_drop", passed=not gate.mismatches and not gate.offenders, detail=detail)
 
 
@@ -1861,9 +1931,11 @@ def category_noise_check(
                 missing.append(f"{slice_name}:{metric} missing from the run (baseline {stat.mean:.4f})")
             else:
                 compared.add(slice_name)
-    detail = [
-        f"{o.slice}:{o.metric} {o.observed:.4f} < {o.threshold:.4f} (baseline {o.baseline_mean:.4f})" for o in offenders
-    ] + missing
+    detail = (
+        [f"{o.slice}:{o.metric} {o.observed:.4f} < {o.threshold:.4f} (baseline {o.baseline_mean:.4f})" for o in offenders]
+        + missing
+        + [line for line in below_min_n_notes(gate) if counted(note_slice(line))]
+    )
     if not compared:
         detail.append("no category slice was compared")
     return CheckResult(
@@ -2145,7 +2217,7 @@ def run_switch_comparison(
 ) -> SwitchComparison:
     if not isinstance(spec, SwitchComparisonSpec):
         spec = _read_model(SwitchComparisonSpec, str(spec), "comparison spec")
-    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    noise = with_min_gate_n(_read_model(NoiseConfig, spec.noise, "noise config"), spec.no_slice_drop_rule.min_gate_n)
     baselines = {mode: _read_model(Baseline, path, f"{mode} baseline") for mode, path in spec.baselines.items()}
     out_dir = Path(out)
     harness_dir = out_dir / HARNESS_DIR

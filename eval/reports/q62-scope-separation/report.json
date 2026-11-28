@@ -5,8 +5,8 @@
     "tenant": 3
   },
   "counts": {
-    "answerable": 331,
-    "cross_lingual": 34,
+    "answerable": 339,
+    "cross_lingual": 40,
     "dev_answerable": 204,
     "near_miss": 58,
     "out_of_domain": 6
@@ -3315,6 +3315,84 @@
     },
     {
       "class": "answerable",
+      "id": "xl-dom-en-zh-001",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.084,
+        "doc_type": 0.084,
+        "doc_type_language": 0.084,
+        "tenant": 0.068,
+        "tenant_language": 0.074
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-dom-en-zh-002",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.086,
+        "doc_type": 0.085,
+        "doc_type_language": 0.08,
+        "tenant": 0.088,
+        "tenant_language": 0.086
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-dom-en-zh-003",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.074,
+        "doc_type": 0.074,
+        "doc_type_language": 0.074,
+        "tenant": 0.048,
+        "tenant_language": 0.049
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-dom-it-zh-001",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.155,
+        "doc_type": 0.093,
+        "doc_type_language": 0.155,
+        "tenant": 0.065,
+        "tenant_language": 0.104
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-dom-it-zh-002",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.118,
+        "doc_type": 0.109,
+        "doc_type_language": 0.115,
+        "tenant": 0.089,
+        "tenant_language": 0.118
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-dom-it-zh-003",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.214,
+        "doc_type": 0.101,
+        "doc_type_language": 0.214,
+        "tenant": 0.105,
+        "tenant_language": 0.135
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
       "id": "xl-en-it-01",
       "pair": "en->it",
       "scores": {
@@ -4077,6 +4155,32 @@
         "doc_type_language": 0.057,
         "tenant": 0.019,
         "tenant_language": 0.06
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-dom-control-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.19,
+        "doc_type": 0.053,
+        "doc_type_language": 0.19,
+        "tenant": 0.017,
+        "tenant_language": 0.028
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-dom-control-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.058,
+        "doc_type": 0.034,
+        "doc_type_language": 0.055,
+        "tenant": 0.013,
+        "tenant_language": 0.058
       },
       "split": "test"
     },
