@@ -22,6 +22,8 @@ export interface ObjectStore {
   get(key: string, options?: ObjectStoreCallOptions): Promise<StoredObject | null>;
   remove(key: string, options?: ObjectStoreCallOptions): Promise<void>;
   exists(key: string, options?: ObjectStoreCallOptions): Promise<boolean>;
+  /** Every key under a folder prefix (ending in `/`), nested folders included, sorted. */
+  list(prefix: string, options?: ObjectStoreCallOptions): Promise<string[]>;
 }
 
 /** A failed store call. Carries the operation and the HTTP status only: the storage message can echo keys and content types. */
@@ -52,7 +54,7 @@ export interface StorageErrorLike {
   originalError?: unknown;
 }
 
-interface StorageResult<T> {
+export interface StorageResult<T> {
   data: T | null;
   error: StorageErrorLike | null;
 }
@@ -63,13 +65,67 @@ export interface StorageBucketApi {
   download(path: string): PromiseLike<StorageResult<Blob>>;
   remove(paths: string[]): PromiseLike<StorageResult<unknown>>;
   exists(path: string): PromiseLike<StorageResult<boolean>>;
+  list?(path: string, options: { limit: number; offset: number }): PromiseLike<StorageResult<StorageListEntry[]>>;
+}
+
+/** One entry of a storage folder listing: a folder has no id. */
+export interface StorageListEntry {
+  name: string;
+  id: string | null;
+}
+
+const LIST_PAGE = 100;
+const LIST_MAX_DEPTH = 4;
+const LIST_MAX_KEYS = 10_000;
+
+/** A folder prefix: non-empty, ending in `/`, and a valid key once the slash is dropped. */
+export function assertListPrefix(prefix: string): void {
+  if (!prefix.endsWith('/')) throw new ObjectStoreError('list', 400);
+  assertObjectKey(prefix.slice(0, -1));
+}
+
+/**
+ * Lists a folder of a Supabase bucket and its nested folders, page by page. Shared by the private and the public store; the caller has
+ * already checked the prefix. Stops with an error past LIST_MAX_KEYS keys rather than returning a partial listing.
+ */
+export async function listStorageFolder(
+  list: (path: string, options: { limit: number; offset: number }) => PromiseLike<StorageResult<StorageListEntry[]>>,
+  prefix: string,
+  signal: AbortSignal | undefined,
+  fail: (status: number | null) => Error,
+): Promise<string[]> {
+  const keys: string[] = [];
+  const walk = async (folder: string, depth: number): Promise<void> => {
+    for (let offset = 0; ; offset += LIST_PAGE) {
+      signal?.throwIfAborted();
+      const { data, error } = await raceAbort(list(folder.slice(0, -1), { limit: LIST_PAGE, offset }), signal);
+      if (error) {
+        if (isMissing(error)) return;
+        throw fail(statusOf(error));
+      }
+      const entries = data ?? [];
+      for (const entry of entries) {
+        if (typeof entry?.name !== 'string' || entry.name === '' || entry.name.includes('/')) continue;
+        if (entry.id === null || entry.id === undefined) {
+          if (depth >= LIST_MAX_DEPTH) throw fail(null);
+          await walk(`${folder}${entry.name}/`, depth + 1);
+        } else {
+          keys.push(`${folder}${entry.name}`);
+          if (keys.length > LIST_MAX_KEYS) throw fail(null);
+        }
+      }
+      if (entries.length < LIST_PAGE) return;
+    }
+  };
+  await walk(prefix, 0);
+  return keys.sort();
 }
 
 export interface StorageClientLike {
   storage: { from(bucket: string): StorageBucketApi };
 }
 
-function statusOf(error: StorageErrorLike): number | null {
+export function statusOf(error: StorageErrorLike): number | null {
   if (typeof error.status === 'number') return error.status;
   const original = error.originalError;
   if (typeof original === 'object' && original !== null && typeof (original as { status?: unknown }).status === 'number') {
@@ -80,14 +136,14 @@ function statusOf(error: StorageErrorLike): number | null {
 }
 
 /** Storage answers a missing object in a private bucket with 404, or with 400 and no statusCode of its own. */
-function isMissing(error: StorageErrorLike): boolean {
+export function isMissing(error: StorageErrorLike): boolean {
   if (error.statusCode === '404') return true;
   const status = statusOf(error);
   return status === 404 || (status === 400 && error.statusCode === undefined);
 }
 
 /** The storage client takes no abort signal, so a run's abort ends the wait; the request itself finishes in the background. */
-function raceAbort<T>(call: PromiseLike<T>, signal: AbortSignal | undefined): Promise<T> {
+export function raceAbort<T>(call: PromiseLike<T>, signal: AbortSignal | undefined): Promise<T> {
   if (!signal) return Promise.resolve(call);
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => reject(signal.reason ?? new DOMException('aborted', 'AbortError'));
@@ -150,6 +206,16 @@ export function createSupabaseObjectStore(client: () => StorageClientLike | null
       const { data, error } = await guarded('exists', key, options?.signal, (api) => api.exists(key));
       if (error && !isMissing(error)) throw new ObjectStoreError('exists', statusOf(error));
       return data === true;
+    },
+
+    async list(prefix, options) {
+      assertListPrefix(prefix);
+      options?.signal?.throwIfAborted();
+      const admin = client();
+      if (!admin) throw new ObjectStoreError('list', null);
+      const api = admin.storage.from(ORIGINALS_BUCKET);
+      if (typeof api.list !== 'function') throw new ObjectStoreError('list', null);
+      return listStorageFolder((path, opts) => api.list!(path, opts), prefix, options?.signal, (status) => new ObjectStoreError('list', status));
     },
   };
 }

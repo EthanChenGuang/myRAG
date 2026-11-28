@@ -427,6 +427,10 @@ const inLangchainDir = (rel) => rel.startsWith(LANGCHAIN_DIR);
 const outsideSelfTests = (rel) => !rel.startsWith(SELF_TEST_DIR);
 const everywhere = () => true;
 
+const PURGE_CLIENT = 'src/lib/rag/ingest/purge.ts';
+// rag_purge_retrieval_log is the retrieval-log retention job (src/lib/rag/feedback-loop/purge.ts), not a lineage purge.
+const PURGE_RPC_RE = /\.rpc\s*\(\s*(['"`])rag_purge_(?!retrieval_log\1)/g;
+
 export const RULES = [
   {
     id: 'embeddings-call',
@@ -451,6 +455,12 @@ export const RULES = [
     description: 'source recheck RPC (rag_source_recheck) called outside the pipeline',
     appliesTo: outsideRag,
     find: (text) => regexMatches(/\.rpc\s*\(\s*(['"`])rag_source_recheck\1/g, text),
+  },
+  {
+    id: 'purge-rpc',
+    description: 'purge RPC (rag_purge_*) called outside src/lib/rag/ingest/purge.ts (D-11)',
+    appliesTo: (rel) => rel !== PURGE_CLIENT,
+    find: (text) => regexMatches(PURGE_RPC_RE, text),
   },
   {
     id: 'voice-agent-rpc',

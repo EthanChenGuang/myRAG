@@ -670,6 +670,8 @@ export { contentIdentifierNorms } from './retrieval/identifiers';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
+export { isPurgeTombstoned, purgeDocumentAsAdmin, purgeLineage, PURGE_ADMIN_REASON_CODES, rescrubRecentPurges, retryPendingPurgeObjects, reverifyPurgeAsAdmin, listPurgeRecords, verifyPurge } from './ingest/purge';
+export type { PurgeActor, PurgeAdminReasonCode, PurgeCheck, PurgeCheckResult, PurgeDocumentAsAdminInput, PurgeFailure, PurgeLineageResult, PurgeReason, PurgeReasonCode, RescrubResult, RetryPendingResult, VerifyPurgeInput, VerifyPurgeResult, PurgeRecord, ListPurgeRecordsResult, ReverifyPurgeResult } from './ingest/purge';
 export { escapeTags, REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from './context/wrap';
 export { readSecurityConfig } from './security/config';
 export {
