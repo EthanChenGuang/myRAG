@@ -1046,3 +1046,12 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:13Z 06.3-21 DONE (exec/06.3-21 64660a8a: purge mode, tombstones, reconcile retry/rescrub; no migration) and archived; queued for train 42. 06.2-41 SUMMARY is on exec/06.2-41 45f3c097, but its report hasn't arrived; check the session.
 - Dispatched 06.2-26 session_01X342smo3PfbabhK3S3tmfN and 06.2-29 session_01X342smFXZX1oiyaXdLTMBZ (base t41 + t39 + 06.2-41), and 06.3-28 session_01X342sk7cnF9bUULYXXxMEB (base 06.3-21).
 - Told t41 to take fix/empty-reply-dup-collapse (debug doc status resolved).
+- 01:14Z 04.2-40 DONE (exec/04.2-40 c121456d, migration 0936) and archived; queued for train 42, which merges after min-gate-n.
+  - Diversity gate FAILs on category:scanned (n=4). Under the min_gate_n v2 rule that slice is report-only, so train 42 re-runs phase42_gate with both branches merged.
+  - Told 04.4-16 that 04.4-17 must give up 0935 and use a number above 0936.
+  - MORNING (owner): D-59 (document-level identifier filter) was an orchestrator design decision taken under standing authority; the owner can overrule it.
+- 01:14Z 05.2.1-23 DONE (exec/05.2.1-23 0869ad9c) and archived. HOLD FROM TRAINS: its new pr-smoke job is red on budget-overflow-legacy and budget-overflow-v2 (must_keep_rate < 1).
+  - Owner decides (D-37, so no changes after seeing results without them). Options:
+    (a) golden/fixture change: plan-12 context_overflow items or the fake window, which needs a golden version bump and a rebaseline;
+    (b) packing truncates the last kept block.
+  - Calc gates PASS.
