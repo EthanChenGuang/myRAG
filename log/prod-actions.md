@@ -156,3 +156,15 @@
   - Readiness lists only rag_attribute_filter_values and rag_attribute_documents, as expected (fixed by 1010 in train 39).
   - rag_access_enforced() is false and stays callable by anon/authenticated.
 - No data rows were written; the 0984 backfill is a no-op while enforcement is off.
+
+## 2026-11-28 ~08:45 UTC: PROD (ppvywaxrycaxrtrrditl) train 39 APPLIED and verified (owner said "跑")
+- Applied: train39_0982_scope_gate_tables, _0983_scope_gate_functions, _0985_translation_gap_glossary_reason, _1010_attribute_resolver_access, _0410_r22_delta.
+- A worker restart dropped the first 1010 call. I checked schema_migrations, confirmed it had not run, and re-applied it once; nothing ran twice.
+- md5: 5/5 match the files.
+- Verify:
+  - Readiness ready=true.
+  - Each attribute resolver has a single access-aware signature (INVOKER).
+  - 28 scope/attribute functions, all with search_path="", none callable by anon or authenticated.
+  - Two new empty tables with RLS on and 0 policies. 9 scope triggers.
+  - glossary_term_lost is in the CHECK. enforced=false.
+- No data rows were written.
