@@ -1191,3 +1191,13 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 14 Drain scheduler pg_cron + pg_net; backend-canary becomes a required check on main (repo setting, owner); vendor/region choice still open.
 Signatures were NOT covered by this; they are asked for separately.
 - 07:10Z Dispatched from owner decisions: quick-5221-mustkeep (1a) session_01X342smNRnY8Ga7xMx4SPuB; quick-41-p52-band (2b) session_01X342shsrjz7JjTcQukpzjW; planner exec/plan-d20-and-44c (5a + plan C; it also records 3A, 4b, 6a, 7a, 8, 9, 10, 11b, 13, 14) session_01X342smz7Q1AuTBMihDowtN. Added 12a and 13 to quick-63-gaps.
+
+## 2026-11-28 07:14Z OWNER SIGNATURES (in person, in this orchestrator session: "全部签，S14 按你的建议派修复")
+- Signed S1–S13 and S15–S22:
+  - 6.1 AR-1..8;
+  - AR-06-01..05 and the bge-m3 HF commit 5617a9f6;
+  - 4.4 AR-04.4-01, deferral of T-47..50 to 04.4-15, and the T-04.4-04 deviation accepted (amend the LEX-06 wording);
+  - 6.3 AR-06.3-01/02, T-35 moved to Phase 7, D-41/D-35;
+  - 07 T-07-103..110, 170, 171 and the 07-01 package approval ratified;
+  - 5.1.1 O-5 (D-16) and O-4 (SameSite=Lax confirmed).
+- S14 (T-04.4-09, rag_lexstats_compact_tenant unguarded) NOT accepted. A guard fix is to be dispatched.
