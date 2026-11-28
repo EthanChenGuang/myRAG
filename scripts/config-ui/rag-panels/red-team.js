@@ -546,7 +546,7 @@ class RedTeamPanel {
     const select = this.el('select', {
       className: 'select select-bordered w-full md:select-sm md:max-w-md',
       id: selectId,
-      attrs: { 'aria-describedby': helpId, 'aria-invalid': this.notice && this.notice.kind === 'config' ? 'true' : null },
+      attrs: { name: selectId, autocomplete: 'off', 'aria-describedby': helpId, 'aria-invalid': this.notice && this.notice.kind === 'config' ? 'true' : null },
     });
     select.appendChild(this.el('option', { text: this.t('start.configCurrent'), attrs: { value: '' } }));
     for (const name of this.runConfigs) {
@@ -567,6 +567,7 @@ class RedTeamPanel {
     const startButton = this.el('button', {
       className: 'btn btn-primary md:btn-sm',
       text: this.t('action.start'),
+      id: 'red-team-start',
       attrs: { type: 'button', 'data-red-team-start': '', 'aria-describedby': running ? this.busyNoteId : null },
     });
     startButton.disabled = running;
@@ -604,9 +605,12 @@ class RedTeamPanel {
     const englishData = this.locale === 'en' ? null : 'en';
     for (const row of view.rows) {
       const languageName = redTeamLanguageName(row.language, this.locale);
+      const labelled = row.techniqueLabel !== row.technique;
       const technique = this.el('th', { className: 'font-normal min-w-0', attrs: { scope: 'row' } }, [
-        this.el('span', { className: 'block break-words', text: row.techniqueLabel, attrs: { lang: englishData } }),
-        this.el('span', { className: 'block text-xs font-mono text-base-content/70 break-all', text: row.technique, attrs: { translate: 'no' } }),
+        labelled
+          ? this.el('span', { className: 'block break-words', text: row.techniqueLabel, attrs: { lang: englishData } })
+          : this.el('span', { className: 'block text-sm font-mono break-all', text: row.technique, attrs: { translate: 'no' } }),
+        labelled ? this.el('span', { className: 'block text-xs font-mono text-base-content/70 break-all', text: row.technique, attrs: { translate: 'no' } }) : null,
         this.el('span', { className: 'block text-xs text-base-content/70 md:hidden' }, [
           languageName + ' ',
           this.el('span', { className: 'font-mono', text: row.language, attrs: { translate: 'no' } }),
@@ -664,7 +668,7 @@ class RedTeamPanel {
     const state = redTeamRunState(run);
     if (state === 'none') {
       return this.el('div', { className: 'py-8 text-center', attrs: { 'data-red-team-empty': '' } }, [
-        this.el('h4', { className: 'text-base font-semibold', text: this.t('empty.title') }),
+        this.el('h4', { className: 'text-base font-semibold text-balance', text: this.t('empty.title') }),
         this.el('p', { className: 'text-sm text-base-content/70 mt-2', text: this.t('empty.body') }),
       ]);
     }
@@ -678,7 +682,7 @@ class RedTeamPanel {
       }
     });
     const header = this.el('div', { className: 'flex flex-wrap items-center justify-between gap-2' }, [
-      this.el('h4', { className: 'text-base font-semibold', text: this.t('latest.title') }),
+      this.el('h4', { className: 'text-base font-semibold text-balance', text: this.t('latest.title') }),
       refresh,
     ]);
     const meta = this.el('div', { className: 'flex flex-wrap items-center gap-x-4 gap-y-1 text-sm' }, [this.stateBadge(state)]);
@@ -758,6 +762,8 @@ class RedTeamPanel {
       content.replaceChildren();
       return;
     }
+    const active = this.doc && this.doc.activeElement;
+    const focusId = active && content.contains && content.contains(active) && active.id ? active.id : null;
     content.replaceChildren(
       this.el('p', { className: 'text-xs text-base-content/70 mb-4 max-w-prose', text: this.t('note.workspace') }),
       this.renderControls(),
@@ -768,6 +774,10 @@ class RedTeamPanel {
       const refresh = this.el('button', { className: 'btn btn-outline md:btn-sm mt-2', text: this.t('action.refresh'), attrs: { type: 'button' } });
       refresh.addEventListener('click', () => this.load());
       content.appendChild(refresh);
+    }
+    if (focusId && this.doc && typeof this.doc.getElementById === 'function') {
+      const again = this.doc.getElementById(focusId);
+      if (again && typeof again.focus === 'function') again.focus();
     }
   }
 }
