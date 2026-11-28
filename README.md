@@ -631,6 +631,7 @@ myrag/
 - 🚀 **[README_VOICE_AGENT_FLYIO.md](README_VOICE_AGENT_FLYIO.md)** - Deploy the voice agent to Fly.io (~$3-4/month)
 - 🔗 **[README_NANGO_INTEGRATION.md](README_NANGO_INTEGRATION.md)** - Cloud connectors for Google Drive, Notion, Dropbox
 - 📱 **[README_WHATSAPP_INTEGRATION.md](README_WHATSAPP_INTEGRATION.md)** - WhatsApp integration via [Baileys](https://baileys.wiki/) (Fly.io/Railway/Render)
+- 🧭 **[README_RAG_PIPELINE.md](README_RAG_PIPELINE.md)** - RAG pipeline guide (switches, stages, commands)
 - 🗣️ **[voice-agent/](voice-agent/)** - Voice agent service (included in monorepo)
 
 ### RAG Pipeline
