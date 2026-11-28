@@ -146,3 +146,13 @@
   - The 0720 columns are absent.
 - Files: snapshots/prod-pre-train38-2026-11-28.json and snapshots/prod-pre-train38-2026-11-28-functions.sql.
 - Nothing was written to prod.
+
+## 2026-11-28 ~08:30 UTC: PROD (ppvywaxrycaxrtrrditl) train 38 APPLIED and verified (owner said "跑")
+- Applied: train38_0930_access_retrieval_functions, _0930_access_retrieval_functions_multi_tenant, _0933_access_seam_legs, _0741_red_team_review_cases, _0981_tenant_doc_types, _0984_review_items_access_sets, _0409_delta, _0410_r21_delta.
+- md5: 8/8 match the files (and equal the EVAL rehearsal).
+- Verify:
+  - One overload each, all with access parameters. search_path="" everywhere. No anon/authenticated EXECUTE.
+  - rag_enqueue_review_item has only the 5-arg signature.
+  - Readiness lists only rag_attribute_filter_values and rag_attribute_documents, as expected (fixed by 1010 in train 39).
+  - rag_access_enforced() is false and stays callable by anon/authenticated.
+- No data rows were written; the 0984 backfill is a no-op while enforcement is off.
