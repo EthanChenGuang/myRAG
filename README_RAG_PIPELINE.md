@@ -120,6 +120,7 @@ Every switch defaults to the behaviour that shipped before it existed: with a sw
 | `RAG_ROLLOUTS` | Tenant or traffic-share rollouts | bool | `false` | - | - |
 | `RAG_SCOPE_TAG_SUGGEST` | Scope tag suggestions | bool | `false` | - | `RAG_SCOPE_TAGS=true` |
 | `RAG_SECTION_RULES` | Section rules | enum | `off` | `off`, `on` | `RAG_INGEST_PIPELINE=unified` |
+| `RAG_SOURCE_PURGE_DAILY_CAP` | Daily purge limit per connection | number | `0` | - | - |
 | `RAG_SOURCE_RECONCILE_INTERVAL_DAYS` | Full reconcile interval (days) | number | `7` | - | - |
 | `RAG_SOURCE_RECONCILE_MAX_AGE_DAYS` | Reconcile age limit (days) | number | `7` | - | - |
 | `RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE` | Pause above this share of documents | number | `0.3` | - | - |
@@ -183,6 +184,7 @@ Every switch defaults to the behaviour that shipped before it existed: with a sw
 | `RAG_IDENTIFIER_FILTER` | Identifier filter | bool | `false` | - | `RAG_IDENTIFIER_INDEX=true` |
 | `RAG_LEXICAL_BM25_B` | BM25 b | number | `0.75` | - | `RAG_LEXICAL_SCORING=bm25` |
 | `RAG_LEXICAL_BM25_K1` | BM25 k1 | number | `1.2` | - | `RAG_LEXICAL_SCORING=bm25` |
+| `RAG_LEXICAL_DF_MODE` | BM25 document frequency | enum | `raw` | `raw`, `cluster` | `RAG_LEXICAL_SCORING=bm25`, `RAG_DUP_CLUSTERS=true` |
 | `RAG_LEXICAL_DICTIONARY` | Dictionary terms as single search terms | bool | `false` | - | - |
 | `RAG_LEXICAL_QUANTITY` | Numbers with units as single search terms | bool | `false` | - | - |
 | `RAG_LEXICAL_SCORING` | Lexical scoring | enum | `ts_rank_cd` | `ts_rank_cd`, `bm25` | `RAG_PIPELINE=v2`, `RAG_LEXICAL_SEARCH=true` |
