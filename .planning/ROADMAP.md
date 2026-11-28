@@ -527,7 +527,7 @@ Plans:
   5. The fixture comparison shows no slice dropping beyond the noise band with BM25 on, measured against the same v2 run configuration with `ts_rank_cd`, the mean overlap between capped and uncapped BM25 top-k is at least 0.95, refusal decisions and their calibration inputs (dense cosine, rerank score) are unchanged, and the `search` stage stays inside its budget in `eval/config/latency-budgets.json` on the 30k-chunk benchmark.
   6. Every new function is callable only by the service role with an empty `search_path` and the tenant-key guard; `anon` and `authenticated` are denied in tests; deleting or purging a tenant's documents removes their contribution to the statistics.
 **Live verification**: On the owner's eval Supabase project, apply 0900–0904, build the statistics, and compare `ts_rank_cd` with `bm25` on the real eval set, lexical leg alone and fused by RRF with the dense leg: Recall@10, Recall@50, MRR and doc@1 with paired bootstrap 95% intervals, a small k1/b grid, `EXPLAIN (ANALYZE, BUFFERS)` of both legs and the `search` stage p50/p95. The default stays `ts_rank_cd` until the owner decides on that evidence.
-**Plans**: 15 plans in 7 waves (see `phases/04.4-true-bm25-lexical-scoring/04.4-PLAN-INDEX.md`); migrations 0900–0904 (block 0900–0919); `hybrid_search_chunks` is not redefined; human step in 04.4-15 (live push and comparison)
+**Plans**: 16 plans in 8 waves (see `phases/04.4-true-bm25-lexical-scoring/04.4-PLAN-INDEX.md`); migrations 0900–0904 (block 0900–0919) plus two claimed by plan 04.4-16 at execution; `hybrid_search_chunks` is not redefined; 04.4-16 (added 2026-11-28, owner decision option B for gap G1) builds cluster-aware document frequency behind `RAG_LEXICAL_DF_MODE` (default `raw`) and re-runs the same gates, flipping nothing; human step in 04.4-15 (live push and comparison), which now runs after 04.4-16
 
 ### Phase 5: Verified Citations & Groundedness
 **Goal**: Every RAG answer cites only chunks that were actually sent to the model, its citations survive later document changes, and users can see whether the answer was checked for groundedness
@@ -894,7 +894,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.2. Retrieval Tuning Additions (INSERTED) | 0/39 | Planned (plan-check PASS) | - |
 | 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
-| 4.4. True BM25 Lexical Scoring (INSERTED) | 0/15 | Planned (plan-check PASS) | - |
+| 4.4. True BM25 Lexical Scoring (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
