@@ -1844,18 +1844,19 @@ export async function listConnectionFiles(connection: ListableConnectionRow): Pr
 
 /**
  * The guarded listing removal for the scheduled reconcile (plan 06.3-11): the mass-delete pause, then the one deletion
- * entry point. An incomplete listing removes nothing and records an incomplete run. Returns the removed count.
+ * entry point. The caller states whether its listing was complete; anything but `complete: true` removes nothing and
+ * records an incomplete run (06.3-SECURITY W2). Returns the removed count.
  */
 export async function removeOrphans(
     connection: SourceConnectionRow,
     currentFileIds: Iterable<string>,
     origin: 'sync' | 'scheduled',
-    options: { complete?: boolean; admin?: SupabaseAdmin; outcome?: { paused: boolean } } = {}
+    options: { complete: boolean; admin?: SupabaseAdmin; outcome?: { paused: boolean } }
 ): Promise<number> {
-    const supabaseAdmin = options.admin ?? getSupabaseAdmin();
-    const listingComplete = options.complete ?? true;
+    const supabaseAdmin = options?.admin ?? getSupabaseAdmin();
+    const listingComplete = options?.complete === true;
     return deleteOrphanedDocuments(connection.connection_id, connection.user_id, new Set(currentFileIds), supabaseAdmin, connection, listingComplete, {
         origin,
-        ...(options.outcome ? { outcome: options.outcome } : {}),
+        ...(options?.outcome ? { outcome: options.outcome } : {}),
     });
 }
