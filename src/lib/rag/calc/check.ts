@@ -55,6 +55,13 @@ export interface StatedNumberOptions {
   /** UTF-16 offset of the trace's anchor. */
   anchor: number;
   language: string;
+  /** The result step's label; a sentence naming it states the result even when its number equals an operand. */
+  resultLabel?: string | null;
+}
+
+/** The label the calculation gives its result step, or null. */
+export function resultLabelOf(request: CalcTrace['request']): string | null {
+  return request.steps.find((s) => s.id === request.result)?.label ?? null;
 }
 
 const ISO_DATE_SHAPE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
@@ -138,20 +145,64 @@ function isExcluded(match: NumberMatch, excluded: readonly Rational[]): boolean 
   return excluded.some((v) => equals(v, match.value));
 }
 
-/** D-95: the stated number of a calculation in the answer text, or null. */
+const MIN_LABEL_LENGTH = 2;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+type AnswerUnit = ReturnType<typeof splitAnswerSentences>[number];
+
+function labelPattern(resultLabel: string | null | undefined): RegExp | null {
+  const label = (resultLabel ?? '').trim();
+  return [...label].length < MIN_LABEL_LENGTH ? null : new RegExp(escapeRegExp(label), 'giu');
+}
+
+/**
+ * D-95 detail (05.2.1-23): in a sentence that names the result step's label, the numbers after the label's last
+ * occurrence state the result: the last candidate among them, else the first of them (a wrong total can equal an operand
+ * or an intermediate, such as a cap applied to the sum, which the candidate filter alone would skip). Null when the
+ * sentence does not name the label or no number follows it.
+ */
+function afterLabel(unit: AnswerUnit, all: readonly NumberMatch[], excluded: readonly Rational[], label: RegExp): NumberMatch | null {
+  let after = -1;
+  for (const match of unit.text.matchAll(label)) after = unit.start + (match.index ?? 0) + match[0].length;
+  if (after < 0) return null;
+  const following = all.filter((m) => m.start >= after && m.end <= unit.end);
+  if (following.length === 0) return null;
+  const candidates = following.filter((m) => !isExcluded(m, excluded));
+  return candidates.length > 0 ? candidates[candidates.length - 1] : following[0];
+}
+
+/**
+ * D-95: the stated number of a calculation in the answer text, or null. The last citing sentence decides (after the result
+ * step's label when it names it, else its last candidate); failing that, the last sentence naming the label; failing that,
+ * the candidate nearest to the anchor.
+ */
 export function locateStatedNumber(rawText: string, options: StatedNumberOptions): NumberMatch | null {
-  const numbers = findNumbers(rawText, numberFormatFor(options.language)).filter((m) => !isExcluded(m, options.excluded));
-  if (numbers.length === 0) return null;
+  const all = findNumbers(rawText, numberFormatFor(options.language));
+  if (all.length === 0) return null;
+  const numbers = all.filter((m) => !isExcluded(m, options.excluded));
+  const label = labelPattern(options.resultLabel);
   const units = splitAnswerSentences(rawText, options.language);
   for (let u = units.length - 1; u >= 0; u -= 1) {
     const unit = units[u];
     const cites = findCitationMarkers(unit.text).some((marker) => marker.aliases.some((a) => options.aliases.has(a)));
     if (!cites) continue;
+    const named = label ? afterLabel(unit, all, options.excluded, label) : null;
+    if (named) return named;
     for (let k = numbers.length - 1; k >= 0; k -= 1) {
       const m = numbers[k];
       if (m.start >= unit.start && m.end <= unit.end) return m;
     }
   }
+  if (label) {
+    for (let u = units.length - 1; u >= 0; u -= 1) {
+      const named = afterLabel(units[u], all, options.excluded, label);
+      if (named) return named;
+    }
+  }
+  if (numbers.length === 0) return null;
   let best: NumberMatch | null = null;
   let bestDistance = 0;
   for (const m of numbers) {
@@ -232,6 +283,7 @@ export function checkCalculation(input: CheckInput): CalcCheckOutcome {
     excluded: candidates,
     anchor: trace.anchor_offset ?? input.rawText.length,
     language: input.answerLanguage,
+    resultLabel: resultLabelOf(trace.request),
   });
   if (stated === null) return notVerified(withValue, 'stated_not_found');
   const statedText = display(stated.value).display;

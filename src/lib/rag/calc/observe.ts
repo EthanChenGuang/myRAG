@@ -1,6 +1,6 @@
 import type { CalcResult, CalcTrace, RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
-import { locateStatedNumber, stepsListed } from './check';
+import { locateStatedNumber, resultLabelOf, stepsListed } from './check';
 import { evaluateCalc } from './evaluate';
 import { display, equals, parseDecimal, rational, type Rational } from './rational';
 
@@ -98,6 +98,7 @@ export function observeCalc(input: {
       excluded: candidates,
       anchor: primary.anchor_offset ?? rawText.length,
       language,
+      resultLabel: resultLabelOf(primary.request),
     });
     return {
       ...observed,
