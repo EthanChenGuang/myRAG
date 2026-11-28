@@ -18,6 +18,9 @@ import { createPgvectorSemanticCache } from '@/lib/rag/cache/pgvector';
 import { computeCacheKeyHash, hashSystemPromptTemplate } from '@/lib/rag/cache/keys';
 import type { CacheQuery, SemanticCache } from '@/lib/rag/cache/types';
 import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
+import type { AnswerGroundedness } from '@/lib/rag/generation/groundedness';
+
+type CachedAnswerFields = Omit<CachedAnswer, 'groundedness' | 'is_refusal'> & { groundedness: AnswerGroundedness; is_refusal: boolean };
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 
 const CONFIG = { ttl: 3600, refusalTtl: 600, maxDistance: 0.05 };
@@ -25,8 +28,8 @@ const TEMPLATE_ONE = 'You answer from the knowledge base only.\n\n{{context}}';
 const TEMPLATE_TWO = 'You answer from the knowledge base only, in short sentences.\n\n{{context}}';
 const NEW_PROFILE = 'voyage-4-large-1024';
 
-function answer(text: string, sources: V2CacheSource[], overrides: Partial<CachedAnswer> = {}): CachedAnswer {
-  return {
+function answer(text: string, sources: V2CacheSource[], overrides: Partial<CachedAnswerFields> = {}): CachedAnswer {
+  const built: CachedAnswerFields = {
     answer_language: 'en',
     answer_text: text,
     created_at: '2026-11-25T00:00:00.000Z',
@@ -48,6 +51,7 @@ function answer(text: string, sources: V2CacheSource[], overrides: Partial<Cache
     source_versions: sources.map((source) => ({ document_id: source.documentId, version: source.version })),
     ...overrides,
   };
+  return built as CachedAnswer;
 }
 
 describe('two-tenant canary: the semantic cache never crosses tenants, entry profiles, prompts or document versions', () => {
