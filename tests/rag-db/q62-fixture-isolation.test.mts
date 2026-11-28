@@ -222,7 +222,11 @@ describe('routing', () => {
     );
     const routed = partitionIngestModeItems(items) as { q62?: typeof items; main: typeof items; tableSplit: typeof items };
     assert.ok(routed.q62, 'the partition has a q62 group');
-    const tagged = items.filter((item) => (item.tags ?? []).includes('phase62')).map((item) => item.id).sort();
+    // The 06.2-41 items also carry phase62 but go to the dominant-language tenant (tag dominant_language).
+    const tagged = items
+      .filter((item) => (item.tags ?? []).includes('phase62') && !(item.tags ?? []).includes('dominant_language'))
+      .map((item) => item.id)
+      .sort();
     assert.equal(tagged.length, 33);
     assert.deepEqual(routed.q62.map((item) => item.id).sort(), tagged);
   });

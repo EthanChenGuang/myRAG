@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture",
-  "version": 7,
+  "version": 8,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -2497,6 +2497,60 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "xl-dom-en-zh-001",
+      "item_sha256": "70ca3fdcfd488d0ece30ab3ac28e11d017f6f3860f2873087ee378710fe70e42",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "xl-dom-en-zh-002",
+      "item_sha256": "38c80e1a8a8028ba241e6a35481ecbdeb5be23c38a2963a3dd3c8a738873e38f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "xl-dom-en-zh-003",
+      "item_sha256": "e30816a32892fd2855891746b383ebcfe78b763a1385187f672459f84851af9d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "xl-dom-it-zh-001",
+      "item_sha256": "1d4a8caf0d36da2512d097bacd9b706ef1c8c702b29ef4fc9bb19419352e50a7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "xl-dom-it-zh-002",
+      "item_sha256": "b7bd2028bec90cf4b3de17a90089aed1d770173e5c09a94742e3cf4125ffd716",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "xl-dom-it-zh-003",
+      "item_sha256": "a14248a6371d2f20f847b429c23f3126a57960ac7ea27c2e6ff4b69f5086bf08",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
       "id": "xl-en-it-01",
       "item_sha256": "da695307e8e9eb4dd703b05b43b091243f3e45dd67a82d3ed028f2c58fb396c6",
       "status": "active",
@@ -3044,6 +3098,24 @@
       "stale_since": null,
       "retire_reason": null,
       "last_reviewed_at": "2026-11-27"
+    },
+    {
+      "id": "zh-dom-control-001",
+      "item_sha256": "d1cf79af7fbcbcaa539378ae4f835963b40ee888fa4a5824f68742c12cf62169",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
+    },
+    {
+      "id": "zh-dom-control-002",
+      "item_sha256": "523e9d2d66ab47f8178fc1b53d483cbb56f6f2ab2e343113ba482421eef9ad1e",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-28"
     },
     {
       "id": "zh-duplicate-flood-001",
@@ -4533,7 +4605,24 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 8,
+      "date": "2026-11-28",
+      "added": [
+        "xl-dom-en-zh-001",
+        "xl-dom-en-zh-002",
+        "xl-dom-en-zh-003",
+        "xl-dom-it-zh-001",
+        "xl-dom-it-zh-002",
+        "xl-dom-it-zh-003",
+        "zh-dom-control-001",
+        "zh-dom-control-002"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "e9ee5ea86298c6e703c885b2c9bcb93344b341dbd71f7d8ed9c1edc7c324396d"
+  "manifest_sha256": "6bda35270c3be23dcdfd52e7dbf8caed9697a7abe2da954fc1d79c2651faf646"
 }
