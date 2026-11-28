@@ -10,7 +10,7 @@ import type { RetrievalResult } from '@/lib/rag/types';
 type Row = Record<string, unknown>;
 
 const DAY = 86_400_000;
-const WORDS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar'];
+const WORDS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec', 'romeo'];
 const ENABLED = { RAG_DOMAIN_EXPERT_REVIEW: 'true', RAG_RETRIEVAL_LOG: 'masked_query', RAG_SOURCE_OPEN_SIGNAL: 'true' };
 
 interface Tenant {
@@ -188,7 +188,7 @@ describe('weekly mining end to end (two tenants, fake edge)', () => {
 
     const byHash = new Map((first.tenants ?? []).map((tenant) => [tenant.tenant_hash, tenant]));
     assert.equal(byHash.size, 2);
-    const one = { feedback_negative: 1, refusal_disputed: 1, groundedness_flagged: 1, refused_high_score: 1, zero_results: 1 };
+    const one = { feedback_negative: 1, refusal_disputed: 1, groundedness_flagged: 1, refused_high_score: 1, zero_results: 1, claim_unsupported: 0, calc_mismatch: 0, calc_unverified: 0 };
     assert.deepEqual(byHash.get(mining.tenantHash(tenantA.key)), {
       tenant_hash: mining.tenantHash(tenantA.key),
       inserted: 6,
@@ -223,6 +223,26 @@ describe('weekly mining end to end (two tenants, fake edge)', () => {
     assert.equal(second.total_inserted, 0);
     for (const tenant of second.tenants ?? []) assert.equal(tenant.inserted, 0);
     assert.equal((await db.query('SELECT 1 FROM rag_review_items')).rows.length, 13);
+    assert.deepEqual(edge.errors, []);
+  });
+
+  test('answer-check reasons of the newest mining function (0984) are counted, not refused as unexpected_result', async () => {
+    const tenantC = await createTenant(db);
+    for (const reason of ['claim_unsupported', 'calc_mismatch', 'calc_unverified']) {
+      const traceId = await insertLog(tenantC, {});
+      await db.query(
+        `INSERT INTO rag_answer_records (id, user_id, organization_id, trace_id, rag_mode, review_reasons) VALUES ($1, $2, $3, $4, 'strict', $5)`,
+        [crypto.randomUUID(), tenantC.userId, tenantC.organizationId, traceId, [reason]],
+      );
+    }
+    const result = await mining.runMining({ since, until }, { client, env: ENABLED, log: () => undefined });
+    assert.equal(result.status, 'completed');
+    const tenant = (result.tenants ?? []).find((entry) => entry.tenant_hash === mining.tenantHash(tenantC.key));
+    assert.ok(tenant, 'the new tenant is in the report');
+    assert.equal(tenant.inserted, 3);
+    assert.equal(tenant.by_reason.claim_unsupported, 1);
+    assert.equal(tenant.by_reason.calc_mismatch, 1);
+    assert.equal(tenant.by_reason.calc_unverified, 1);
     assert.deepEqual(edge.errors, []);
   });
 
