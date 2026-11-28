@@ -9927,6 +9927,15 @@
                                                         <span id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE-help" class="label-text-alt text-base-content/70">0.3 means 30%. A full listing that would remove more than this share of a connection's documents pauses for confirmation. At 1 the pause never applies. Deletions the source reports file by file are not paused.</span>
                                                     </label>
                                                 </div>
+                                                <div class="form-control mb-4 max-w-md">
+                                                    <label class="label" for="RAG_SOURCE_PURGE_DAILY_CAP">
+                                                        <span class="label-text">Daily purge limit per connection</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_SOURCE_PURGE_DAILY_CAP" name="RAG_SOURCE_PURGE_DAILY_CAP" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" translate="no" aria-describedby="RAG_SOURCE_PURGE_DAILY_CAP-help" class="input input-bordered w-full">
+                                                    <label class="label">
+                                                        <span id="RAG_SOURCE_PURGE_DAILY_CAP-help" class="label-text-alt text-base-content/70">Files the source reports as deleted that one connection in Purge mode may purge per day (UTC). Above it, the rest wait in a paused run for confirmation. 0 turns the limit off.</span>
+                                                    </label>
+                                                </div>
                                                 <p class="text-xs text-base-content/70">Saved with Save All Changes at the top of the page.</p>
                                                 <div class="flex flex-wrap items-center gap-x-2">
                                                     <span class="text-xs text-base-content/70">The source recheck at retrieval (<code translate="no">RAG_SOURCE_RECHECK</code>) is under RAG Modes.</span>
