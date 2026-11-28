@@ -19,6 +19,7 @@ const PROFILE = 'openai-3-small-1536';
 const KEY_A = `u:${TWO_TENANT_IDS.userA}`;
 const KEY_B = `u:${TWO_TENANT_IDS.userB}`;
 const D03_FIELDS = [
+  'access_groups',
   'chunking_profile_id',
   'content_hash',
   'doc_date',

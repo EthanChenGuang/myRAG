@@ -15,6 +15,8 @@ export interface SyncRow {
   source: string | null;
   chunking_profile_id: string | null;
   parent_id: string | null;
+  /** 0742: the chunk's access keys (text[]); PostgREST sends an array, a raw Postgres literal arrives as `{a,b}`. */
+  access_groups: string[] | string | null;
 }
 
 export interface SyncPlan {
@@ -42,6 +44,24 @@ function toVector(value: number[] | string): number[] {
     .map(Number);
 }
 
+const ACCESS_KEY_RE = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/**
+ * SEC-12: the access keys exactly as Supabase holds them. A row without them (a database before 0742) or with a malformed key is
+ * refused rather than written with a guessed label, so the drain fails that row and retries once the migration is in.
+ */
+function toAccessGroups(value: SyncRow['access_groups'] | undefined): string[] {
+  const keys = Array.isArray(value)
+    ? value.map(String)
+    : typeof value === 'string'
+      ? value.replace(/^\{|\}$/g, '').split(',').map((key) => key.trim().replace(/^"|"$/g, '')).filter((key) => key.length > 0)
+      : null;
+  if (!keys || keys.length === 0 || !keys.every((key) => ACCESS_KEY_RE.test(key))) {
+    throw new Error('[Vector Sync] servable row without valid access_groups (apply migration 0742)');
+  }
+  return keys;
+}
+
 /** D-03: the payload is built field by field, so content or a document name can never ride along. */
 export function toPoint(row: SyncRow): VectorPoint {
   return {
@@ -59,6 +79,7 @@ export function toPoint(row: SyncRow): VectorPoint {
       lexical_text: row.lexical_text,
       content_hash: row.content_hash,
       lexical_version: row.lexical_version,
+      access_groups: toAccessGroups(row.access_groups),
     },
   };
 }

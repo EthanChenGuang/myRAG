@@ -54,6 +54,7 @@ const PAYLOAD_FIELDS: readonly (keyof VectorPointPayload)[] = [
   'lexical_text',
   'content_hash',
   'lexical_version',
+  'access_groups',
 ];
 
 /** RET-05 purges: document ids per deleteMany filter and per count. */
@@ -80,7 +81,7 @@ function toProperties(payload: VectorPointPayload): Record<string, unknown> {
   for (const field of PAYLOAD_FIELDS) {
     const value = payload[field];
     if (value === null || value === undefined) continue;
-    properties[field] = field === 'doc_date' ? weaviateDate(String(value)) : value;
+    properties[field] = field === 'doc_date' ? weaviateDate(String(value)) : Array.isArray(value) ? [...value] : value;
   }
   return properties;
 }
@@ -219,6 +220,10 @@ export function createWeaviateStore(options: WeaviateStoreOptions): VectorStore 
       if (points.length === 0) return 0;
       for (const point of points) {
         if (point.payload.tenant_key !== tenantKey) throw new Error('[Vector Sync] weaviate store: point tenant differs from tenant');
+        const keys = point.payload.access_groups;
+        if (!Array.isArray(keys) || keys.length === 0 || keys.some((key) => typeof key !== 'string' || key.length === 0)) {
+          throw new Error('[Vector Sync] weaviate store: point without access_groups');
+        }
       }
       await ensureTenant(profileId, tenantKey);
       let result;

@@ -44,6 +44,19 @@ export interface WeaviateCollectionState {
   lexicalParams: LexicalParams | null;
 }
 
+export const WEAVIATE_ACCESS_GROUPS_PROPERTY = 'access_groups';
+
+/** SEC-12: the Phase 4.3 access keys as an exact-match, filterable text array; filtered only while RAG_DOC_ACCESS_GROUPS is on. */
+export function weaviateAccessGroupsProperty(): Record<string, unknown> {
+  return {
+    name: WEAVIATE_ACCESS_GROUPS_PROPERTY,
+    dataType: configure.dataType.TEXT_ARRAY,
+    tokenization: configure.tokenization.FIELD,
+    indexFilterable: true,
+    indexSearchable: false,
+  };
+}
+
 /**
  * D-06, D-13, A-4, RET-10: one multi-tenant collection per embedding profile, tenants created only by the worker, one
  * self-provided vector with the pgvector HNSW parameters, no quantization, no stopwords, BM25 over the shared tokenizer output.
@@ -90,6 +103,7 @@ export function weaviateCollectionSpec(profileId: string, dims: number, params: 
         indexFilterable: true,
         indexSearchable: false,
       })),
+      weaviateAccessGroupsProperty(),
       { name: 'doc_date', dataType: configure.dataType.DATE, indexFilterable: true, indexRangeFilters: true },
       { name: 'lexical_version', dataType: configure.dataType.INT, indexFilterable: true },
     ],
@@ -148,6 +162,25 @@ export async function ensureWeaviateCollection(
   if (state.lexicalMode !== WEAVIATE_LEXICAL_MODE) throw new Error('[Vector Sync] weaviate collection lexical mode differs');
   const recorded = state.lexicalParams ?? defaultLexicalParams();
   if (!sameLexicalParams(recorded, params)) throw new LexicalParamsMismatchError('weaviate', profileId, recorded, params);
+  await ensureWeaviateAccessGroupsProperty(client, profileId);
+}
+
+/** A collection created before SEC-12 gets the access_groups property added in place, once; it is never recreated. */
+async function ensureWeaviateAccessGroupsProperty(client: WeaviateClientLike, profileId: string): Promise<void> {
+  const name = weaviateCollectionName(profileId);
+  let properties: Array<{ name: string }> | null | undefined;
+  try {
+    properties = (await client.collections.export(name)).properties;
+  } catch (error) {
+    throw mapWeaviateError(error, 'describe_collection');
+  }
+  if (Array.isArray(properties) && properties.some((property) => property?.name === WEAVIATE_ACCESS_GROUPS_PROPERTY)) return;
+  try {
+    await client.collections.use(name).config.addProperty(weaviateAccessGroupsProperty());
+  } catch (error) {
+    if (/already exists/i.test(error instanceof Error ? error.message : '')) return;
+    throw mapWeaviateError(error, 'add_property');
+  }
 }
 
 /** rebuild-lexical: drops the profile's collection (every tenant shard) and creates it again with the given pair. */

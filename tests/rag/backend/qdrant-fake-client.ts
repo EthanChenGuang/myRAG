@@ -60,8 +60,12 @@ function condition(cond: Json, point: StoredPoint): boolean {
   const value = point.payload[cond.key as string];
   if (cond.match) {
     const match = cond.match as Json;
-    if ('value' in match) return value === match.value;
-    if ('any' in match) return (match.any as unknown[]).includes(value);
+    // Qdrant matches an array payload when any element matches.
+    if ('value' in match) return Array.isArray(value) ? value.includes(match.value) : value === match.value;
+    if ('any' in match) {
+      const any = match.any as unknown[];
+      return Array.isArray(value) ? value.some((item) => any.includes(item)) : any.includes(value);
+    }
     if ('except' in match) return value !== undefined && value !== null && !(match.except as unknown[]).includes(value);
     if ('text' in match) return typeof value === 'string' && value.split(/\s+/).includes(String(match.text));
   }

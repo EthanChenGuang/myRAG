@@ -297,6 +297,7 @@ function pointFor(id: string, documentId: string): VectorPoint {
       lexical_text: null,
       content_hash: null,
       lexical_version: 1,
+      access_groups: ['all'],
     },
   };
 }

@@ -123,7 +123,7 @@ export function createFakeVectorStore(target: VectorSyncTarget = 'qdrant'): Fake
       for (const point of points) {
         if (point.payload.tenant_key !== tenantKey) throw new Error('[Vector Sync] fake store: point tenant differs from partition');
         if (point.vector.length !== col.dims) throw new Error('[Vector Sync] fake store: vector dims differ');
-        part.set(point.id, { id: point.id, vector: [...point.vector], payload: { ...point.payload } });
+        part.set(point.id, { id: point.id, vector: [...point.vector], payload: { ...point.payload, access_groups: [...point.payload.access_groups] } });
       }
       return points.length;
     },
@@ -231,7 +231,7 @@ export function createFakeVectorStore(target: VectorSyncTarget = 'qdrant'): Fake
     },
     plant(profileId: string, tenantKey: string, point: VectorPoint): void {
       const part = partition(profileId, tenantKey, true) as Map<string, VectorPoint>;
-      part.set(point.id, { id: point.id, vector: [...point.vector], payload: { ...point.payload } });
+      part.set(point.id, { id: point.id, vector: [...point.vector], payload: { ...point.payload, access_groups: [...point.payload.access_groups] } });
     },
     points(profileId: string, tenantKey: string): VectorPoint[] {
       return sorted(collections.has(profileId) ? partition(profileId, tenantKey) : null);
