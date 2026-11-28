@@ -685,6 +685,72 @@ for (const mode of MODES) {
       assert.equal(await count(db, 'rag_lexical_cluster_dirty'), 0);
     });
 
+    test('purge: rag_purge_lineage folds the lexical statistics after its chunk delete and rag_purge_verify reports lexical_stats', async (t) => {
+      // 04.4-07 hand-off, migration 0746: the Phase 6.3 purge runs rag_purge_hook_lexical_stats after the chunk delete, so the -1 rows
+      // the delete triggers stage are folded and no ledger row keeps a purged chunk's lexemes.
+      const present = await db.query<{ ok: boolean }>("SELECT to_regprocedure('public.rag_purge_lineage(text,uuid,jsonb,jsonb)') IS NOT NULL AS ok");
+      if (!present.rows[0]!.ok) {
+        t.skip('Phase 6.3 purge (0727) not on this checkout');
+        return;
+      }
+      await enableCluster(db, tenantA);
+      const cluster = await newCluster(db, tenantA);
+      const doomed = await createDocument(db, FIXTURE_USER_ID);
+      const kept = await createDocument(db, FIXTURE_USER_ID);
+      const [doomedUnit] = await insertChunks(db, doomed, [{ text: 'w1 w2 w3', cluster }, { text: 'w4', cluster: null }]);
+      await insertChunks(db, kept, [{ text: 'w1 w2 w3', cluster }]);
+      await assertSettled(db, tenantA, 'seeded');
+      const lineage = (await db.query<{ lineage_id: string }>('SELECT lineage_id FROM public.documents WHERE id = $1', [doomed])).rows[0]!.lineage_id;
+
+      await db.query('INSERT INTO public.admin_users (id) VALUES ($1) ON CONFLICT DO NOTHING', [FIXTURE_USER_ID]);
+      let counts: Record<string, unknown>;
+      try {
+        const r = await db.query<{ counts: Record<string, unknown> }>(
+          'SELECT counts FROM public.rag_purge_lineage($1, $2, $3::jsonb, $4::jsonb)',
+          [tenantA, lineage, JSON.stringify({ kind: 'admin', id: FIXTURE_USER_ID }), JSON.stringify({ code: 'added_in_error', note: 'synthetic test purge' })],
+        );
+        counts = r.rows[0]!.counts;
+      } finally {
+        await db.query('DELETE FROM public.admin_users WHERE id = $1', [FIXTURE_USER_ID]);
+      }
+      assert.ok(Number(counts.lexical_stats) > 0, `the purge counts the folded lexical rows: ${JSON.stringify(counts)}`);
+      assert.equal(await count(db, 'rag_lexical_stats_pending', 'tenant_key = $1', [tenantA]), 0, 'no staged removal is left');
+      assert.equal(await count(db, 'rag_lexical_cluster_dirty', 'tenant_key = $1', [tenantA]), 0, 'no marker is left');
+      assert.equal(await count(db, 'rag_lexical_cluster_units', 'chunk_id = $1', [doomedUnit]), 0, 'no ledger row keeps the purged chunk');
+      await assertSettled(db, tenantA, 'after rag_purge_lineage');
+
+      const verify = async () =>
+        (await db.query<{ store: string; remaining: string }>('SELECT store, remaining FROM public.rag_purge_verify($1, $2)', [tenantA, lineage])).rows.find(
+          (row) => row.store === 'lexical_stats',
+        );
+      assert.equal(Number((await verify())?.remaining), 0, 'verify lists lexical_stats with nothing remaining');
+      await db.query('INSERT INTO public.rag_lexical_cluster_dirty (tenant_key, dup_cluster_id) VALUES ($1, $2)', [tenantA, cluster]);
+      assert.equal(Number((await verify())?.remaining), 1, 'an unreconciled marker is reported');
+      await compactUntilZero(db, tenantA);
+      assert.equal(Number((await verify())?.remaining), 0);
+    });
+
+    test('the Phase 6.3 store inventory lists the six lexical statistics relations under lexical_stats', async (t) => {
+      const present = await db.query<{ ok: boolean }>("SELECT to_regprocedure('public.rag_purge_store_inventory()') IS NOT NULL AS ok");
+      if (!present.rows[0]!.ok) {
+        t.skip('Phase 6.3 store inventory (0728) not on this checkout');
+        return;
+      }
+      const rows = (
+        await db.query<{ relation: string; store_id: string; handling: string }>(
+          "SELECT relation, store_id, handling FROM public.rag_purge_store_inventory() WHERE relation LIKE 'rag\\_lexical\\_%' ORDER BY relation",
+        )
+      ).rows.map((row) => `${row.relation} ${row.store_id} ${row.handling}`);
+      assert.deepEqual(rows, [
+        'rag_lexical_cluster_dirty lexical_stats purge_step',
+        'rag_lexical_cluster_units lexical_stats purge_step',
+        'rag_lexical_corpus lexical_stats purge_step',
+        'rag_lexical_df lexical_stats purge_step',
+        'rag_lexical_stats_pending lexical_stats purge_step',
+        'rag_lexical_stats_state  exempt',
+      ]);
+    });
+
     if (tenantB) {
       test('two tenants: clustering, editing and deleting chunks of tenant A changes no counter, ledger row, marker or pending row of B', async () => {
         const snapshotB = async () => {
