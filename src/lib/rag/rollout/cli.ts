@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
 import { rpcRows, type RpcClient } from '@/lib/rag/backend/supabase-rpc';
+import type { PromoteDeps } from './promote';
 
 /** `npm run rag:rollout` (plan 07-47, LANG-11): start, list, include, exclude and rollback per-tenant rollouts. Ids, keys and codes only. */
 export interface CliIo {
@@ -12,6 +13,8 @@ export interface CliIo {
 export interface RolloutCliDeps {
   /** The service-role client; default: built from NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. */
   rpc?: RpcClient;
+  /** promote only: clock, languages, judge reader and activation overrides (tests). */
+  promote?: Omit<PromoteDeps, 'rpc'>;
 }
 
 const KINDS = ['embedding_profile', 'chunking_profile', 'rebuild_run'] as const;
@@ -23,7 +26,7 @@ const REF = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 export type ParsedRolloutArgs =
   | { ok: true; command: 'start'; kind: Kind; candidate: string[]; tenants: string[] | null; share: number | null; actor: string | null }
   | { ok: true; command: 'include' | 'exclude'; rolloutId: string; tenant: string; actor: string | null }
-  | { ok: true; command: 'rollback'; rolloutId: string; actor: string | null }
+  | { ok: true; command: 'rollback' | 'promote'; rolloutId: string; actor: string | null }
   | { ok: true; command: 'list' }
   | { ok: false; error: string };
 
@@ -31,6 +34,7 @@ export const USAGE = [
   'usage: npm run rag:rollout -- start --kind embedding_profile|chunking_profile|rebuild_run --candidate <id>[,<id>] (--tenants <keys> | --share <0-100>) [--actor <uuid>]',
   '       npm run rag:rollout -- include|exclude <rollout_id> --tenant <key> [--actor <uuid>]',
   '       npm run rag:rollout -- rollback <rollout_id> [--actor <uuid>]',
+  '       npm run rag:rollout -- promote <rollout_id> [--actor <uuid>]',
   '       npm run rag:rollout -- list',
 ].join('\n');
 
@@ -85,16 +89,16 @@ export function parseRolloutArgs(argv: string[]): ParsedRolloutArgs {
     if (actor === false) return { ok: false, error: '--actor takes a uuid' };
     return { ok: true, command, kind: kind as Kind, candidate, tenants, share, actor };
   }
-  if (command === 'include' || command === 'exclude' || command === 'rollback') {
+  if (command === 'include' || command === 'exclude' || command === 'rollback' || command === 'promote') {
     const [rolloutId, ...tail] = rest;
     if (!rolloutId || !UUID.test(rolloutId)) return { ok: false, error: `${command} needs a rollout id` };
     const values = flags(tail);
     if (typeof values === 'string') return { ok: false, error: values };
-    const allowed = command === 'rollback' ? ['--actor'] : ['--tenant', '--actor'];
+    const allowed = command === 'rollback' || command === 'promote' ? ['--actor'] : ['--tenant', '--actor'];
     for (const name of values.keys()) if (!allowed.includes(name)) return { ok: false, error: `unknown flag: ${name.slice(0, 40)}` };
     const actor = actorOf(values);
     if (actor === false) return { ok: false, error: '--actor takes a uuid' };
-    if (command === 'rollback') return { ok: true, command, rolloutId, actor };
+    if (command === 'rollback' || command === 'promote') return { ok: true, command, rolloutId, actor };
     const tenant = values.get('--tenant');
     if (!tenant || !TENANT_KEY.test(tenant)) return { ok: false, error: `${command} needs --tenant <key>` };
     return { ok: true, command, rolloutId, tenant, actor };
@@ -189,6 +193,29 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       case 'rollback': {
         await call(rpc, 'rag_rollout_rollback', { p_rollout_id: parsed.rolloutId, p_actor: parsed.actor });
         io.out(`[RAG Rollout] ${parsed.rolloutId} rolled_back`);
+        return 0;
+      }
+      case 'promote': {
+        const { promoteRollout } = await import('./promote');
+        const { getLanguageSettings } = await import('../lang/settings');
+        const result = await promoteRollout(parsed.rolloutId, parsed.actor, {
+          languages: () => {
+            const settings = getLanguageSettings();
+            return settings.configured ? (settings.languages ?? []) : null;
+          },
+          ...deps.promote,
+          rpc,
+        });
+        for (const language of result.languages ?? []) {
+          for (const row of language.measures) {
+            io.out(`${language.language} ${row.measure} candidate=${row.candidate.n} before=${row.before.n} others=${row.others.n} ${row.verdict}`);
+          }
+        }
+        if (!result.ok) {
+          io.err(`[RAG Rollout] refused: ${result.code}`);
+          return 2;
+        }
+        io.out(`[RAG Rollout] ${result.rolloutId} promoted kind=${result.kind} candidate=${result.candidate.join(',')}`);
         return 0;
       }
       case 'list': {

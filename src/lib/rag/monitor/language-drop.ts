@@ -94,6 +94,12 @@ function rate(value: CountOverN): number | null {
   return value.n > 0 ? value.count / value.n : null;
 }
 
+/** The count and sample size of one count metric over a set of cells, as evaluateLanguageDrop measures it (plan 07-49 reuses it). */
+export function languageCountMeasure(cells: readonly LanguageQualityCell[], metric: LanguageCountMetric): { count: number; n: number; rate: number | null } {
+  const value = sum(cells, metric);
+  return { ...value, rate: rate(value) };
+}
+
 function groupKey(tenantKey: string | null | undefined): string {
   return tenantKey ?? '';
 }
@@ -211,6 +217,19 @@ function judgeMetricsOf(cells: readonly LanguageJudgeCell[]): Set<string> {
   const out = new Set<string>();
   for (const cell of cells) for (const metric of Object.keys(cell.score_sums)) out.add(metric);
   return out;
+}
+
+/** The judge metrics present in every given set of cells, sorted, as evaluateLanguageJudgeDrop compares them. */
+export function languageJudgeMetrics(...sets: ReadonlyArray<readonly LanguageJudgeCell[]>): string[] {
+  const [first, ...rest] = sets;
+  if (!first) return [];
+  const others = rest.map(judgeMetricsOf);
+  return [...judgeMetricsOf(first)].filter((metric) => others.every((set) => set.has(metric))).sort();
+}
+
+/** The judged count and mean judge score over the given metrics, as evaluateLanguageJudgeDrop computes it. */
+export function languageJudgeMean(cells: readonly LanguageJudgeCell[], metrics: readonly string[]): { n: number; mean: number | null } {
+  return judgeMean(cells, metrics);
 }
 
 /**
