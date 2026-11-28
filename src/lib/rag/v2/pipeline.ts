@@ -391,6 +391,7 @@ async function runV2PipelineBody(
               scope,
               embeddingProfileId,
               ragMode: input.options?.ragMode ?? 'strict',
+              evalRun: profile === 'eval',
               variants: query.variants,
               embeddings: variantEmbeddings,
               queryPlan: queryPlan ?? null,
