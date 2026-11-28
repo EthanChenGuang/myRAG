@@ -1499,7 +1499,7 @@ $r22_service_role_only$;
 
 ## Train 40: 0723, 0724, 0726, 0727, 0986, 0988 and 0410 r23 delta (to apply after train 39 is live)
 
-Branch `ci/merge-train-40`, built on `ci/merge-train-39` 6da932ba and merged forward to c6f1b3f76 (through `exec/quick-state-sync`, which is train 39 plus one commit). Train 39 (and #135) are not yet in `origin/main`. Nothing below has been applied live yet. Production is multi-tenant.
+Branch `ci/merge-train-40`, built on `ci/merge-train-39` 6da932ba, merged forward to c6f1b3f76 (through `exec/quick-state-sync`), then `origin/main` 021b640b merged in after #135 (train 38), #139 (train 39), #136 and #138 (NF-1, 0989) landed. Nothing below has been applied live yet. Production is multi-tenant.
 
 ### Merged plans
 Merged with `--no-ff`; each branch carries its SUMMARY. The 13 audit branches went in phase order; the orchestrator's additions followed in the order it gave (03.3-25 asked to go first arrived after ten audit branches were already in, so it went in next).
@@ -1551,9 +1551,9 @@ Apply the SQL before deploying the train-40 app. Checked on PGlite (multi-tenant
 - `tests/ui/__snapshots__/source-version-also-in.{citation,panel}-baseline.html` re-recorded: class order of the citation badge only (06.3-06's `cn()`), class sets equal.
 - `tests/rag/characterize-chat.test.ts`: both D-24 configurations run with the languages unset (quick-261127-irl localizes the strict refusal only while languages are configured); snapshot unchanged. Accepted by the orchestrator.
 - `tests/rag-db/eval-v2-overlay.test.mts`: the exact allow-list includes `RAG_DOC_ACCESS_GROUPS` (04.3-52, ffa1e508e).
-- `tests/rag-db/phase32-migrations-apply.test.mts`: the restore step re-runs 0986 after 0933.
+- `tests/rag-db/phase32-migrations-apply.test.mts`, `ingestion-schema.test.mts`, `phase32-columns-checks.test.mts`: the re-apply/restore steps re-run 0986 after 0933.
 - `tests/rag-db/purge-hook-golden-items.test.mts`: the Phase 6.3 case purges as an entitled admin and needs `rag_purge_foreign_stores` (0728, plan 06.3-19); it skips on this train. Gap: until 06.3-19, `rag_purge_lineage` does not run the purge hooks, so golden evidence and other hook stores of a purged lineage stay.
 - `tests/rag/canary/{embed,voice}-scope.test.ts`: the direct `backend.search` negative controls pass `scopeAccessFilter(scope)` (4.3 D-05).
 - `tests/rag-db/access-catalog-sentinel.test.mts`: EXEMPT entries for the 06.3 functions (see above).
 - 06.3-02 `RAG_SOURCE_RECHECK` is a generated RAG Modes row (07-20 manifest), so `config-source-sync-fields.test.ts` asserts the manifest entry instead of a hand-written select.
-- Pre-existing on train 39 (same subtests fail at c6f1b3f76): `ingestion-schema` "applying 0351 twice ..." (0425 reports `match_chunks_by_profile(...7 args)` missing) and `phase32-columns-checks` "applying 0801 a second time ..." (`rag_dup_cluster_sources` definition differs), both modes. Left for the train-39 builder.
+- `ingestion-schema` "applying 0351 twice ..." and `phase32-columns-checks` "applying 0801 a second time ..." failed on train 39 at c6f1b3f76 and pass on origin/main 021b640b (fixed there); after merging main, both re-run 0986 after 0933, since 0986 redefines 0933's `rag_access_readiness`.
