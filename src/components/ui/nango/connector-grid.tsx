@@ -67,6 +67,18 @@ interface NangoConnectionWithValidity extends NangoConnectionRecord {
   is_valid: boolean;
 }
 
+export function ConnectorReconcilePill(_props: { state: unknown; t: (key: TranslationKeys) => string }) {
+  return null;
+}
+
+export function ConnectorReconcileNote(_props: { state: unknown; t: (key: TranslationKeys) => string }) {
+  return null;
+}
+
+export function connectorReconcileKind(_state: unknown): 'paused' | 'overdue' | null {
+  return null;
+}
+
 interface ConnectorGridProps {
   onConnectionChange?: () => void;
 }
