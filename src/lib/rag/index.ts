@@ -949,6 +949,7 @@ export type { PromptBudgetTrace } from '@/lib/rag-eval/contracts.generated';
 export { getCentroidSnapshot, invalidateCentroidCache, refreshCentroidSnapshot, SCOPE_CENTROID_CACHE_TTL_MS } from './scope/centroids';
 export type { CentroidSnapshot, ScopeCentroid, ScopeGroupKind } from './scope/centroids';
 export { rebuildScopeCentroids, ScopeRebuildError } from './scope/build';
+export { scopeGateCalibrationView } from './scope/calibration';
 export type { ScopeRebuildCounts, ScopeRebuildOptions, ScopeRebuildResult } from './scope/build';
 export {
   addScopeExample,

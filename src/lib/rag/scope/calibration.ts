@@ -57,6 +57,14 @@ export function scopeGateCalibrationFor(profileId: string, ragMode: RagMode, opt
   return loaded.cells.get(`${profileId}|${ragMode}`) ?? null;
 }
 
+/**
+ * 06.2-38: the committed calibration as the admin route shows it (D-27, read-only): null for an invalid file, else its source, recording
+ * time and every cell in file order. The calibration target percentage is not part of the file and is never added here.
+ */
+export function scopeGateCalibrationView(): ScopeGateCalibration | null {
+  return parseScopeGateCalibration(override ? override.data : rawCalibration);
+}
+
 /** Tests only: replaces the committed file's content until reset. */
 export function setScopeGateCalibrationForTests(data: unknown): void {
   override = { data };
