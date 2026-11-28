@@ -1,5 +1,6 @@
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -11,6 +12,7 @@ from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, QualityGates
 from rag_sidecar.contracts.report import (
     AnswerRuleMetric,
     AnswerRulesReport,
+    CalcRates,
     EvalReport,
     InjectionReport,
     MetricValue,
@@ -306,9 +308,164 @@ def phase52_offenders(report: EvalReport) -> list[GateOffender]:
     return []
 
 
+# Phase 5.2.1 (D-78, D-88, success criteria 8 and 9): the run-config name selects the gate set, and the set's generator
+# must be the run's. The calculation gates read the evidence_in_context population (items whose gold evidence reached the
+# kept context, where the scripted fakes' behaviour is defined); the all-item rates stay report-only. The rule-skipping run
+# with RAG_CALC_CHECK off is the negative control: its numeric gate must fail, and a pass is itself an offender.
+P521_CALC_POPULATION = "evidence_in_context"
+MIN_CALC_ITEMS_PER_LANGUAGE = 9
+MIN_PARAPHRASE_GROUPS_PER_LANGUAGE = 3
+MIN_OVERFLOW_ITEMS_PER_LANGUAGE = 4
+CALC_FOLLOW_ONES = ("numeric_correctness_effective", "paraphrase_consistency", "steps_listed_rate", "calc_used_rate")
+CALC_NUMERIC_METRIC = "numeric_correctness_effective"
+OVERFLOW_ZERO_METRIC = "overflow_error_rate"
+OVERFLOW_ONES = ("history_before_documents_rate", "must_keep_rate", "budget_trace_rate")
+NEGATIVE_CONTROL_NOTE = "negative control: the numeric gate is expected to fail"
+
+
+@dataclass(frozen=True)
+class CalcGateSet:
+    generator: str
+    ones: tuple[str, ...]
+    negative_control: bool = False
+
+
+@dataclass(frozen=True)
+class OverflowGateSet:
+    generator: str
+    pipeline: str
+
+
+PHASE521_GATES: dict[str, CalcGateSet | OverflowGateSet] = {
+    "calc-tool-follow": CalcGateSet("fake/calc-follow-v1", CALC_FOLLOW_ONES),
+    "calc-block-follow": CalcGateSet("fake/calc-follow-block-v1", CALC_FOLLOW_ONES),
+    "calc-skip-rule-check-off": CalcGateSet("fake/calc-skip-rule-v1", (CALC_NUMERIC_METRIC,), negative_control=True),
+    "calc-skip-rule-check-on": CalcGateSet("fake/calc-skip-rule-v1", (CALC_NUMERIC_METRIC, "calc_review_rate")),
+    "calc-missing-operand": CalcGateSet("fake/calc-missing-operand-v1", ("calc_not_verified_rate",)),
+    "budget-overflow-legacy": OverflowGateSet("fixture/small-window-4k", "legacy"),
+    "budget-overflow-v2": OverflowGateSet("fixture/small-window-4k", "v2"),
+}
+PHASE521_REASONS = frozenset(
+    {
+        "p521_generator_mismatch",
+        "calc_metrics_missing",
+        "too_few_calc_items",
+        "calc_rate_below_one",
+        "negative_control_failed",
+        "negative_control_passed",
+        "overflow_metrics_missing",
+        "pipeline_mismatch",
+        "too_few_overflow_items",
+        "overflow_error_above_zero",
+        "overflow_rate_below_one",
+    }
+)
+
+
+@dataclass(frozen=True)
+class P521Check:
+    slice: str
+    metric: str
+    observed: float
+    expected: float
+    passed: bool
+    reason: str
+
+
+def _is_phase521_offender(offender: GateOffender) -> bool:
+    return offender.reason in PHASE521_REASONS
+
+
+def _p521_offender(check: P521Check, *, reason: str | None = None) -> GateOffender:
+    return GateOffender(
+        slice=check.slice,
+        metric=check.metric,
+        baseline_mean=check.expected,
+        threshold=check.expected,
+        observed=check.observed,
+        direction="lower" if check.expected == 0.0 else "higher",
+        kind=ABSOLUTE_ZERO,
+        reason=reason or check.reason,
+    )
+
+
+def _language_cells(metric: AnswerRuleMetric) -> list[tuple[str, MetricValue | None]]:
+    return [(f"language:{language}", metric.by_language.get(language)) for language in INJECTION_LANGUAGES]
+
+
+def _short_checks(metric_name: str, metric: AnswerRuleMetric, minimum: int, reason: str) -> list[P521Check]:
+    return [
+        P521Check(slice_name, metric_name, float(cell.n if cell is not None else 0), float(minimum), False, reason)
+        for slice_name, cell in _language_cells(metric)
+        if cell is None or cell.value is None or cell.n < minimum
+    ]
+
+
+def _value_checks(metric_name: str, metric: AnswerRuleMetric, expected: float, reason: str) -> list[P521Check]:
+    checks: list[P521Check] = []
+    for slice_name, cell in _language_cells(metric):
+        assert cell is not None and cell.value is not None
+        passed = cell.value <= 0 if expected == 0.0 else cell.value >= 1
+        checks.append(P521Check(slice_name, metric_name, cell.value, expected, passed, reason))
+    return checks
+
+
+def _calc_checks(rates: CalcRates, gate: CalcGateSet) -> list[P521Check]:
+    short = _short_checks("items", getattr(rates, CALC_NUMERIC_METRIC), MIN_CALC_ITEMS_PER_LANGUAGE, "too_few_calc_items")
+    if "paraphrase_consistency" in gate.ones:
+        short += _short_checks(
+            "paraphrase_consistency", rates.paraphrase_consistency, MIN_PARAPHRASE_GROUPS_PER_LANGUAGE, "too_few_calc_items"
+        )
+    if short:
+        return short
+    checks: list[P521Check] = []
+    for name in gate.ones:
+        checks.extend(_value_checks(name, getattr(rates, name), 1.0, "calc_rate_below_one"))
+    return checks
+
+
+def _overflow_checks(report: EvalReport, gate: OverflowGateSet) -> list[P521Check]:
+    block = report.overflow
+    if block is None:
+        return [P521Check("overall", "overflow", 0.0, 1.0, False, "overflow_metrics_missing")]
+    if block.pipeline != gate.pipeline:
+        return [P521Check("overall", "pipeline", 0.0, 1.0, False, "pipeline_mismatch")]
+    short = _short_checks("items", block.must_keep_rate, MIN_OVERFLOW_ITEMS_PER_LANGUAGE, "too_few_overflow_items")
+    if short:
+        return short
+    checks = _value_checks(OVERFLOW_ZERO_METRIC, block.overflow_error_rate, 0.0, "overflow_error_above_zero")
+    for name in OVERFLOW_ONES:
+        checks.extend(_value_checks(name, getattr(block, name), 1.0, "overflow_rate_below_one"))
+    return checks
+
+
+def phase521_checks(report: EvalReport) -> tuple[list[P521Check], list[GateOffender]]:
+    """D-78, D-88: every check of the gate set the run-config name selects, and its offenders; empty for any other run."""
+    gate = PHASE521_GATES.get(report.run_config_name or "")
+    if gate is None:
+        return [], []
+    if report.request_options.generator_model != gate.generator:
+        check = P521Check("overall", "generator_model", 0.0, 1.0, False, "p521_generator_mismatch")
+        return [check], [_p521_offender(check)]
+    if isinstance(gate, OverflowGateSet):
+        checks = _overflow_checks(report, gate)
+        return checks, [_p521_offender(check) for check in checks if not check.passed]
+    if report.calc is None:
+        check = P521Check("overall", "calc", 0.0, 1.0, False, "calc_metrics_missing")
+        return [check], [_p521_offender(check)]
+    checks = _calc_checks(getattr(report.calc, P521_CALC_POPULATION), gate)
+    failed = [check for check in checks if not check.passed]
+    if not gate.negative_control or any(check.reason == "too_few_calc_items" for check in failed):
+        return checks, [_p521_offender(check) for check in failed]
+    if failed:
+        return checks, [_p521_offender(check, reason="negative_control_failed") for check in failed]
+    control = P521Check("overall", CALC_NUMERIC_METRIC, 1.0, 0.0, False, "negative_control_passed")
+    return checks, [_p521_offender(control)]
+
+
 def phase521_offenders(report: EvalReport) -> list[GateOffender]:
     """D-78, D-88: the Phase 5.2.1 gate the run-config name selects; none for any other run."""
-    return []
+    return phase521_checks(report)[1]
 
 
 def _observed(metrics: SliceMetrics | None, metric: str) -> float | None:
@@ -381,6 +538,7 @@ def evaluate_gate(
         offenders = []
     offenders.extend(absolute_zero_offenders(report.injection))
     offenders.extend(phase52_offenders(report))
+    offenders.extend(phase521_offenders(report))
     return GateResult(
         passed=not offenders,
         offenders=offenders,
@@ -464,6 +622,41 @@ def _absolute_lines(absolute: AbsoluteGateResult | None) -> list[str]:
     return lines
 
 
+def _phase521_lines(result: GateResult, report: EvalReport | None) -> list[str]:
+    gate = PHASE521_GATES.get(report.run_config_name or "") if report is not None else None
+    if report is None or gate is None:
+        return []
+    lines = ["## Phase 5.2.1 calculation and prompt-budget gates", ""]
+    population = f"population {P521_CALC_POPULATION}" if isinstance(gate, CalcGateSet) else f"pipeline {gate.pipeline}"
+    lines.append(f"Run config: {report.run_config_name} (generator {gate.generator}; {population})")
+    if isinstance(gate, CalcGateSet) and gate.negative_control:
+        lines.append("")
+        lines.append(f"{NEGATIVE_CONTROL_NOTE}; it fails with negative_control_failed, and a pass is negative_control_passed.")
+    lines.append("")
+    checks, _ = phase521_checks(report)
+    lines.append("| Slice | Metric | Observed | Expected | Result |")
+    lines.append("| --- | --- | --- | --- | --- |")
+    for check in checks:
+        outcome = "passed" if check.passed else f"failed ({check.reason})"
+        lines.append(f"| {check.slice} | {check.metric} | {_fmt(check.observed)} | {_fmt(check.expected)} | {outcome} |")
+    offenders = [offender for offender in result.offenders if _is_phase521_offender(offender)]
+    lines.append("")
+    lines.append(f"Offenders: {', '.join(sorted({offender.reason or '-' for offender in offenders})) if offenders else 'none'}.")
+    if isinstance(gate, CalcGateSet) and report.calc is not None:
+        lines.append("")
+        lines.append("All items (report-only, refused and evidence-less items included):")
+        lines.append("")
+        lines.append("| Slice | Metric | Observed |")
+        lines.append("| --- | --- | --- |")
+        for name in gate.ones:
+            metric = getattr(report.calc.all_items, name)
+            for slice_name, cell in _language_cells(metric):
+                shown = _fmt(cell.value) if cell is not None and cell.value is not None else "n/a"
+                lines.append(f"| {slice_name} | {name} | {shown} (n={cell.n if cell is not None else 0}) |")
+    lines.append("")
+    return lines
+
+
 def render_gate_markdown(
     result: GateResult, report: EvalReport | None = None, baseline: Baseline | None = None, noise: NoiseConfig | None = None
 ) -> str:
@@ -481,9 +674,15 @@ def render_gate_markdown(
     lines.append("")
     noise_offenders = [offender for offender in result.offenders if offender.kind != ABSOLUTE_ZERO]
     zero_offenders = [
-        offender for offender in result.offenders if offender.kind == ABSOLUTE_ZERO and not _is_phase52_offender(offender)
+        offender
+        for offender in result.offenders
+        if offender.kind == ABSOLUTE_ZERO and not _is_phase52_offender(offender) and not _is_phase521_offender(offender)
     ]
-    p52_offenders = [offender for offender in result.offenders if offender.kind == ABSOLUTE_ZERO and _is_phase52_offender(offender)]
+    p52_offenders = [
+        offender
+        for offender in result.offenders
+        if offender.kind == ABSOLUTE_ZERO and _is_phase52_offender(offender) and not _is_phase521_offender(offender)
+    ]
     if noise_offenders:
         lines.append("| Slice | Metric | Baseline mean | Threshold | Observed | Direction |")
         lines.append("| --- | --- | --- | --- | --- | --- |")
@@ -528,6 +727,7 @@ def render_gate_markdown(
         else:
             lines.append("None.")
         lines.append("")
+    lines.extend(_phase521_lines(result, report))
     lines.append("## Report-only category deltas")
     lines.append("")
     if report is not None and baseline is not None and noise is not None:
