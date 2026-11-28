@@ -53,12 +53,13 @@ jobs:
 
   ts-db:
     runs-on: ubuntu-latest
-    # Shards are balanced by scripts/ci/test-durations.json: about 8 min of tests each, 14.5 min for the shard that holds
-    # schema-migrations (one file runs its suites in series), plus about 1.5 min of setup; 25 leaves 1.5x on the slowest shard.
-    timeout-minutes: 25
+    # Train 38: the larger fixture corpus put the slowest shard (migration and fixture-rebuild suites) past 25 minutes.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
+        # Balanced by scripts/ci/test-durations.json: about 8 min of tests per shard, 14.5 min for the one holding schema-migrations
+        # (a file runs its suites in series), plus about 1.5 min of setup.
         shard: ['1/12', '2/12', '3/12', '4/12', '5/12', '6/12', '7/12', '8/12', '9/12', '10/12', '11/12', '12/12']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

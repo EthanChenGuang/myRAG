@@ -60,6 +60,8 @@ TS_JOB_NEEDLES = {
 # ts-db and ts-tsx split by recorded file durations (scripts/ci/test-durations.json); Node's --test-shard splits by file index.
 TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": SHARD_PLANNER, "ts-tsx": SHARD_PLANNER}
 TS_TIMEOUT_MAX = 25
+# ts-db rebuilds the fixture database in many suites; with the train-38 corpus its slowest shard needs up to ~35 minutes.
+TS_TIMEOUT_MAX_BY_JOB = {"ts-db": 40}
 PR_JOBS = [
     *TS_JOB_NEEDLES,
     "sibling-types",
@@ -558,8 +560,9 @@ def check_ts_jobs(jobs: dict, errors: list[str]) -> None:
         if "continue-on-error" in str(job):
             errors.append(f"pr-smoke: job {jname} must not use continue-on-error")
         timeout = job.get("timeout-minutes")
-        if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
-            errors.append(f"pr-smoke: job {jname} must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+        cap = TS_TIMEOUT_MAX_BY_JOB.get(jname, TS_TIMEOUT_MAX)
+        if not isinstance(timeout, int) or timeout > cap:
+            errors.append(f"pr-smoke: job {jname} must set timeout-minutes <= {cap}, got {timeout!r}")
         if jname in TS_SHARDED:
             check_shards(jname, job, TS_SHARDED[jname], errors)
         elif (job.get("strategy") or {}).get("matrix"):
