@@ -521,6 +521,8 @@ def render_markdown(result: Phase44Gates) -> str:
             lines += ["", "| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(g.numbers.items()))]
         if g.offenders:
             lines += ["", "Offenders:", *(f"- {offender}" for offender in g.offenders)]
+        if g.below_min_n:
+            lines += ["", "Below min_gate_n (reported, not gated):", *(f"- {line}" for line in g.below_min_n)]
     if result.report_only:
         lines += ["", "## Report-only (not gated)"]
         for r in result.report_only:

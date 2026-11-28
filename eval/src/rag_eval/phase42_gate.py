@@ -798,6 +798,8 @@ def render_markdown(result: Phase42Gates) -> str:
             lines += ["", "| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(g.numbers.items()))]
         if g.offenders:
             lines += ["", "Offenders:", *(f"- {offender}" for offender in g.offenders)]
+        if g.below_min_n:
+            lines += ["", "Below min_gate_n (reported, not gated):", *(f"- {line}" for line in g.below_min_n)]
     if result.decisions:
         lines += ["", "## Decisions", ""]
         for d in result.decisions:
@@ -805,6 +807,7 @@ def render_markdown(result: Phase42Gates) -> str:
             if d.numbers:
                 lines += ["| Number | Value |", "| --- | --- |", *(f"| {key} | {_num(value)} |" for key, value in sorted(d.numbers.items())), ""]
             lines += [f"- {reason}" for reason in d.reasons] or ["- every condition of the rule holds"]
+            lines += [f"- below min_gate_n (reported, not gated): {line}" for line in d.below_min_n]
             lines.append("")
     if result.report_only:
         lines += ["", "## Report-only", "", *(f"- {entry.metric}: {entry.note}" for entry in result.report_only)]

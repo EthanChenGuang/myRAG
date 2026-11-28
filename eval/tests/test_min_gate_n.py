@@ -134,3 +134,15 @@ def test_a_spec_without_the_rule_defaults_to_ten_and_rejects_zero():
     assert getattr(getattr(spec, "no_slice_drop_rule", None), "min_gate_n", None) == 10
     with pytest.raises(ValueError):
         phase42_gate.Phase42GateSpec.model_validate({**raw, "no_slice_drop_rule": {"version": 2, "min_gate_n": 0}})
+
+
+
+@pytest.mark.parametrize("module", [phase42_gate, phase44_gate])
+def test_markdown_lists_below_min_n_lines(module):
+    outcome = module._outcome("on", "D-x", ["on"], {}, ["on: category:table:mrr below_min_n (n=4 < min_gate_n=10)"])
+    extra = {"decisions": [], "report_only": []} if module is phase42_gate else {"report_only": []}
+    result = getattr(module, "Phase42Gates" if module is phase42_gate else "Phase44Gates")(
+        phase="04.x", passed=True, selected=["on"], noise_floor=0.02, noise_k=3.0, gates=[outcome], runs=[], notes=[], **extra
+    )
+    text = module.render_markdown(result)
+    assert "Below min_gate_n (reported, not gated):" in text and "category:table:mrr below_min_n" in text
