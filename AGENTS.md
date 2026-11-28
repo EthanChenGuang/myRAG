@@ -245,6 +245,7 @@ myrag/
 - Consent: a tenant's chunks are exported only with consent (`private` or `deployment`). Revoking taints every model version trained on that tenant (its evidence is dropped and its bindings stop serving) and prints the rollback, clear, artifact-delete and `prune` steps; `--prune-root <dir>` runs the prune, which deletes the tenant's text-bearing bundle files and keeps manifests and reports.
 - Retention: `prune` counts a bundle's age from its manifest's `created_at` (30 days by default); schedule it on the host that holds the bundles with cron or a systemd timer, never Vercel cron (`docs/finetune-retention.md`).
 - `embedding_model_versions`, `rag_finetune_consent` and every `rag_finetune_*` function are service_role only. A tenant-scope model serves only its own tenant.
+- Slot comparison: `eval/harness/run-profile-compare.mts` has no slot arm (a slot serves only after consent, a registered model card, a binding and a passing probe). A fixture slot comparison runs through the lifecycle harness `tests/helpers/finetune-lifecycle.mts` (`grantRegisterBind`, then `runProfileComparison`), as `tests/rag-db/finetune-release-lifecycle.test.mts` does.
 - Live items (plan 06.1-19): real export and training, endpoint binding, re-embed and the real-item profile comparison before activation. Fixture runs prove wiring only.
 
 ### Source deletion sync and purge (Phase 6.3)
