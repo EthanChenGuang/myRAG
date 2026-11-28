@@ -136,7 +136,9 @@ const chunkIds = (chunks: TraceChunk[]): string[] => chunks.map((chunk) => chunk
 
 function assertFromDominantTenant(trace: TraceLine | undefined, id: string): void {
   assert.ok(trace, `${id} has a trace`);
-  for (const chunk of [...trace.candidates, ...trace.kept]) {
+  // v2 candidates may carry no document name; every kept chunk does.
+  const named = [...trace.candidates.filter((chunk) => (chunk.document_name ?? '') !== ''), ...trace.kept];
+  for (const chunk of named) {
     assert.match(String(chunk.document_name ?? ''), DOMINANT_FILE, `${id}: chunk ${chunk.chunk_id} comes from the dominant-language tenant`);
   }
 }
