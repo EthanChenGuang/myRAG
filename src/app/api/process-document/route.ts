@@ -45,8 +45,6 @@ import { verifyUserOrganizationAccess } from '@/lib/auth/organization-handler';
 // Use Node.js runtime
 export const runtime = 'nodejs';
 
-const STORAGE_BUCKET = 'chat-attachments';
-
 // Token-based chunking utilities
 function estimateTokens(text: string): number {
   // OpenAI's tokenizer generates roughly 4 characters per token
@@ -407,28 +405,6 @@ async function processWithLlamaCloud(jobId: string): Promise<LlamaCloudProcessin
     images: result.images,
     chunks: result.chunks // Include chunks if provided by LlamaCloud
   };
-}
-
-async function uploadExtractedImage(imageBuffer: Buffer, filename: string): Promise<string> {
-  console.log(`Uploading extracted image: ${filename}`);
-  const { data, error } = await supabaseAdmin.storage
-    .from(STORAGE_BUCKET)
-    .upload(`extracted-images/${filename}`, imageBuffer, {
-      contentType: 'image/jpeg',
-      cacheControl: '3600'
-    });
-
-  if (error) {
-    console.error('Error uploading image:', error);
-    throw error;
-  }
-
-  console.log('Image uploaded successfully');
-  const { data: urlData } = supabaseAdmin.storage
-    .from(STORAGE_BUCKET)
-    .getPublicUrl(`extracted-images/${filename}`);
-
-  return urlData.publicUrl;
 }
 
 // Function to store document and its chunks in Supabase
@@ -1127,7 +1103,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { text, metadata, images, chunks: llamaChunks } = processingResult;
+    const { text, metadata, chunks: llamaChunks } = processingResult;
 
     // For temporary documents, return immediately with just the text
     if (isTemporary) {
@@ -1157,20 +1133,7 @@ export async function POST(req: Request) {
       return NextResponse.json(documentContent);
     }
 
-    // Process any extracted images (only for permanent documents)
-    const processedImages = images ? await Promise.all(
-      images.map(async (img: any, index: number) => {
-        console.log(`Processing image ${index + 1}/${images.length}`);
-        const imgBuffer = Buffer.from(img.data, 'base64');
-        const imgFilename = `${Date.now()}-${index}.jpg`;
-        const url = await uploadExtractedImage(imgBuffer, imgFilename);
-        return {
-          url,
-          pageNumber: img.pageNumber
-        };
-      })
-    ) : undefined;
-
+    // LlamaCloud page images are not stored: a copy no document or chunk references could never be purged (06.3-SECURITY W5).
     // Determine chunking strategy based on LlamaCloud response and configuration
     let validChunks: string[];
     
@@ -1235,7 +1198,6 @@ export async function POST(req: Request) {
       name: file.name,
       text,
       pages: metadata.total_pages,
-      extractedImages: processedImages,
       id: storedDocumentId,
       successfulChunks,
       totalChunks

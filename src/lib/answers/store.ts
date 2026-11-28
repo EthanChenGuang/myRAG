@@ -9,6 +9,7 @@ import {
   type AnswerRecord,
   type CitationRecord,
 } from '@/lib/rag-eval/contracts.generated';
+import { citationQuoteAllowed } from '@/lib/citations/quote';
 
 export type AnswerGroundednessValue = AnswerRecord['groundedness'];
 export type AnswerFeedbackValue = NonNullable<AnswerRecord['feedback']>;
@@ -86,7 +87,7 @@ const InsertSchema = z.object({
   ragMode: z.enum(['strict', 'balanced', 'flexible', 'bypass']),
   answerLanguage: z.string().nullable(),
   invalidCitations: z.number().int().gte(0),
-  citations: z.array(CitationRecordSchema),
+  citations: z.array(CitationRecordSchema.refine(citationQuoteAllowed, { message: 'quote too short', path: ['quote'] })),
   groundedness: AnswerRecordSchema.shape.groundedness,
   checks: AnswerChecksSchema.optional(),
   textsSource: z.enum(['registry', 'legacy']).optional(),
