@@ -1303,7 +1303,13 @@ def run_refusal_calibration(
     forced_path.write_text(forced_text, encoding="utf-8")
 
     run = (runner or _default_runner)(
-        run_config=forced_path, golden=golden_path, out=out_dir / HARNESS_DIR, base_url=base_url, fixture_mode=fixture_mode
+        run_config=forced_path,
+        golden=golden_path,
+        out=out_dir / HARNESS_DIR,
+        base_url=base_url,
+        fixture_mode=fixture_mode,
+        # The fit reads pre-refusal similarities and rerank scores; the floor this run may write is never applied while fitting it.
+        fixture_floor=False,
     )
     notes.extend(getattr(run, "notes", []) or [])
     _assert_refusal_off(run.traces)

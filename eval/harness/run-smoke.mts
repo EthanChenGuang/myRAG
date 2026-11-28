@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +72,7 @@ async function main(): Promise<number> {
       'golden-manifest': { type: 'string' },
       answers: { type: 'boolean', default: false },
       'no-answers': { type: 'boolean', default: false },
+      'no-fixture-floor': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
       phase52: { type: 'boolean', default: false },
       'rag-mode': { type: 'string' },
@@ -269,6 +271,11 @@ async function main(): Promise<number> {
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
   const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  // The fixture floor of this mode must have been fitted on the golden set in force for it, also when --golden names a subset of it.
+  const goldenInForce =
+    values.golden === undefined ? mergedGolden : mergeGoldenFiles(defaultGolden.map((file) => path.resolve(REPO_ROOT, file)), path.join(outDir, 'golden.in-force.jsonl'));
+  const fixtureFloorGolden = values['no-fixture-floor'] ? null : crypto.createHash('sha256').update(fs.readFileSync(goldenInForce)).digest('hex');
+  if (fixtureFloorGolden === null) console.log('[Eval Harness] fixture floor: off for this run (--no-fixture-floor)');
   // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
   // templated_collection items likewise run only in the inline ingest mode, which loads the templated collection for them.
   const goldenPath =
@@ -319,6 +326,7 @@ async function main(): Promise<number> {
     ...(answers ? { answers: true } : {}),
     ...(ragMode ? { ragMode } : {}),
     ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
+    fixtureFloorGolden,
   });
 
   if (result.cachePairsPath) {

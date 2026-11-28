@@ -143,6 +143,8 @@ export interface InProcessEval {
 
 export interface RunEvalOptions {
   goldenPath: string;
+  /** The fixture floor's golden check (prepareInProcessEval); defaults to the sha256 of goldenPath, null installs no floor. */
+  fixtureFloorGolden?: string | null;
   corpusDir: string;
   outDir: string;
   deploymentMode: DeploymentMode;
@@ -393,8 +395,11 @@ export async function prepareInProcessEval(options: {
    * list seeds nothing. A caller-built ingestFixture is seeded only when it holds no layer of these rows yet.
    */
   terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
-  /** sha256 of the run's golden file: the fixture floor entry of the mode must have been fitted on it, or the run stops. */
-  goldenSha256?: string;
+  /**
+   * The fixture floor: the sha256 of the golden set in force for the mode (the entry must have been fitted on it, or the run stops),
+   * null to install no floor (calibration runs), absent to read the entry unchecked (callers without a run golden file).
+   */
+  fixtureFloorGolden?: string | null;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -562,7 +567,9 @@ export async function prepareInProcessEval(options: {
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
   const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
   floorModule.setEvalScoreCalibration(
-    loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked', { goldenSha256: options.goldenSha256 }),
+    options.fixtureFloorGolden === null
+      ? null
+      : loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked', { goldenSha256: options.fixtureFloorGolden }),
   );
 
   return {
@@ -874,7 +881,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           corpusDir,
           deploymentMode,
           fixtureMode,
-          goldenSha256: sha256File(goldenPath),
+          fixtureFloorGolden: options.fixtureFloorGolden === undefined ? sha256File(goldenPath) : options.fixtureFloorGolden,
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,

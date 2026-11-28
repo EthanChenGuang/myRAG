@@ -139,6 +139,7 @@ def run_harness(
     chunking_profiles: list[dict[str, Any]] | None = None,
     answers: bool = False,
     rag_mode: str | None = None,
+    fixture_floor: bool = True,
 ) -> HarnessRun:
     if rag_mode is not None and rag_mode not in ("strict", "balanced"):
         raise HarnessError(f"rag_mode must be strict or balanced, got {rag_mode!r}")
@@ -186,6 +187,8 @@ def run_harness(
         argv.extend(["--rag-mode", rag_mode])
     if fixture_mode:
         argv.extend(["--fixture-mode", fixture_mode])
+    if not fixture_floor:
+        argv.append("--no-fixture-floor")
 
     result = (spawner or default_spawner)(argv, Path(repo_root))
     code = getattr(result, "returncode", None)
