@@ -2,10 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
-const { exec, spawn } = require('child_process');
+const { exec, execFile, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
 const ragGate = require('./config-server-rag-gate');
+const redTeam = require('./config-server-red-team');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -1430,6 +1431,16 @@ ragGate.registerRagGateRoutes(
     repoRoot: REPO_ROOT,
     spawn,
     prepareConfig: prepareRagGateConfig,
+    appBaseUrl: () => getMainAppBaseUrl(),
+  }),
+);
+
+// SEC-11: red-team runs started from the Config UI, behind the loopback and CSRF checks; the app confirms an admin first.
+redTeam.registerRedTeamRoutes(
+  app,
+  redTeam.createRedTeamRunner({
+    repoRoot: REPO_ROOT,
+    execFile,
     appBaseUrl: () => getMainAppBaseUrl(),
   }),
 );
