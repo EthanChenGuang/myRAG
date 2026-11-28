@@ -400,6 +400,7 @@ export const zh = {
   executingTool: "执行工具中，请稍候...",
   toolError: "运行工具时发生错误。",
   voiceUnavailable: "语音暂不可用，请稍后再试。",
+  emptyReply: "这次未能生成回答，请重试或换个问法。",
   
   // Chat message action tooltips
   copyTooltip: "复制",

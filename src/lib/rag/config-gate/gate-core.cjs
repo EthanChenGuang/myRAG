@@ -38,6 +38,9 @@ const MAX_CHANGED_KEYS = 200;
 const MAX_CELLS = 500;
 
 const REQUIRED = Object.freeze({ kind: 'refuse', status: 409, error: 'rag_gate_required' });
+const OVERRIDE_REQUIRED = Object.freeze({ kind: 'refuse', status: 409, error: 'rag_gate_override_required' });
+const GATE_NAME = 'RAG_CONFIG_GATE';
+const MODE_RANK = Object.freeze({ off: 0, warn: 1, enforce: 2 });
 const INVALID_REASON = Object.freeze({ kind: 'refuse', status: 400, error: 'invalid_reason' });
 
 function defaultNames() {
@@ -82,8 +85,14 @@ function write(gateResult, checkId = null, overrideReason = null) {
   return { kind: 'write', gateResult, checkId, overrideReason };
 }
 
+/** W-1: true when the save changes RAG_CONFIG_GATE to a mode weaker than the effective one. */
+function lowersGate(before, after, keys, effective) {
+  if (!ragAffectingDiff(before, after, keys).includes(GATE_NAME)) return false;
+  return MODE_RANK[normaliseMode(after[GATE_NAME])] < MODE_RANK[effective];
+}
+
 /**
- * D-10, D-15: decides one save.
+ * D-10, D-15: decides one save. In enforce mode a save that lowers RAG_CONFIG_GATE needs a typed override reason (W-1).
  * @param {{ mode?: string, before: object, after: object, ragGate?: object | null, readCheck?: (id: string) => object | null | Promise<object | null>, names?: Iterable<string> }} input
  * @returns {Promise<{ kind: 'write', gateResult: string, checkId: string | null, overrideReason: string | null } | { kind: 'refuse', status: number, error: string }>}
  */
@@ -95,6 +104,8 @@ async function decideSave({ mode, before, after, ragGate, readCheck, names } = {
 
   const reason = trimmedReason(ragGate);
   if (effective === 'enforce' && reason.present && !reason.valid) return { ...INVALID_REASON };
+  // W-1: a save that lowers the gate below enforce is never decided by a check of the settings it writes.
+  if (effective === 'enforce' && lowersGate(before || {}, after || {}, keys, effective) && !reason.valid) return { ...OVERRIDE_REQUIRED };
 
   const hash = ragSettingsHash(after || {}, keys);
   const check = await matchingCheck(ragGate, readCheck, hash);

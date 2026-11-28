@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerRecordRow } from './store';
+import { withLegacyChecksSentenceReasons } from './sentence-reason';
 
 export type DocumentAvailability = 'current' | 'unavailable' | 'withdrawn';
 
@@ -93,7 +94,7 @@ export function toAnswerRecord(
 /** D-23: present only when the row was read with the 0940 columns; a stored '{}' (or a non-object) gives an empty checks object. */
 function checksFields(row: AnswerRecordRow): { checks?: Record<string, unknown>; textsSource?: string } {
   const fields: { checks?: Record<string, unknown>; textsSource?: string } = {};
-  if (row.checks !== undefined) fields.checks = objectOr(row.checks) ?? {};
+  if (row.checks !== undefined) fields.checks = (withLegacyChecksSentenceReasons(objectOr(row.checks)) as Record<string, unknown> | null) ?? {};
   if (typeof row.texts_source === 'string') fields.textsSource = row.texts_source;
   return fields;
 }

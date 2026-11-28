@@ -26,6 +26,8 @@
 --    ORDER BY 1;
 -- Re-running any migration below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (this file, then the mode
 -- file) after it.
+-- Phase 3.1.1: re-running 0425 after 0440 and 0442 puts back the unscoped rag_chunk_embeddings_guard and rag_reembed_* bodies without
+-- notice, so re-run 0440 and then 0442 after it. (quick-311, I-3)
 
 BEGIN;
 

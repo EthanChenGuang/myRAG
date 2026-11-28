@@ -14,7 +14,14 @@ export type SupportedProvider =
   | 'notion'
   | 'dropbox'
   | 'box'
-  | 'confluence';
+  | 'confluence'
+  | 'sharepoint-online'
+  | 'one-drive';
+
+function integrationIdFromEnv(configured: string | undefined, providerId: string): string {
+  const trimmed = (configured || '').trim();
+  return trimmed || providerId;
+}
 
 /**
  * Provider display configuration
@@ -64,6 +71,20 @@ export const PROVIDER_CONFIG: Record<SupportedProvider, {
     description: 'Sync Confluence pages and spaces',
     fileModel: 'pages',
     integrationId: 'confluence',
+  },
+  'sharepoint-online': {
+    displayName: 'SharePoint Online',
+    icon: '/icons/connectors/default.svg',
+    description: 'Sync documents from SharePoint Online sites and libraries',
+    fileModel: 'files',
+    integrationId: integrationIdFromEnv(typeof process !== 'undefined' ? process.env.NANGO_SHAREPOINT_INTEGRATION_KEY : undefined, 'sharepoint-online'),
+  },
+  'one-drive': {
+    displayName: 'OneDrive for Business',
+    icon: '/icons/connectors/onedrive.svg',
+    description: 'Sync documents from OneDrive for Business',
+    fileModel: 'files',
+    integrationId: integrationIdFromEnv(typeof process !== 'undefined' ? process.env.NANGO_ONEDRIVE_INTEGRATION_KEY : undefined, 'one-drive'),
   },
 };
 
@@ -117,6 +138,8 @@ export interface NangoSyncRecord {
  * Nango webhook payload types
  */
 export type NangoWebhookType =
+  | 'sync'
+  | 'auth'
   | 'sync.success'
   | 'sync.error'
   | 'auth.token_expired'
@@ -135,9 +158,18 @@ export interface NangoWebhookPayload {
     deleted: number;
   };
   error?: {
-    message: string;
+    message?: string;
     type: string;
+    description?: string;
   };
+  /** Current payloads (type 'sync' and 'auth'): whether the run or the auth operation succeeded. */
+  success?: boolean;
+  /** Current sync payloads: `from === null` marks a full sync (D-33). */
+  checkpoints?: { from: string | null; to: string | null };
+  /** Auth payloads: creation, override, refresh or deletion. */
+  operation?: string;
+  startedAt?: string;
+  failedAt?: string;
 }
 
 /**
@@ -154,6 +186,10 @@ export interface NangoFileRecord {
   web_url?: string;
   /** Dropbox: the shared folder that holds the file (files/list_folder sharing_info.parent_shared_folder_id). */
   parent_shared_folder_id?: string;
+  /** A provider revision tag when the listing reports one (Dropbox `rev`), stored as documents.source_etag (D-07). */
+  etag?: string;
+  /** SharePoint Online / OneDrive for Business: the drive that holds the item (Graph item ids are looked up per drive). */
+  drive_id?: string;
 }
 
 /**

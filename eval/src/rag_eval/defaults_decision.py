@@ -8,6 +8,7 @@ refusal is the single-threshold behaviour (D-26)."""
 import argparse
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -34,6 +35,9 @@ EXIT_INTERNAL = 70
 
 Profile = Literal["chat", "embed", "eval", "voice"]
 PROFILES: tuple[Profile, ...] = ("chat", "embed", "eval", "voice")
+# src/lib/rag/rerank/select.ts AUTO_HOSTED_PROFILES: voice stays off hosted rerank under auto until G7 measures it (G-06).
+CODE_DEFAULT_HOSTED: tuple[Profile, ...] = ("chat", "embed", "eval")
+VOICE_UNMEASURED = "not measured: no live voice p95 for hosted rerank yet (G7 pending)"
 CHAT_TIER_PROFILES: tuple[Profile, ...] = ("chat", "embed", "eval")
 DEFAULT_VARIABLES = ("RAG_PIPELINE", "RAG_LEXICAL_SEARCH", "RAG_RERANKER", "RAG_REFUSAL_THRESHOLD", "RAG_REFUSAL_FLOOR")
 D01_VALUES = {
@@ -136,6 +140,14 @@ class HostedDecision(_Model):
     notes: list[str] = Field(default_factory=list)
 
 
+class Historical(_Model):
+    """A record kept as the evidence of one run, not rebuilt when its inputs move on (check-current still reports the drift)."""
+
+    as_of_git_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    reason: str = Field(min_length=10)
+    original_gate_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class DecisionRecord(_Model):
     """The retrieval-defaults decision Phase 7 takes as its incumbent (D-15). No field names a RAG mode (D-26)."""
 
@@ -162,6 +174,9 @@ class DecisionRecord(_Model):
     g7: G7Record
     g8: G8Result
     caveat: str
+    git_sha: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    run_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    historical: Historical | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> "DecisionRecord":
@@ -206,10 +221,10 @@ def _recorded_ref(path: str, recorded_sha256: str, what: str) -> FileRef:
 
 def _hosted(live: LiveRerankResult) -> tuple[list[Profile], HostedDecision]:
     if live.status == "pending_live":
-        return list(PROFILES), HostedDecision(
+        return list(CODE_DEFAULT_HOSTED), HostedDecision(
             preference=HOSTED_PREFERENCE,
             basis="pending_live",
-            dropped=[],
+            dropped=[DroppedProfile(profile="voice", reason=VOICE_UNMEASURED)],
             notes=[
                 (
                     "G7 not run: the live passes of plan 04.1-08 are an operator action; AUTO_HOSTED_PROFILES keeps its code "
@@ -360,6 +375,15 @@ def _flip_reasons(gate: DefaultsGateResult, blockers: list[str]) -> list[str]:
     return unique
 
 
+def _run_date(gate: DefaultsGateResult) -> str | None:
+    stamps = [mode.created_at for config in gate.configurations for mode in config.modes]
+    if gate.evaluated_at:
+        stamps.append(gate.evaluated_at)
+    if not stamps:
+        return None
+    return max(datetime.fromisoformat(stamp.replace("Z", "+00:00")) for stamp in stamps).date().isoformat()
+
+
 def build_decision(gate_path: Path, live_path: Path, *, blockers: list[str] | None = None) -> DecisionRecord:
     gate_file = resolve_cli_path(gate_path)
     live_file = resolve_cli_path(live_path)
@@ -414,6 +438,8 @@ def build_decision(gate_path: Path, live_path: Path, *, blockers: list[str] | No
         g7=g7,
         g8=gate.g8,
         caveat=CAVEAT,
+        git_sha=gate.git_sha,
+        run_date=_run_date(gate),
     )
 
 
@@ -428,12 +454,15 @@ def render_markdown(record: DecisionRecord) -> str:
     lines = ["# Phase 4.1 retrieval-defaults decision", ""]
     lines.append(f"Status: **{record.status}** (provisional: fixture evidence only, until the real-golden re-run of D-14)")
     lines.append(f"Refusal basis: {record.refusal_basis}")
+    lines.append(f"Run git sha: {record.git_sha or 'not recorded'}; run date: {record.run_date or 'not recorded'}")
+    if record.historical is not None:
+        lines.append(f"Historical record as of {record.historical.as_of_git_sha}: {record.historical.reason}")
     lines.append("")
     if record.reasons:
         lines += ["## Why not flipped", "", *[f"- {reason}" for reason in record.reasons], ""]
         failing = [
             f"- {criterion.id} {result.config} ({result.mode}): {check.name} {check.slice or ''} {check.metric or ''} "
-            f"observed {_fmt(check.observed)} (n {'' if check.n is None else check.n}) bound {_fmt(check.bound)}"
+            f"observed {_fmt(check.observed)} (n {'n/a' if check.n is None else check.n}) bound {_fmt(check.bound)}"
             for criterion in record.criteria
             for result in criterion.results
             for check in result.checks
@@ -571,12 +600,13 @@ def _cmd_check(args: argparse.Namespace) -> int:
             stale.append(f"{role} {ref.path} is missing")
         elif sha256_file(target) != ref.sha256:
             stale.append(f"{role} {ref.path} differs from the file the decision was taken on")
+    label = "" if record.historical is None else f" (historical record as of {record.historical.as_of_git_sha})"
     if stale:
-        print("defaults_decision: stale", file=sys.stderr)
+        print(f"defaults_decision: stale{label}", file=sys.stderr)
         for line in stale:
             print(f"  {line}", file=sys.stderr)
         return EXIT_STALE
-    print(f"defaults_decision: current ({record.status})")
+    print(f"defaults_decision: current ({record.status}){label}")
     return EXIT_CURRENT
 
 

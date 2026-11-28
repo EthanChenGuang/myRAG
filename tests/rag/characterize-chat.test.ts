@@ -58,8 +58,14 @@ interface Configuration {
 }
 
 // One snapshot file, two configurations: the explicit legacy pipeline, and a defaulted v2 whose languages are not chosen (D-24).
+// Both run with the languages unset: since quick-261127-irl the strict refusal follows the question's language while languages are
+// configured, so the D-24 comparison holds like for like; the configured refusal language is covered by refusal-language-route.test.ts.
 const CONFIGURATIONS: Configuration[] = [
-  { name: 'explicit legacy', env: { RAG_PIPELINE: 'legacy' }, defaultPipeline: null },
+  {
+    name: 'explicit legacy',
+    env: { RAG_PIPELINE: 'legacy', RAG_SUPPORTED_LANGUAGES: undefined, RAG_PRIMARY_LANGUAGE: undefined },
+    defaultPipeline: null,
+  },
   {
     name: 'languages unset under a defaulted v2',
     env: { RAG_PIPELINE: undefined, RAG_SUPPORTED_LANGUAGES: undefined, RAG_PRIMARY_LANGUAGE: undefined },

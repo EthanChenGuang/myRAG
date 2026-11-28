@@ -2,7 +2,7 @@ import { CondensedQuerySchema, type CondensedQuery } from '@/lib/rag-eval/contra
 import { getRagDeps } from '../../deps';
 import type { HistoryTurn } from '../../types';
 import { checkCondensed, DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits, type PostCheckSkip } from '../post-checks';
-import { loadPrompt, renderPrompt } from '../prompts/render';
+import { loadPrompt, renderPrompt, type TerminologyGlossaryEntry } from '../prompts/render';
 import type { Lang } from '../rewrite-gate';
 
 export const LLAMAINDEX_CONDENSE_PROMPT_ID = 'llamaindex.condense';
@@ -17,6 +17,8 @@ export interface CondenseInput {
   protectedTokens: readonly string[];
   /** D-14: glossary source terms in the query (RAG_TRANSLATION_GLOSSARY effective); the rewrite must keep them verbatim. */
   glossaryProtected?: readonly string[];
+  /** QRY-01: dictionary matches in the query and history (RAG_TERMINOLOGY on); listed in the prompt, never checked. */
+  terminology?: readonly TerminologyGlossaryEntry[];
   limits?: PostCheckLimits;
   signal: AbortSignal;
 }
@@ -36,7 +38,13 @@ export async function llamaindexCondense(input: CondenseInput): Promise<Condense
   const prompt = renderPrompt(
     loadPrompt(LLAMAINDEX_CONDENSE_PROMPT_ID),
     { question: input.query },
-    { language: input.language, maxItems: 1, protectedTokens: input.protectedTokens, history: input.history },
+    {
+      language: input.language,
+      maxItems: 1,
+      protectedTokens: input.protectedTokens,
+      history: input.history,
+      ...(input.terminology ? { terminology: input.terminology } : {}),
+    },
   );
   const output = await getRagDeps()
     .queryLlm()

@@ -1,0 +1,61 @@
+{
+  "note": "Hand-written synthetic Graph listing pages for the SharePoint / OneDrive picker (D-25). No tenant data.",
+  "responses": {
+    "/v1.0/sites?$select=id,name,displayName": {
+      "status": 200,
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#sites",
+        "value": [
+          { "id": "site-a", "name": "site-a", "displayName": "Site A", "webUrl": "https://example.test/sites/a" }
+        ],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/sites?$select=id,name,displayName&$skiptoken=page2"
+      }
+    },
+    "/v1.0/sites?$select=id,name,displayName&$skiptoken=page2": {
+      "status": 200,
+      "body": { "value": [ { "id": "site-b", "name": "site-b", "displayName": "Site B" } ] }
+    },
+    "/v1.0/sites?search=ab&$select=id,name,displayName": {
+      "status": 200,
+      "body": { "value": [ { "id": "site-c", "name": "site-c", "displayName": "Site C" } ] }
+    },
+    "/v1.0/sites/site-a/drives?$select=id,name": {
+      "status": 200,
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#drives",
+        "value": [
+          { "id": "drive-a", "name": "Library 1" },
+          { "id": "drive-b", "name": "Library 2" }
+        ]
+      }
+    },
+    "/v1.0/me/drives?$select=id,name": {
+      "status": 200,
+      "body": { "value": [ { "id": "drive-o", "name": "Library 1" } ] }
+    },
+    "/v1.0/drives/drive-a/root/children?$select=id,name,folder,file&$top=200": {
+      "status": 200,
+      "body": {
+        "value": [
+          { "id": "item-folder-1", "name": "Folder 1", "folder": { "childCount": 2 } },
+          { "id": "item-folder-2", "name": "Folder 2", "folder": { "childCount": 0 } },
+          { "id": "item-file-a", "name": "file-a.pdf", "file": { "mimeType": "application/pdf" } }
+        ],
+        "@odata.nextLink": "https://graph.microsoft.com/v1.0/drives/drive-a/root/children?$select=id,name,folder,file&$top=200&$skiptoken=page2"
+      }
+    },
+    "/v1.0/drives/drive-a/root/children?$select=id,name,folder,file&$top=200&$skiptoken=page2": {
+      "status": 200,
+      "body": { "value": [ { "id": "item-folder-3", "name": "Folder 3", "folder": { "childCount": 1 } } ] }
+    },
+    "/v1.0/drives/drive-a/items/item-folder-1/children?$select=id,name,folder,file&$top=200": {
+      "status": 200,
+      "body": {
+        "value": [
+          { "id": "item-folder-4", "name": "Folder 4", "folder": { "childCount": 0 } },
+          { "id": "item-file-b", "name": "file-b.docx", "file": {} }
+        ]
+      }
+    }
+  }
+}

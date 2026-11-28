@@ -93,8 +93,11 @@ export function stripRestrictedContent<T extends StrippableTrace>(
   collected: T,
   labels: ReadonlyMap<string, readonly string[]> | null,
   kept: readonly ExportChunk[],
+  /** T-04.3-143: documents that count as kept without a chunk (the cached sources of a semantic-cache hit). */
+  sourceDocumentIds: readonly string[] = [],
 ): T {
-  const restricted = kept.some((chunk) => isRestrictedDocument(labels, chunk.document_id));
+  const restricted =
+    kept.some((chunk) => isRestrictedDocument(labels, chunk.document_id)) || sourceDocumentIds.some((id) => isRestrictedDocument(labels, id));
   const out: T = { ...collected };
   if (out.content?.chunks !== undefined) {
     out.content = {

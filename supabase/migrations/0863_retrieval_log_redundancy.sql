@@ -1,4 +1,4 @@
--- 0863: rag_retrieval_log.topk_redundancy, the largest share of the kept chunks in one duplicate cluster (Phase 4.2, D-22, RET-13).
+-- 0863: rag_retrieval_log.topk_redundancy, the largest share of the kept chunks with one (duplicate cluster, value signature) pair (Phase 4.2, D-22 v2, RET-13).
 -- Nullable: written only when a kept chunk carried a cluster id. A number between 0 and 1, never chunk or document text.
 -- Access is the table's own (0531): RLS on with no policy, service_role only. Skipped where 0531 has not run. Idempotent.
 

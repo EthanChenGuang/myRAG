@@ -290,6 +290,7 @@ export function createFakeWeaviate(options: FakeWeaviateOptions = {}): FakeWeavi
         return { description: String(requireCollection(name).config.description ?? '') };
       },
       async delete(name: string) {
+        calls.push({ op: 'collections.delete', collection: name, tenant: null });
         collections.delete(name);
       },
     },

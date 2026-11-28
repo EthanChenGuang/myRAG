@@ -156,15 +156,19 @@ function readRagEnvInput(): RagEnvInput {
     RAG_QUERY_CONDENSE: process.env.RAG_QUERY_CONDENSE ?? env.RAG_QUERY_CONDENSE,
     RAG_QUERY_EXPAND: process.env.RAG_QUERY_EXPAND ?? env.RAG_QUERY_EXPAND,
     RAG_QUERY_DECOMPOSE: process.env.RAG_QUERY_DECOMPOSE ?? env.RAG_QUERY_DECOMPOSE,
-    RAG_QUERY_DECOMPOSE_COMPLETENESS: process.env.RAG_QUERY_DECOMPOSE_COMPLETENESS,
-    RAG_QUERY_SUBQ_FILTERS: process.env.RAG_QUERY_SUBQ_FILTERS,
+    RAG_QUERY_DECOMPOSE_COMPLETENESS: process.env.RAG_QUERY_DECOMPOSE_COMPLETENESS ?? env.RAG_QUERY_DECOMPOSE_COMPLETENESS,
+    RAG_QUERY_SUBQ_FILTERS: process.env.RAG_QUERY_SUBQ_FILTERS ?? env.RAG_QUERY_SUBQ_FILTERS,
+    RAG_DECOMPOSED_ANSWER: process.env.RAG_DECOMPOSED_ANSWER ?? env.RAG_DECOMPOSED_ANSWER,
     RAG_TRANSLATION_GLOSSARY: process.env.RAG_TRANSLATION_GLOSSARY ?? env.RAG_TRANSLATION_GLOSSARY,
+    RAG_SCOPE_GATE: process.env.RAG_SCOPE_GATE ?? env.RAG_SCOPE_GATE,
+    RAG_WHATSAPP_HISTORY: process.env.RAG_WHATSAPP_HISTORY ?? env.RAG_WHATSAPP_HISTORY,
     RAG_QUERY_TRANSLATE: process.env.RAG_QUERY_TRANSLATE ?? env.RAG_QUERY_TRANSLATE,
     RAG_QUERY_DATE_NORMALIZE: process.env.RAG_QUERY_DATE_NORMALIZE ?? env.RAG_QUERY_DATE_NORMALIZE,
     RAG_QUERY_HYDE: process.env.RAG_QUERY_HYDE ?? env.RAG_QUERY_HYDE,
     RAG_QUERY_TRANSLATE_DISABLED_PROFILES: process.env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES ?? env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES,
     RAG_QUERY_VOICE_TRANSFORMS: process.env.RAG_QUERY_VOICE_TRANSFORMS ?? env.RAG_QUERY_VOICE_TRANSFORMS,
     RAG_QUERY_HISTORY_FALLBACK: process.env.RAG_QUERY_HISTORY_FALLBACK ?? env.RAG_QUERY_HISTORY_FALLBACK,
+    RAG_SPECULATIVE_RETRIEVAL: process.env.RAG_SPECULATIVE_RETRIEVAL ?? env.RAG_SPECULATIVE_RETRIEVAL,
     RAG_SEMANTIC_CACHE: process.env.RAG_SEMANTIC_CACHE ?? env.RAG_SEMANTIC_CACHE,
     RAG_SEMANTIC_CACHE_TTL: process.env.RAG_SEMANTIC_CACHE_TTL ?? env.RAG_SEMANTIC_CACHE_TTL,
     RAG_SEMANTIC_CACHE_REFUSAL_TTL: process.env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? env.RAG_SEMANTIC_CACHE_REFUSAL_TTL,
@@ -173,6 +177,10 @@ function readRagEnvInput(): RagEnvInput {
     RAG_RETRIEVAL_BACKEND: process.env.RAG_RETRIEVAL_BACKEND ?? env.RAG_RETRIEVAL_BACKEND,
     RAG_RETRIEVAL_BACKEND_VOICE: process.env.RAG_RETRIEVAL_BACKEND_VOICE ?? env.RAG_RETRIEVAL_BACKEND_VOICE,
     RAG_VECTOR_SYNC_MAX_LAG_SECONDS: process.env.RAG_VECTOR_SYNC_MAX_LAG_SECONDS ?? env.RAG_VECTOR_SYNC_MAX_LAG_SECONDS,
+    RAG_LANGID_SIDECAR: process.env.RAG_LANGID_SIDECAR ?? env.RAG_LANGID_SIDECAR,
+    RAG_MODEL_ROUTING: process.env.RAG_MODEL_ROUTING ?? env.RAG_MODEL_ROUTING,
+    RAG_ROUTING_FAST_MODEL: process.env.RAG_ROUTING_FAST_MODEL ?? env.RAG_ROUTING_FAST_MODEL,
+    RAG_ROUTING_QUALITY_MODEL: process.env.RAG_ROUTING_QUALITY_MODEL ?? env.RAG_ROUTING_QUALITY_MODEL,
   };
 }
 
@@ -247,6 +255,19 @@ export function currentContextTokenBudget(): number {
 /** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
 export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
+}
+
+/** 06.2 G3: effective RAG_MODEL_ROUTING with the two raw routing ids (empty when not set); read by the chat model list. */
+export function currentModelRouting(): { mode: 'off' | 'auto'; fastModel: string; qualityModel: string } {
+  const fastModel = (process.env.RAG_ROUTING_FAST_MODEL ?? env.RAG_ROUTING_FAST_MODEL ?? '').trim();
+  const qualityModel = (process.env.RAG_ROUTING_QUALITY_MODEL ?? env.RAG_ROUTING_QUALITY_MODEL ?? '').trim();
+  const { mode } = loadRagConfig({
+    ...getRagDeps().ragEnv(),
+    RAG_MODEL_ROUTING: process.env.RAG_MODEL_ROUTING ?? env.RAG_MODEL_ROUTING,
+    RAG_ROUTING_FAST_MODEL: fastModel,
+    RAG_ROUTING_QUALITY_MODEL: qualityModel,
+  }).modelRouting;
+  return { mode, fastModel, qualityModel };
 }
 
 /** D-29: the effective attribute filter mode ('off' unless RAG_ATTRIBUTE_FILTER, RAG_DOC_ATTRIBUTES and the v2 pipeline allow it). */

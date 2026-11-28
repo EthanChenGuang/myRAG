@@ -3,6 +3,15 @@ import { weaviateConfigure as configure } from './client';
 import { mapWeaviateError } from './errors';
 import { WEAVIATE_INDEX } from '../index-params';
 import type { WeaviateClientLike } from './types';
+import {
+  LEXICAL_BM25_KEY,
+  LexicalParamsMismatchError,
+  defaultLexicalParams,
+  lexicalParamsRecord,
+  recordedLexicalParams,
+  sameLexicalParams,
+  type LexicalParams,
+} from '../lexical-params';
 
 export const WEAVIATE_LEXICAL_MODE = WEAVIATE_INDEX.lexicalMode;
 export const WEAVIATE_LEXICAL_PROPERTY = 'lexical_text';
@@ -23,21 +32,30 @@ export interface WeaviateCollectionDescription {
   profile_id: string;
   dims: number;
   lexical_mode: typeof WEAVIATE_LEXICAL_MODE;
+  /** LEX-05: lexical_bm25, the BM25 pair the inverted index was built with; absent on a collection created before it (the defaults). */
+  [LEXICAL_BM25_KEY]?: { k1: number; b: number };
 }
 
 export interface WeaviateCollectionState {
   exists: boolean;
   dims: number | null;
   lexicalMode: string | null;
+  /** The recorded pair (defaults when the description has none); null when the collection does not exist. */
+  lexicalParams: LexicalParams | null;
 }
 
 /**
  * D-06, D-13, A-4, RET-10: one multi-tenant collection per embedding profile, tenants created only by the worker, one
  * self-provided vector with the pgvector HNSW parameters, no quantization, no stopwords, BM25 over the shared tokenizer output.
  */
-export function weaviateCollectionSpec(profileId: string, dims: number): Record<string, unknown> {
+export function weaviateCollectionSpec(profileId: string, dims: number, params: LexicalParams = defaultLexicalParams()): Record<string, unknown> {
   if (!Number.isInteger(dims) || dims <= 0) throw new Error('[Vector Sync] weaviate collection dims must be a positive integer');
-  const description: WeaviateCollectionDescription = { profile_id: profileId, dims, lexical_mode: WEAVIATE_LEXICAL_MODE };
+  const description: WeaviateCollectionDescription = {
+    profile_id: profileId,
+    dims,
+    lexical_mode: WEAVIATE_LEXICAL_MODE,
+    [LEXICAL_BM25_KEY]: lexicalParamsRecord(params),
+  };
   return {
     name: weaviateCollectionName(profileId),
     description: JSON.stringify(description),
@@ -54,8 +72,8 @@ export function weaviateCollectionSpec(profileId: string, dims: number): Record<
     invertedIndex: configure.invertedIndex({
       indexNullState: true,
       stopwordsPreset: 'none',
-      bm25k1: 1.2,
-      bm25b: 0.75,
+      bm25k1: params.k1,
+      bm25b: params.b,
     }),
     properties: [
       {
@@ -91,21 +109,31 @@ function parseDescription(raw: string | null | undefined): Partial<WeaviateColle
 export async function describeWeaviateCollection(client: WeaviateClientLike, profileId: string): Promise<WeaviateCollectionState> {
   const name = weaviateCollectionName(profileId);
   try {
-    if (!(await client.collections.exists(name))) return { exists: false, dims: null, lexicalMode: null };
+    if (!(await client.collections.exists(name))) return { exists: false, dims: null, lexicalMode: null, lexicalParams: null };
     const description = parseDescription((await client.collections.export(name)).description);
     return {
       exists: true,
       dims: typeof description.dims === 'number' ? description.dims : null,
       lexicalMode: typeof description.lexical_mode === 'string' ? description.lexical_mode : null,
+      lexicalParams: recordedLexicalParams(description[LEXICAL_BM25_KEY]),
     };
   } catch (error) {
     throw mapWeaviateError(error, 'describe_collection');
   }
 }
 
-/** Creates the collection when absent (write client); an existing one with other dims or another lexical mode is refused. */
-export async function ensureWeaviateCollection(client: WeaviateClientLike, profileId: string, dims: number, raced = false): Promise<void> {
-  const spec = weaviateCollectionSpec(profileId, dims);
+/**
+ * Creates the collection when absent (write client); an existing one with other dims, another lexical mode or another BM25 pair is
+ * refused. k1 and b live in the inverted index, so a changed pair needs rebuild-lexical, never an in-place update.
+ */
+export async function ensureWeaviateCollection(
+  client: WeaviateClientLike,
+  profileId: string,
+  dims: number,
+  params: LexicalParams = defaultLexicalParams(),
+  raced = false,
+): Promise<void> {
+  const spec = weaviateCollectionSpec(profileId, dims, params);
   const state = await describeWeaviateCollection(client, profileId);
   if (!state.exists) {
     try {
@@ -114,10 +142,23 @@ export async function ensureWeaviateCollection(client: WeaviateClientLike, profi
     } catch (error) {
       if (raced || !/already exists/i.test(error instanceof Error ? error.message : '')) throw mapWeaviateError(error, 'create_collection');
     }
-    return ensureWeaviateCollection(client, profileId, dims, true);
+    return ensureWeaviateCollection(client, profileId, dims, params, true);
   }
   if (state.dims !== dims) throw new Error('[Vector Sync] weaviate collection dims differ');
   if (state.lexicalMode !== WEAVIATE_LEXICAL_MODE) throw new Error('[Vector Sync] weaviate collection lexical mode differs');
+  const recorded = state.lexicalParams ?? defaultLexicalParams();
+  if (!sameLexicalParams(recorded, params)) throw new LexicalParamsMismatchError('weaviate', profileId, recorded, params);
+}
+
+/** rebuild-lexical: drops the profile's collection (every tenant shard) and creates it again with the given pair. */
+export async function recreateWeaviateCollection(client: WeaviateClientLike, profileId: string, dims: number, params: LexicalParams): Promise<void> {
+  const name = weaviateCollectionName(profileId);
+  try {
+    if (await client.collections.exists(name)) await client.collections.delete(name);
+  } catch (error) {
+    throw mapWeaviateError(error, 'delete_collection');
+  }
+  await ensureWeaviateCollection(client, profileId, dims, params);
 }
 
 /** D-07: tenants are created only here, from canonical keys, on the write client; the server never creates one. */

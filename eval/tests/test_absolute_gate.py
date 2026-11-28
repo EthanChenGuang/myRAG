@@ -538,3 +538,75 @@ def test_items_marked_report_only_are_not_counted():
     report = _report(items=rows)
     assert all(isinstance(item, ItemResult) for item in report.items)
     assert _composition(evaluate(report, _gates(), tier="smoke"), "en").items == 100
+
+
+# Gap 3 (05.3-VERIFICATION, quick-53): per-check enforcement. A listed ceiling is reported, every other check still gates.
+def _false_refusal_failing_slice() -> dict:
+    return _slice(false_refusals=40)
+
+
+def test_report_only_checks_keep_the_listed_ceiling_reported_and_gate_everything_else():
+    failing = _false_refusal_failing_slice()
+    report = _report(overall=failing, languages={"en": failing})
+    full = evaluate(report, _gates(), tier="smoke")
+    assert exit_code_for(full) == 11 and "false_refusal_rate_exceeded" in full.failed
+    listed = evaluate(report, _gates(), tier="smoke", report_only_checks=("false_refusal_rate",))
+    assert listed.mode == "enforce"
+    assert exit_code_for(listed) == 0 and listed.exit_code == 0 and listed.passed is True
+    rows = _rows_of(listed, "false_refusal_rate")
+    assert rows["overall"].result == "report_only" and rows["overall"].reason == "false_refusal_rate_exceeded_report_only"
+    assert _rows_of(listed, "false_answer_rate")["overall"].result == "passed"
+
+
+def test_report_only_false_refusal_still_fails_on_a_false_answer():
+    both = _slice(refused=17, false_refusals=40)
+    report = _report(overall=both, languages={})
+    result = evaluate(report, _gates(), tier="smoke", report_only_checks=("false_refusal_rate",))
+    assert exit_code_for(result) == 11 and result.failed == ["false_answer_rate_exceeded"]
+
+
+def test_report_only_checks_do_not_hide_composition_or_stale_share():
+    report = _report(overall=_false_refusal_failing_slice(), languages={}, items=_rows("en", no_answer=14), stale_count=12, stale_share=0.12)
+    result = evaluate(report, _gates(), tier="smoke", report_only_checks=("false_refusal_rate",))
+    assert exit_code_for(result) == 12
+    assert {"no_answer_share_below_min", "stale_share_exceeded"} <= set(result.failed)
+    assert "false_refusal_rate_exceeded" not in result.failed
+
+
+def test_report_only_checks_accept_only_ceiling_metrics():
+    for bad in ("no_answer_share", "recall_at_5", "floor_ragas_faithfulness", ""):
+        with pytest.raises(ValueError):
+            evaluate(_report(), _gates(), tier="smoke", report_only_checks=(bad,))
+
+
+def test_measure_report_only_marks_a_tier_enforce_when_only_listed_checks_fail(tmp_path: Path):
+    failing = _false_refusal_failing_slice()
+    smoke = _write(tmp_path / "smoke" / "report.json", _report(overall=failing, languages={"en": failing}).model_dump_json())
+    both = _write(tmp_path / "legacy" / "report.json", _report(overall=_slice(refused=17, false_refusals=40), languages={}).model_dump_json())
+    ingest = _write(tmp_path / "ingest" / "report.json", _report().model_dump_json())
+    out = tmp_path / "measure.json"
+    markdown = tmp_path / "measure.md"
+    code = main(
+        ["measure", "--stage", "after", "--tier", f"smoke={smoke}", "--tier", f"legacy={both}", "--tier", f"ingest={ingest}",
+         "--report-only", "smoke=false_refusal_rate", "--report-only", "legacy=false_refusal_rate",
+         "--gates", str(GATES_PATH), "--out", str(out), "--markdown", str(markdown)]
+    )
+    assert code == 0
+    tiers = {entry["name"]: entry for entry in json.loads(out.read_text(encoding="utf-8"))["tiers"]}
+    assert tiers["smoke"]["report_only_checks"] == ["false_refusal_rate"]
+    assert (tiers["smoke"]["mode"], tiers["smoke"]["exit_code"], tiers["smoke"]["enforced_exit_code"]) == ("enforce", 11, 0)
+    assert tiers["smoke"]["failed"] == ["false_refusal_rate_exceeded"]
+    assert (tiers["legacy"]["mode"], tiers["legacy"]["enforced_exit_code"]) == ("report", 11)
+    assert "report_only_checks" not in tiers["ingest"] and "enforced_exit_code" not in tiers["ingest"]
+    assert tiers["ingest"]["mode"] == "enforce"
+    assert "- smoke: enforce; report-only checks: false_refusal_rate" in markdown.read_text(encoding="utf-8")
+
+
+def test_measure_report_only_needs_a_measured_tier_and_a_ceiling(tmp_path: Path):
+    report = _write(tmp_path / "smoke" / "report.json", _report().model_dump_json())
+    out = tmp_path / "measure.json"
+    base = ["measure", "--stage", "after", "--tier", f"smoke={report}", "--gates", str(GATES_PATH), "--out", str(out)]
+    assert main([*base, "--report-only", "other=false_refusal_rate"]) == 2
+    assert main([*base, "--report-only", "smoke=no_answer_share"]) == 2
+    assert main([*base, "--report-only", "smoke"]) == 2
+    assert main([*base, "--stage", "before", "--report-only", "smoke=false_refusal_rate"]) == 2

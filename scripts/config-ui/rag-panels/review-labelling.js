@@ -2473,7 +2473,7 @@ function reviewLabellingValidate(form, quotes, textFor) {
 /** Label key for a span the server refused (UI-SPEC 8.2). */
 function reviewLabellingServerQuoteError(reason) {
   if (reason === 'quote_not_found') return { key: 'quote.server.quote_not_found' };
-  if (reason === 'chunk_not_in_tenant' || reason === 'chunk_not_servable') return { key: 'quote.server.gone' };
+  if (reason === 'chunk_not_servable') return { key: 'quote.server.gone' };
   return { key: 'quote.server.other', code: String(reason || 'unknown') };
 }
 

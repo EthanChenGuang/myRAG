@@ -8,7 +8,7 @@ type NoticeTone = 'neutral' | 'caution' | 'blocked';
 
 /** UI-SPEC 13.1: neutral and caution are the groundedness badge's sets, so notices and badge match. */
 const TONE_CLASSES: Record<NoticeTone, string> = {
-  neutral: 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-[#2A2A2A] dark:text-gray-300 dark:ring-[#3A3A3A]',
+  neutral: 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-chat-surface dark:text-gray-300 dark:ring-chat-hairline',
   caution: 'bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900',
   blocked: 'bg-red-50 text-red-900 ring-red-200 dark:bg-red-950/40 dark:text-red-300 dark:ring-red-900',
 };

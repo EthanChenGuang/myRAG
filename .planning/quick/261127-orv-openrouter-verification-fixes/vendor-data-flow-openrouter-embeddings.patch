@@ -1,0 +1,56 @@
+diff --git a/config/rag/vendor-data-flow.json b/config/rag/vendor-data-flow.json
+index f273d9f1e..7fc4d6316 100644
+--- a/config/rag/vendor-data-flow.json
++++ b/config/rag/vendor-data-flow.json
+@@ -202,6 +202,23 @@
+       "training": "to_verify",
+       "providers": []
+     },
++    {
++      "vendor": "openrouter_embeddings",
++      "name": "OpenRouter-routed BGE-M3 embeddings pinned to DeepInfra (bge-m3-1024, RAG_BGE_M3_VIA=openrouter)",
++      "hosts": [
++        "openrouter.ai"
++      ],
++      "content": [
++        "query",
++        "chunk_text"
++      ],
++      "switch": "RAG_BGE_M3_VIA",
++      "opt_in": true,
++      "multi_tenant": "allowed",
++      "retention": "to_verify",
++      "training": "to_verify",
++      "providers": []
++    },
+     {
+       "vendor": "prompt_guard",
+       "name": "Hugging Face Hub (Prompt Guard weights at image build; nothing uploaded, scoring runs in the sidecar)",
+diff --git a/docs/vendor-data-flow.md b/docs/vendor-data-flow.md
+index 8d1193b31..0175ce4cb 100644
+--- a/docs/vendor-data-flow.md
++++ b/docs/vendor-data-flow.md
+@@ -18,6 +18,7 @@ Generated from config/rag/vendor-data-flow.json (ADM-04, D-20). Each row is one
+ | `llamacloud` | LlamaCloud LlamaParse document parsing | `api.cloud.llamaindex.ai` | `file_bytes` | `RAG_PARSER_ALLOW_CLOUD` | no | allowed | to_verify | to_verify |
+ | `openai` | OpenAI embeddings, image captioning and transcription | `api.openai.com` | `query`, `chunk_text`, `file_bytes` | `RAG_OPENAI_EMBEDDINGS_VIA` | no | allowed | to_verify | to_verify |
+ | `openrouter` | OpenRouter chat generation, query layer and LLM judge models | `openrouter.ai` | `query`, `chunk_text`, `answer` | - | no | allowed | to_verify | to_verify |
++| `openrouter_embeddings` | OpenRouter-routed BGE-M3 embeddings pinned to DeepInfra (bge-m3-1024, RAG_BGE_M3_VIA=openrouter) | `openrouter.ai` | `query`, `chunk_text` | `RAG_BGE_M3_VIA` | yes | allowed | to_verify | to_verify |
+ | `prompt_guard` | Hugging Face Hub (Prompt Guard weights at image build; nothing uploaded, scoring runs in the sidecar) | `huggingface.co` | `chunk_text` | `RAG_INJECTION_PROMPT_GUARD` | yes | allowed | to_verify | to_verify |
+ | `qdrant` | Qdrant external retrieval backend (cluster host from QDRANT_URL) | `cloud.qdrant.io` | `vectors`, `lexical_text` | `RAG_RETRIEVAL_BACKEND` | yes | allowed | to_verify | to_verify |
+ | `vectara` | Vectara HHEM groundedness scoring, called from the sidecar | `api.vectara.io` | `chunk_text`, `answer` | `RAG_GROUNDEDNESS_VECTARA_OPT_IN` | yes | requires `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK`=true | to_verify | to_verify |
+@@ -37,6 +38,7 @@ Generated from config/rag/vendor-data-flow.json (ADM-04, D-20). Each row is one
+ - `llamacloud`: none (no managed url or secret variable)
+ - `openai`: none (no managed url or secret variable)
+ - `openrouter`: none (no managed url or secret variable)
++- `openrouter_embeddings`: none (no managed url or secret variable)
+ - `prompt_guard`: none (no managed url or secret variable)
+ - `qdrant`: `qdrant`
+ - `vectara`: none (no managed url or secret variable)
+@@ -58,6 +60,7 @@ Fields still marked to_verify (operator action: confirm against the vendor terms
+ - `llamacloud`: retention, training
+ - `openai`: retention, training
+ - `openrouter`: retention, training
++- `openrouter_embeddings`: retention, training
+ - `prompt_guard`: retention, training
+ - `qdrant`: retention, training
+ - `vectara`: retention, training

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed, assertLegacySplitterAllowed, legacyLlamaparseLanguages } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed, assertLegacySplitterAllowed, legacyLlamaparseLanguages, captionLegacyImage } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -493,7 +493,11 @@ async function processImageDocument(
       filename.toLowerCase().endsWith('.webp') ? 'image/webp' :
         filename.toLowerCase().endsWith('.gif') ? 'image/gif' : 'image/jpeg';
 
-    const { text: description } = await generateText({
+    const inLanguage = await captionLegacyImage(new Uint8Array(buffer), mimeType, {
+      userId: metadata.user_id ?? null,
+      organizationId: metadata.organization_id ?? null,
+    });
+    const { text: description } = inLanguage !== null ? { text: inLanguage } : await generateText({
       model: aiOpenai('gpt-4o'),
       messages: [
         {

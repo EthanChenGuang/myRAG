@@ -70,7 +70,10 @@ def test_spec_writes_the_numbers_of_each_gate():
     assert g.diversity.runs == ["v2-diversity-collapse", "v2-diversity-mmr"]
     assert g.diversity.slice == "category:duplicate_flood"
     assert g.diversity.intent_coverage_min == 1.0
-    assert g.diversity.max_chunks_per_cluster == 1
+    assert g.diversity.max_chunks_per_unit == 1
+    assert g.diversity.version == 2
+    assert g.diversity.redundancy_measure.version == 2 and g.diversity.redundancy_measure.unit == "cluster_value_signature"
+    assert g.diversity.noise_band.source == "eval/config/noise.json"
     assert g.identifier.run == "v2-identifier-on"
     assert g.identifier.slice == "category:identifier_near_miss"
     assert g.identifier.identifier_precision_min == 1.0
@@ -292,7 +295,15 @@ def _table_candidates(legs):
     ]
 
 
-def _output(kept=None, misses=(), candidates=None, identifier=None, refused=("en-no_answer-001",)) -> RunOutput:
+def _app_redundancy(chunks) -> float | None:
+    """What the app writes on the trace for these fixtures (one value signature per cluster here)."""
+    clustered = [chunk.dup_cluster_id for chunk in chunks if chunk.dup_cluster_id is not None]
+    if not chunks or not clustered:
+        return None
+    return max(clustered.count(cluster) for cluster in clustered) / len(chunks)
+
+
+def _output(kept=None, misses=(), candidates=None, identifier=None, refused=("en-no_answer-001",), app_redundancy=None) -> RunOutput:
     traces: list[RagTrace] = []
     for item in GOLDEN:
         if item.id in refused:
@@ -301,7 +312,8 @@ def _output(kept=None, misses=(), candidates=None, identifier=None, refused=("en
             chunks = (kept or {}).get(item.id)
             if chunks is None:
                 chunks = [_chunk(item.id, 1, "other.md", "unrelated text")] if item.id in misses else _default_kept(item)
-            trace = _trace(item.id, []).model_copy(update={"kept": chunks})
+            measured = (app_redundancy or {}).get(item.id, _app_redundancy(chunks))
+            trace = _trace(item.id, []).model_copy(update={"kept": chunks, "topk_redundancy": measured})
         update = {"candidates": (candidates or {}).get(item.id, _table_candidates({"table:0": 1}) if item.id == "en-table-001" else [])}
         if identifier is not None:
             update["identifier"] = identifier.get(item.id, TraceIdentifier(asked=0, resolved=0))
@@ -363,6 +375,49 @@ def test_diversity_collapse_passes_and_fails_on_an_item_above_one_chunk_per_clus
     result = diversity_gate(gate, _diversity_outputs(**{"v2-diversity-collapse": _output(kept={"en-flood-001": flooded})}), NOISE)
     assert result.passed is False
     assert result.offenders == ["v2-diversity-collapse: en-flood-001 topk_redundancy 0.6667 > 1/3 = 0.3333"]
+
+
+def test_diversity_measure_v2_counts_the_app_value_per_cluster_and_value_signature():
+    gate = _spec().gates.diversity
+    value_distinct = [
+        _chunk("en-flood-001", 1, "flood.en.md", QUOTE, dup_cluster_id="k1"),
+        _chunk("en-flood-001", 2, "flood-v2.en.md", QUOTE, dup_cluster_id="k1"),
+        _chunk("en-flood-001", 3, "single.en.md", SECOND),
+    ]
+    run = _output(kept={"en-flood-001": value_distinct}, app_redundancy={"en-flood-001": 1 / 3})
+    result = diversity_gate(gate, _diversity_outputs(**{"v2-diversity-collapse": run}), NOISE)
+    assert result.passed is True, result.offenders
+    assert result.numbers["redundancy_measure_version"] == 2
+
+
+def test_diversity_measure_v2_refuses_the_cluster_only_fallback_when_the_trace_has_no_app_value():
+    gate = _spec().gates.diversity
+    flooded = [_chunk("en-flood-001", 1, "flood.en.md", QUOTE, dup_cluster_id="k1"), _chunk("en-flood-001", 2, "single.en.md", SECOND)]
+    run = _output(kept={"en-flood-001": flooded})
+    traces = [t.model_copy(update={"topk_redundancy": None}) if t.item_id == "en-flood-001" else t for t in run.traces]
+    run = RunOutput(report=run.report, traces=traces, golden=run.golden)
+    result = diversity_gate(gate, _diversity_outputs(**{"v2-diversity-collapse": run}), NOISE)
+    assert result.passed is False
+    assert result.offenders == [
+        "v2-diversity-collapse: en-flood-001 trace carries no app topk_redundancy (measure v2 cluster_value_signature not measured)"
+    ]
+
+
+def test_diversity_spec_without_the_registered_v2_measure_is_refused():
+    import json
+
+    import pytest
+    from pydantic import ValidationError
+
+    from rag_eval.phase42_gate import DiversityGate
+
+    raw = json.loads(SPEC_PATH.read_text(encoding="utf-8"))["gates"]["diversity"]
+    v1 = {k: v for k, v in raw.items() if k not in ("version", "registered", "redundancy_measure", "noise_band", "max_chunks_per_unit")}
+    v1["max_chunks_per_cluster"] = 1
+    with pytest.raises(ValidationError):
+        DiversityGate.model_validate(v1)
+    with pytest.raises(ValidationError):
+        DiversityGate.model_validate({**raw, "redundancy_measure": {**raw["redundancy_measure"], "version": 1, "unit": "cluster"}})
 
 
 def test_diversity_mmr_fails_when_one_intent_has_no_kept_chunk():

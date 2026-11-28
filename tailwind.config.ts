@@ -43,6 +43,11 @@ export default {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
+  			chat: {
+  				surface: 'var(--chat-surface)',
+  				hairline: 'var(--chat-hairline)',
+  				'accent-ink': 'var(--chat-accent-ink)'
+  			},
   			chart: {
   				'1': 'hsl(var(--chart-1))',
   				'2': 'hsl(var(--chart-2))',

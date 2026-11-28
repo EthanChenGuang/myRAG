@@ -22,17 +22,18 @@
     },
     {
       "id": "bge_m3_hosted_vectors_recorded",
-      "status": "not_done",
-      "date": "",
-      "by": "",
-      "evidence": "Only the sidecar recording exists: eval/fixtures/embeddings/bge-m3-sidecar.json (real model, CPU, 15 vectors). eval/fixtures/embeddings/bge-m3-hosted.json is absent.",
-      "reason": "Copied from the 03.2.1-02 checkpoint answer: DeepInfra answers HTTP 402 'You need positive balance to do inference' for the account the proxy uses; a payment by the owner is needed. Still out of credit on 2026-11-27 (orchestrator note).",
+      "status": "done",
+      "date": "2026-11-27",
+      "by": "executor (hosted API call; credential supplied by owner)",
+      "commit": "2ca22676",
+      "evidence": "eval/fixtures/embeddings/bge-m3-hosted.json recorded through the DeepInfra API (BAAI/bge-m3, revision 5617a9f61b028005a4858fdac845db406aefb181, 15 vectors on the synthetic fixture texts, 15 calls, 2 s apart), committed in 2ca22676. record_bge_m3.py --compare bge-m3-hosted.json bge-m3-sidecar.json exit 0, 15/15 within the D-26 tolerance: min cosine 0.99999316 (zh-long-1), max component difference 3.680e-04 (en-long-1). CI identity test tests/rag/bge-m3-identity.test.ts added in 2d96703f; nightly job bge-m3-identity added in bac27c82.",
+      "reason": "",
       "command": "DEEPINFRA_API_KEY=<key> uv run --directory eval python ../eval/fixtures/embeddings/record_bge_m3.py --mode hosted --out ../eval/fixtures/embeddings/bge-m3-hosted.json",
       "prerequisites": ["DeepInfra account with a positive balance"],
-      "dry_run": {
+      "compare": {
         "command": "uv run --directory eval python ../eval/fixtures/embeddings/record_bge_m3.py --compare ../eval/fixtures/embeddings/bge-m3-hosted.json ../eval/fixtures/embeddings/bge-m3-sidecar.json",
-        "exit": 2,
-        "result": "not comparable: bge-m3-hosted.json unreadable (file missing), as expected while the hosted recording is pending"
+        "exit": 0,
+        "result": "15/15 within tolerance; min cosine 0.99999316, max component difference 3.680e-04"
       }
     },
     {

@@ -2,6 +2,14 @@ import { qdrantCollectionName } from '@/lib/rag/backend/tenant-key';
 import type { CollectionInfo, CollectionSpec } from '@/lib/rag/sync/stores/types';
 import type { QdrantApi } from './client';
 import { qdrantErrorStatus } from './errors';
+import {
+  LEXICAL_BM25_KEY,
+  defaultLexicalParams,
+  lexicalParamsRecord,
+  recordedLexicalParams,
+  sameLexicalParams,
+  type LexicalParams,
+} from '../lexical-params';
 
 export const QDRANT_DENSE_VECTOR = 'dense';
 export const QDRANT_LEXICAL_FIELD = 'lexical_text';
@@ -31,10 +39,15 @@ export const QDRANT_PAYLOAD_INDEXES: ReadonlyArray<{ field: string; schema: Fiel
 
 export interface QdrantCollectionInfo extends CollectionInfo {
   lexicalMode: string | null;
+  /** LEX-05: the pair recorded in the metadata as lexical_bm25 (defaults when absent). Qdrant takes k1 and b per query, so it is a record only. */
+  lexicalParams: LexicalParams;
 }
 
 /** The creation body: one named cosine vector, no quantization, strict mode refusing filters on unindexed fields. */
-export function qdrantCollectionSpec(spec: CollectionSpec): Parameters<QdrantApi['createCollection']>[1] {
+export function qdrantCollectionSpec(
+  spec: CollectionSpec,
+  params: LexicalParams = defaultLexicalParams(),
+): Parameters<QdrantApi['createCollection']>[1] {
   if (!Number.isInteger(spec.dims) || spec.dims <= 0) throw new Error('[Vector Sync] qdrant: invalid collection dims');
   return {
     vectors: { [QDRANT_DENSE_VECTOR]: { size: spec.dims, distance: 'Cosine' } },
@@ -45,6 +58,7 @@ export function qdrantCollectionSpec(spec: CollectionSpec): Parameters<QdrantApi
       dims: spec.dims,
       lexical_mode: QDRANT_LEXICAL_MODE,
       hnsw: { m: QDRANT_HNSW.m, ef_construct: QDRANT_HNSW.ef_construct },
+      [LEXICAL_BM25_KEY]: lexicalParamsRecord(params),
     },
   };
 }
@@ -68,6 +82,7 @@ function infoFrom(profileId: string, collection: NonNullable<Awaited<ReturnType<
     dims,
     tenants: null,
     lexicalMode: typeof metadata.lexical_mode === 'string' ? metadata.lexical_mode : null,
+    lexicalParams: recordedLexicalParams(metadata[LEXICAL_BM25_KEY]),
   };
 }
 
@@ -76,11 +91,43 @@ export async function describeQdrantCollection(client: QdrantApi, profileId: str
   return found ? infoFrom(profileId, found) : null;
 }
 
+export interface QdrantLexicalOptions {
+  params?: LexicalParams;
+  log?: (line: string) => void;
+}
+
+/** Query-bound: a differing recorded pair is refreshed in place (metadata merge), with one [Vector Sync] line; nothing is rebuilt. */
+export async function refreshQdrantLexicalParams(
+  client: QdrantApi,
+  profileId: string,
+  recorded: LexicalParams,
+  params: LexicalParams,
+  log: (line: string) => void = (line) => console.log(line),
+): Promise<boolean> {
+  if (sameLexicalParams(recorded, params)) return false;
+  try {
+    await client.updateCollection(qdrantCollectionName(profileId), { metadata: { [LEXICAL_BM25_KEY]: lexicalParamsRecord(params) } });
+  } catch (error) {
+    throw new Error(`[Vector Sync] qdrant: collection metadata update failed (${qdrantErrorStatus(error) ?? 'unreachable'})`);
+  }
+  log(
+    `[Vector Sync] qdrant collection for profile ${profileId}: recorded BM25 pair refreshed from k1 ${recorded.k1}, b ${recorded.b} ` +
+      `to k1 ${params.k1}, b ${params.b} (k1 and b are sent per query; no rebuild)`,
+  );
+  return true;
+}
+
 /**
  * Collection admin is the only tenant-less call (write client). Creates the collection and every payload index before any point is
  * written; an existing collection must have the profile's dims. ensured caches per process, so a second call sends nothing.
  */
-export async function ensureQdrantCollection(client: QdrantApi, spec: CollectionSpec, ensured: Map<string, number>): Promise<void> {
+export async function ensureQdrantCollection(
+  client: QdrantApi,
+  spec: CollectionSpec,
+  ensured: Map<string, number>,
+  lexical: QdrantLexicalOptions = {},
+): Promise<void> {
+  const params = lexical.params ?? defaultLexicalParams();
   const name = qdrantCollectionName(spec.profileId);
   const known = ensured.get(spec.profileId);
   if (known !== undefined) {
@@ -93,10 +140,11 @@ export async function ensureQdrantCollection(client: QdrantApi, spec: Collection
     if (info.dims !== spec.dims) throw new Error('[Vector Sync] qdrant: collection dims differ from the profile');
     const present = new Set(Object.keys(found.payload_schema ?? {}));
     await createIndexes(client, name, (field) => !present.has(field));
+    await refreshQdrantLexicalParams(client, spec.profileId, info.lexicalParams, params, lexical.log);
     ensured.set(spec.profileId, spec.dims);
     return;
   }
-  await client.createCollection(name, qdrantCollectionSpec(spec));
+  await client.createCollection(name, qdrantCollectionSpec(spec, params));
   await createIndexes(client, name, () => true);
   ensured.set(spec.profileId, spec.dims);
 }

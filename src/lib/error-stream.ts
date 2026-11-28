@@ -9,7 +9,11 @@
  * This returns a proper `error` event carrying the message, terminated by the
  * `[DONE]` sentinel the client uses to close the stream.
  */
+export function errorStreamPart(message: string): { type: 'error'; errorText: string } {
+  return { type: 'error', errorText: message };
+}
+
 export function formatErrorSSE(message: string): string {
-  const errorPart = JSON.stringify({ type: 'error', errorText: message });
+  const errorPart = JSON.stringify(errorStreamPart(message));
   return `data: ${errorPart}\n\ndata: [DONE]\n\n`;
 }

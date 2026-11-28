@@ -1484,6 +1484,13 @@
             color: rgba(255, 255, 255, 0.75);
         }
 
+        /* The card heading and card body colours above would turn a warning alert's text white on amber */
+        [data-theme="dark"] .card .alert-warning,
+        [data-theme="dark"] .card .alert-warning h3,
+        [data-theme="dark"] .card .alert-warning .link {
+            color: var(--fallback-wac, oklch(var(--wac) / 1));
+        }
+
         /* Divider text in dark mode */
         [data-theme="dark"] .divider {
             color: rgba(255, 255, 255, 0.8);
@@ -6530,13 +6537,14 @@
                                             </div>
                                             <div class="form-control">
                                                 <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
-                                                <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" class="select select-bordered w-full">
+                                                <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" aria-describedby="rag-reranker-help" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>
                                                     <option value="auto">auto</option>
                                                     <option value="cohere">cohere</option>
                                                     <option value="voyage">voyage</option>
                                                     <option value="local_bm25">local_bm25</option>
                                                 </select>
+                                                <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-reranker-help">With <code class="font-mono text-xs" translate="no">auto</code> and <code class="font-mono text-xs" translate="no">COHERE_API_KEY</code> set, the query and candidate text are sent to <span translate="no">Cohere</span> for chat, embed and eval; without a key, reranking stays local.</p>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">
@@ -7345,7 +7353,7 @@
                                                     <label class="label" for="RAG_UPLOADER_ALERT_THRESHOLD">
                                                         <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD">Alert level: events from one uploader</span>
                                                     </label>
-                                                    <input type="number" id="RAG_UPLOADER_ALERT_THRESHOLD" name="RAG_UPLOADER_ALERT_THRESHOLD" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_THRESHOLD-help">
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_THRESHOLD" name="RAG_UPLOADER_ALERT_THRESHOLD" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" class="input input-bordered w-full md:max-w-40 tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_THRESHOLD-help">
                                                     <label class="label">
                                                         <span id="RAG_UPLOADER_ALERT_THRESHOLD-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD.help">An alert opens above this number. 0 means no alerts.</span> <code translate="no">RAG_UPLOADER_ALERT_THRESHOLD</code></span>
                                                     </label>
@@ -7354,7 +7362,7 @@
                                                     <label class="label" for="RAG_UPLOADER_ALERT_WINDOW_HOURS">
                                                         <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_WINDOW_HOURS">Window in hours</span>
                                                     </label>
-                                                    <input type="number" id="RAG_UPLOADER_ALERT_WINDOW_HOURS" name="RAG_UPLOADER_ALERT_WINDOW_HOURS" min="1" max="720" step="1" placeholder="24" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_WINDOW_HOURS-help">
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_WINDOW_HOURS" name="RAG_UPLOADER_ALERT_WINDOW_HOURS" min="1" max="720" step="1" placeholder="24" inputmode="numeric" autocomplete="off" class="input input-bordered w-full md:max-w-40 tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_WINDOW_HOURS-help">
                                                     <label class="label">
                                                         <span id="RAG_UPLOADER_ALERT_WINDOW_HOURS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><code translate="no">RAG_UPLOADER_ALERT_WINDOW_HOURS</code></span>
                                                     </label>
@@ -9662,7 +9670,7 @@
                                                             <option value="openrouter" data-rag-i18n="RAG_BGE_M3_VIA.opt.openrouter">OpenRouter, pinned to DeepInfra</option>
                                                         </select>
                                                         <div class="label flex-wrap gap-1">
-                                                            <span class="label-text-alt" id="rag-bge-m3-via-help"><span data-rag-i18n="via.help">OpenRouter sends the hosted calls with the OpenRouter key and records host openrouter on new vectors. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.</span></span>
+                                                            <span class="label-text-alt" id="rag-bge-m3-via-help"><span data-rag-i18n="via.help">With OpenRouter, document and query text is sent to OpenRouter (openrouter.ai) with the OpenRouter key, which passes it to DeepInfra; new vectors record host openrouter. Run npm run rag:embedding -- verify-route bge-m3 before using it with stored vectors.</span></span>
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_VIA</code>
                                                         </div>
                                                     </div>

@@ -39,6 +39,9 @@ const INGEST_IMPACT_LABELS = {
     'mechanism.reembed': 'Rebuild embeddings',
     'mechanism.recaption': 'Rewrite image captions',
     'mechanism.retranslate': 'Translate again',
+    'mechanism.reindex_tables': 'Rebuild table row index',
+    'mechanism.reindex_identifiers': 'Rebuild identifier index',
+    'mechanism.recluster': 'Rebuild duplicate clusters',
     'mechanism.rescan': 'Security rescan',
     'settings.affectsStored': 'Changing this affects documents already stored; saving shows how many.',
     'warn.needsLanguages': 'This setting has no effect until the supported languages are chosen in the Languages panel.',
@@ -135,6 +138,9 @@ const INGEST_IMPACT_LABELS = {
     'mechanism.reembed': '重建向量',
     'mechanism.recaption': '重写图片说明',
     'mechanism.retranslate': '重新翻译',
+    'mechanism.reindex_tables': '重建表格行索引',
+    'mechanism.reindex_identifiers': '重建标识符索引',
+    'mechanism.recluster': '重建重复内容聚类',
     'mechanism.rescan': '安全重新扫描',
     'settings.affectsStored': '更改此项会影响已入库的文档；保存时会显示数量。',
     'warn.needsLanguages': '在“语言”面板中选择支持的语言之前，此设置不会生效。',
@@ -247,6 +253,9 @@ const INGEST_IMPACT_LABELS = {
     'mechanism.reembed': 'Ricostruzione degli embedding',
     'mechanism.recaption': 'Riscrittura delle didascalie',
     'mechanism.retranslate': 'Nuova traduzione',
+    'mechanism.reindex_tables': 'Ricostruzione indice righe di tabella',
+    'mechanism.reindex_identifiers': 'Ricostruzione indice identificatori',
+    'mechanism.recluster': 'Ricostruzione gruppi di duplicati',
     'mechanism.rescan': 'Riesame di sicurezza',
     'settings.affectsStored': 'La modifica riguarda i documenti già archiviati; al salvataggio vedrai quanti.',
     'warn.needsLanguages': 'Questa impostazione non ha effetto finché non scegli le lingue supportate nel pannello Lingue.',
@@ -341,7 +350,7 @@ const INGEST_IMPACT_PATHS = {
   impact: '/api/rag/admin/ingest-fingerprint/impact',
   rebuild: '/api/rag/admin/ingest-fingerprint/rebuild',
 };
-const INGEST_IMPACT_MECHANISMS = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'rescan'];
+const INGEST_IMPACT_MECHANISMS = ['reparse', 'rechunk', 'relex', 'reembed', 'recaption', 'retranslate', 'reindex_tables', 'reindex_identifiers', 'recluster', 'rescan'];
 const INGEST_IMPACT_BACKFILL_COMMAND = 'npm run rag:fingerprint -- backfill';
 /** The names the impact route accepts are classified RAG_* settings; secret-named values never leave the page (UI-SPEC 11.6). */
 const INGEST_IMPACT_SETTING_NAME = /^RAG_[A-Z0-9_]+$/;

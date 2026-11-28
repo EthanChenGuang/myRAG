@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { MISS_RECORDER_RPC, recordMissRow } from '../terminology/miss-log';
 
-/** Phase 4.1.1's service-role miss recorder (0473): rag_term_record_miss(p_tenant_key text, p_row jsonb). */
-export const MISS_RECORDER_RPC = 'rag_term_record_miss';
+/** Phase 4.1.1's service-role miss recorder (0473); the call itself is made inside the terminology module (W-3). */
+export { MISS_RECORDER_RPC };
 /** D-17: the review reasons that reach the vocabulary miner. */
 export const BRIDGE_REASONS: readonly string[] = ['feedback_negative', 'refusal_disputed', 'zero_results'];
 export const BRIDGE_QUERY_MAX_CHARS = 500;
@@ -169,9 +170,7 @@ export async function bridgeToTerminologyMisses(input: BridgeInput, deps: Bridge
           continue;
         }
         try {
-          const { error } = (await deps.client.rpc(MISS_RECORDER_RPC, { p_tenant_key: tenant.tenantKey, p_row: miss })) as unknown as {
-            error: unknown;
-          };
+          const { error } = await recordMissRow(deps.client, tenant.tenantKey, miss);
           if (!error) {
             counts.recorded += 1;
             continue;

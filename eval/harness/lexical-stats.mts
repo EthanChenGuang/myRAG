@@ -139,3 +139,148 @@ export async function fixtureOverlapAtK(
     items,
   };
 }
+
+export const TIES_FILE = 'lexical-ties.json';
+export const TIES_K = 10;
+const TIE_EPSILON = 1e-6;
+const NEAR_DUP_JACCARD = 0.8;
+
+export interface TieQuestion {
+  id: string;
+  question: string;
+  category: string | null;
+}
+
+export interface TieHit {
+  document_id: string;
+  score: number;
+  shingles: Set<string>;
+}
+
+export interface ArmTieStats {
+  hits: number;
+  distinct_documents: number;
+  /** Groups of two or more adjacent top-k hits whose scores are equal within a relative 1e-6. */
+  tie_groups: number;
+  tied_hits: number;
+  /** Tie groups whose members are all near duplicates of each other (word-trigram Jaccard at least 0.8). */
+  duplicate_tie_groups: number;
+  /** Top-k hit pairs that are near duplicates, whatever their scores. */
+  duplicate_pairs: number;
+  /** A tie group crosses the rank-5 or rank-10 cut, so the order inside it decides what the cut keeps. */
+  tie_at_cut_5: boolean;
+  tie_at_cut_10: boolean;
+  /** Mean relative score gap between adjacent near-duplicate hits; null when no two adjacent hits are near duplicates. */
+  mean_duplicate_gap: number | null;
+}
+
+export interface TieRow {
+  item_id: string;
+  category: string | null;
+  token_count: number;
+  arms: { bm25: ArmTieStats; ts_rank_cd: ArmTieStats };
+}
+
+export interface TieReport {
+  schema_version: 1;
+  tenant_hash: string;
+  k: number;
+  near_duplicate_jaccard: number;
+  categories: string[];
+  items: TieRow[];
+}
+
+export function shinglesOf(content: string): Set<string> {
+  const words = content.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word !== '');
+  const out = new Set<string>();
+  if (words.length < 3) {
+    out.add(words.join(' '));
+    return out;
+  }
+  for (let i = 0; i + 2 < words.length; i += 1) out.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  return out;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  let inter = 0;
+  for (const value of a) if (b.has(value)) inter += 1;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 1 : inter / union;
+}
+
+function sameScore(a: number, b: number): boolean {
+  return Math.abs(a - b) <= TIE_EPSILON * Math.max(1, Math.abs(a), Math.abs(b));
+}
+
+/** Ties and near duplicates of one ranked lexical list (already in rank order, at most k hits). */
+export function armTieStats(hits: readonly TieHit[]): ArmTieStats {
+  const groups: number[][] = [];
+  let current: number[] = [];
+  hits.forEach((hit, index) => {
+    if (current.length > 0 && sameScore(hits[current[current.length - 1]].score, hit.score)) current.push(index);
+    else {
+      if (current.length > 1) groups.push(current);
+      current = [index];
+    }
+  });
+  if (current.length > 1) groups.push(current);
+  const dup = (i: number, j: number) => jaccard(hits[i].shingles, hits[j].shingles) >= NEAR_DUP_JACCARD;
+  let duplicatePairs = 0;
+  for (let i = 0; i < hits.length; i += 1) for (let j = i + 1; j < hits.length; j += 1) if (dup(i, j)) duplicatePairs += 1;
+  const gaps: number[] = [];
+  for (let i = 0; i + 1 < hits.length; i += 1) {
+    if (!dup(i, i + 1)) continue;
+    gaps.push(Math.abs(hits[i].score - hits[i + 1].score) / Math.max(Math.abs(hits[i].score), 1e-12));
+  }
+  const crosses = (cut: number) => groups.some((group) => group[0] < cut && group[group.length - 1] >= cut);
+  return {
+    hits: hits.length,
+    distinct_documents: new Set(hits.map((hit) => hit.document_id)).size,
+    tie_groups: groups.length,
+    tied_hits: groups.reduce((sum, group) => sum + group.length, 0),
+    duplicate_tie_groups: groups.filter((group) => group.every((i) => group.every((j) => i === j || dup(i, j)))).length,
+    duplicate_pairs: duplicatePairs,
+    tie_at_cut_5: crosses(5),
+    tie_at_cut_10: crosses(10),
+    mean_duplicate_gap: gaps.length === 0 ? null : gaps.reduce((sum, value) => sum + value, 0) / gaps.length,
+  };
+}
+
+async function scoredLexical(db: PGlite, fn: 'hybrid_search_chunks' | 'rag_bm25_search_chunks', args: Record<string, unknown>, k: number): Promise<TieHit[]> {
+  const keys = Object.keys(args);
+  const sql = `SELECT document_id, content, lexical_score FROM public.${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')}) WHERE leg = 'lexical' ORDER BY rank`;
+  const rows = await serviceRole(db, async (tx) =>
+    (await tx.query<{ document_id: string; content: string | null; lexical_score: number | null }>(sql, keys.map((key) => args[key]))).rows,
+  );
+  return rows.slice(0, k).map((row) => ({ document_id: String(row.document_id), score: Number(row.lexical_score ?? 0), shingles: shinglesOf(row.content ?? '') }));
+}
+
+/**
+ * Report-only diagnostic (quick-44, Phase 4.4 gap G1): for the questions of the named categories, the lexical top k of the BM25 leg
+ * (the cap the app sends) and of the ts_rank_cd leg with their scores, summarised as score ties and near-duplicate counts. Ids and
+ * numbers only, never chunk text or a token.
+ */
+export async function fixtureLexicalTies(
+  db: PGlite,
+  tenantKey: string,
+  questions: readonly TieQuestion[],
+  categories: readonly string[],
+  k: number = TIES_K,
+  options: { lexicalOptionsFor?: (question: string) => Promise<LexicalOptions | undefined>; profileId?: string; tenantHash?: string; k1?: number; b?: number } = {},
+): Promise<TieReport> {
+  const wanted = new Set(categories);
+  const items: TieRow[] = [];
+  for (const question of questions) {
+    if (question.category === null || !wanted.has(question.category)) continue;
+    const tokens = queryLexicalTokens(question.question, options.lexicalOptionsFor ? await options.lexicalOptionsFor(question.question) : undefined);
+    const base = lexicalOnlyHybridArgs(tenantKey, options.profileId ?? LEGACY_PROFILE_ID, tokens, k);
+    const { p_dense_limit: _dense, ...bm25Base } = base;
+    const tsHits = tokens.length === 0 ? [] : await scoredLexical(db, 'hybrid_search_chunks', base, k);
+    const bmHits =
+      tokens.length === 0
+        ? []
+        : await scoredLexical(db, 'rag_bm25_search_chunks', { ...bm25Base, p_k1: options.k1 ?? 1.2, p_b: options.b ?? 0.75, p_candidate_limit: bm25CandidateLimit(k) }, k);
+    items.push({ item_id: question.id, category: question.category, token_count: tokens.length, arms: { bm25: armTieStats(bmHits), ts_rank_cd: armTieStats(tsHits) } });
+  }
+  return { schema_version: 1, tenant_hash: options.tenantHash ?? '', k, near_duplicate_jaccard: NEAR_DUP_JACCARD, categories: [...categories], items };
+}

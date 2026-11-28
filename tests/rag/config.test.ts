@@ -1138,6 +1138,23 @@ describe('terminology switches (D-15, D-18, D-19)', () => {
     expect(configWarnings().join(' ')).toContain('RAG_TERMINOLOGY_DENSE');
   });
 
+  test('RAG_TERMINOLOGY=true with RAG_LEXICAL_SEARCH=false warns once per process that term:0 is not built (I-1)', () => {
+    const first = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_TERMINOLOGY: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    expect(first.v2.terminology).toBe(true);
+    expect(first.warnings.join(' ')).toContain('RAG_LEXICAL_SEARCH');
+    loadRagConfig({ RAG_PIPELINE: 'v2', RAG_TERMINOLOGY: 'true' });
+    loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'true' });
+    const logged = configWarnings().filter((line) => line.includes('RAG_TERMINOLOGY') && line.includes('RAG_LEXICAL_SEARCH'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('term:0');
+  });
+
+  test('no lexical warning while RAG_LEXICAL_SEARCH=true or RAG_TERMINOLOGY is off', () => {
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_TERMINOLOGY: 'true', RAG_LEXICAL_SEARCH: 'true' }).warnings).toEqual([]);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'false' }).warnings).toEqual([]);
+    expect(configWarnings()).toEqual([]);
+  });
+
   test('the dense variant is ignored for the voice profile', () => {
     expect(typeof terminologyDenseFor).toBe('function');
     const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'true' });

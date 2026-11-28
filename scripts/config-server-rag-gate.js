@@ -765,6 +765,7 @@ const clearableNames = Object.freeze(['RAG_MONITOR_WEBHOOK_URL']);
 const RAG_GATE_REQUIRED_MESSAGE =
   'This change affects RAG answers. Run the setting check in the Config UI and save once it passes, or save with a typed reason.';
 const RAG_GATE_INVALID_REASON_MESSAGE = 'An override reason must be 10 to 500 characters.';
+const RAG_GATE_OVERRIDE_REQUIRED_MESSAGE = 'Lowering RAG_CONFIG_GATE while it enforces needs a typed override reason (10 to 500 characters); it is stored in the change record.';
 const MODE_RANK = { off: 0, warn: 1, enforce: 2 };
 
 function refuseWith(status, error, message) {
@@ -849,9 +850,9 @@ async function guardEnvWrite(input) {
     });
     if (decision.kind === 'refuse') {
       log('[Config Gate] save refused', { route, error: decision.error });
-      return decision.error === 'invalid_reason'
-        ? refuseWith(400, 'invalid_reason', RAG_GATE_INVALID_REASON_MESSAGE)
-        : gateRequired();
+      if (decision.error === 'invalid_reason') return refuseWith(400, 'invalid_reason', RAG_GATE_INVALID_REASON_MESSAGE);
+      if (decision.error === 'rag_gate_override_required') return refuseWith(409, 'rag_gate_override_required', RAG_GATE_OVERRIDE_REQUIRED_MESSAGE);
+      return gateRequired();
     }
 
     const row = gateCore.buildChangeRecord({

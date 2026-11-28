@@ -391,7 +391,8 @@ describe('validation and status mapping (D-24, D-35)', () => {
 
     state.rpcCalls = [];
     await (await load()).list.GET(req(`${BASE}?layer=shared`, { token: ADMIN }));
-    expect(state.rpcCalls[0]!.args).toMatchObject({ p_kind: null, p_source_language: null, p_target_language: null });
+    // W-1: without a filter the list names only the five 0472 arguments, so it works with and without 0980.
+    expect(Object.keys(state.rpcCalls[0]!.args).sort()).toEqual(['p_actor', 'p_layer_key', 'p_limit', 'p_offset', 'p_search']);
   });
 
   it('answers 400 for an unknown kind or a malformed language filter', async () => {

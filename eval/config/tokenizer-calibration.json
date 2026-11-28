@@ -1,7 +1,19 @@
 {
-  "version": 1,
-  "encoding": "cl100k_base",
   "default_factor": 1.25,
-  "families": [],
-  "written_by": "default"
+  "encoding": "cl100k_base",
+  "families": [
+    {
+      "computed_at": "2026-11-27T22:03:49Z",
+      "factor": 1.2997,
+      "family": "fixture",
+      "quantile": 0.95,
+      "run_ids": [
+        "p521-20-legacy"
+      ],
+      "samples": 294,
+      "source": "measured"
+    }
+  ],
+  "version": 1,
+  "written_by": "rag_eval.calibrate tokenizer"
 }

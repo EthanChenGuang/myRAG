@@ -2,6 +2,14 @@
   "$defs": {
     "AnswerSentence": {
       "additionalProperties": false,
+      "if": {
+        "properties": {
+          "support": {
+            "const": "not_checked"
+          }
+        },
+        "type": "object"
+      },
       "properties": {
         "cited": {
           "title": "Cited",
@@ -100,6 +108,17 @@
         "factual",
         "cited"
       ],
+      "then": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
       "title": "AnswerSentence",
       "type": "object"
     },

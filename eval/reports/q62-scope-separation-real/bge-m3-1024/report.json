@@ -1,0 +1,4947 @@
+{
+  "centroids_by_kind": {
+    "doc_type": 10,
+    "scope_tag": 0,
+    "tenant": 3
+  },
+  "counts": {
+    "answerable": 310,
+    "cross_lingual": 34,
+    "dev_answerable": 194,
+    "near_miss": 46,
+    "out_of_domain": 6
+  },
+  "embedder": "bge-m3:BAAI/bge-m3",
+  "embedding_profile": "bge-m3-1024",
+  "embedding_run": {
+    "calls": 11,
+    "texts": 1078
+  },
+  "groupings": {
+    "d34_all": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 5,
+          "it->it": 7,
+          "zh->zh": 1
+        },
+        "total": 13
+      },
+      "centroids": 13,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 0
+      },
+      "near_miss_below": {
+        "by_language": {
+          "en": 3,
+          "it": 2,
+          "zh": 1
+        },
+        "total": 6
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "en": 2,
+          "it": 2,
+          "zh": 2
+        },
+        "ids": [
+          "en-no-answer-003",
+          "en-no-answer-004",
+          "it-no-answer-003",
+          "it-no-answer-004",
+          "zh-no-answer-003",
+          "zh-no-answer-004"
+        ],
+        "total": 6
+      },
+      "threshold": 0.416
+    },
+    "doc_type": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 6,
+          "it->it": 5
+        },
+        "total": 11
+      },
+      "centroids": 5,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 0
+      },
+      "near_miss_below": {
+        "by_language": {
+          "en": 3,
+          "it": 2,
+          "zh": 1
+        },
+        "total": 6
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "en": 2,
+          "it": 2,
+          "zh": 2
+        },
+        "ids": [
+          "en-no-answer-003",
+          "en-no-answer-004",
+          "it-no-answer-003",
+          "it-no-answer-004",
+          "zh-no-answer-003",
+          "zh-no-answer-004"
+        ],
+        "total": 6
+      },
+      "threshold": 0.404
+    },
+    "doc_type_language": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 6,
+          "it->it": 7,
+          "zh->zh": 2
+        },
+        "total": 15
+      },
+      "centroids": 10,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 0
+      },
+      "near_miss_below": {
+        "by_language": {
+          "en": 3,
+          "it": 2,
+          "zh": 1
+        },
+        "total": 6
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "en": 2,
+          "it": 2,
+          "zh": 2
+        },
+        "ids": [
+          "en-no-answer-003",
+          "en-no-answer-004",
+          "it-no-answer-003",
+          "it-no-answer-004",
+          "zh-no-answer-003",
+          "zh-no-answer-004"
+        ],
+        "total": 6
+      },
+      "threshold": 0.413
+    },
+    "tenant": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 4,
+          "it->it": 6,
+          "zh->zh": 3
+        },
+        "total": 13
+      },
+      "centroids": 1,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 2
+      },
+      "near_miss_below": {
+        "by_language": {
+          "en": 4,
+          "it": 3
+        },
+        "total": 7
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "en": 2,
+          "it": 2,
+          "zh": 2
+        },
+        "ids": [
+          "en-no-answer-003",
+          "en-no-answer-004",
+          "it-no-answer-003",
+          "it-no-answer-004",
+          "zh-no-answer-003",
+          "zh-no-answer-004"
+        ],
+        "total": 6
+      },
+      "threshold": 0.398
+    },
+    "tenant_language": {
+      "answerable_below": {
+        "by_pair": {
+          "en->en": 4,
+          "it->it": 6,
+          "zh->zh": 2
+        },
+        "total": 12
+      },
+      "centroids": 3,
+      "cross_lingual_below": {
+        "max_over_variants": 0,
+        "original_only": 3
+      },
+      "near_miss_below": {
+        "by_language": {
+          "en": 4,
+          "it": 2
+        },
+        "total": 6
+      },
+      "out_of_domain_below": {
+        "by_language": {
+          "en": 2,
+          "it": 2,
+          "zh": 2
+        },
+        "ids": [
+          "en-no-answer-003",
+          "en-no-answer-004",
+          "it-no-answer-003",
+          "it-no-answer-004",
+          "zh-no-answer-003",
+          "zh-no-answer-004"
+        ],
+        "total": 6
+      },
+      "threshold": 0.4
+    }
+  },
+  "items": [
+    {
+      "class": "answerable",
+      "id": "en-ambiguous-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.555,
+        "doc_type": 0.539,
+        "doc_type_language": 0.551,
+        "tenant": 0.543,
+        "tenant_language": 0.555
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-ambiguous-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.537,
+        "doc_type": 0.516,
+        "doc_type_language": 0.53,
+        "tenant": 0.514,
+        "tenant_language": 0.537
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-near-miss-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.516,
+        "doc_type_language": 0.516,
+        "tenant": 0.486,
+        "tenant_language": 0.489
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-near-miss-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.577,
+        "doc_type": 0.556,
+        "doc_type_language": 0.577,
+        "tenant": 0.401,
+        "tenant_language": 0.425
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-near-miss-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.588,
+        "doc_type": 0.59,
+        "doc_type_language": 0.588,
+        "tenant": 0.442,
+        "tenant_language": 0.49
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-near-miss-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.643,
+        "doc_type": 0.598,
+        "doc_type_language": 0.643,
+        "tenant": 0.544,
+        "tenant_language": 0.541
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-near-miss-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.484,
+        "doc_type": 0.48,
+        "doc_type_language": 0.484,
+        "tenant": 0.403,
+        "tenant_language": 0.4
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-paraphrase-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.541,
+        "doc_type": 0.554,
+        "doc_type_language": 0.541,
+        "tenant": 0.497,
+        "tenant_language": 0.484
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-paraphrase-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.583,
+        "doc_type": 0.552,
+        "doc_type_language": 0.583,
+        "tenant": 0.453,
+        "tenant_language": 0.448
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-paraphrase-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.517,
+        "doc_type": 0.502,
+        "doc_type_language": 0.517,
+        "tenant": 0.448,
+        "tenant_language": 0.441
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-cache-paraphrase-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.577,
+        "doc_type": 0.583,
+        "doc_type_language": 0.577,
+        "tenant": 0.541,
+        "tenant_language": 0.526
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.579,
+        "doc_type": 0.578,
+        "doc_type_language": 0.579,
+        "tenant": 0.503,
+        "tenant_language": 0.497
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.524,
+        "doc_type": 0.522,
+        "doc_type_language": 0.517,
+        "tenant": 0.525,
+        "tenant_language": 0.524
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-term-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.442,
+        "doc_type": 0.422,
+        "doc_type_language": 0.439,
+        "tenant": 0.425,
+        "tenant_language": 0.442
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-term-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.44,
+        "doc_type": 0.432,
+        "doc_type_language": 0.436,
+        "tenant": 0.435,
+        "tenant_language": 0.44
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-term-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.454,
+        "doc_type": 0.433,
+        "doc_type_language": 0.451,
+        "tenant": 0.437,
+        "tenant_language": 0.454
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-term-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.434,
+        "doc_type": 0.408,
+        "doc_type_language": 0.431,
+        "tenant": 0.41,
+        "tenant_language": 0.434
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-colloquial-term-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.429,
+        "doc_type": 0.413,
+        "doc_type_language": 0.427,
+        "tenant": 0.416,
+        "tenant_language": 0.429
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-compound-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.56,
+        "doc_type": 0.537,
+        "doc_type_language": 0.56,
+        "tenant": 0.453,
+        "tenant_language": 0.443
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-compound-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.678,
+        "doc_type": 0.627,
+        "doc_type_language": 0.678,
+        "tenant": 0.459,
+        "tenant_language": 0.474
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-compound-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.527,
+        "doc_type": 0.54,
+        "doc_type_language": 0.527,
+        "tenant": 0.437,
+        "tenant_language": 0.433
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-compound-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.563,
+        "doc_type": 0.563,
+        "doc_type_language": 0.563,
+        "tenant": 0.51,
+        "tenant_language": 0.506
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-compound-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.667,
+        "doc_type": 0.688,
+        "doc_type_language": 0.667,
+        "tenant": 0.499,
+        "tenant_language": 0.51
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-context-overflow-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.458,
+        "doc_type": 0.427,
+        "doc_type_language": 0.458,
+        "tenant": 0.427,
+        "tenant_language": 0.456
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-context-overflow-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.441,
+        "doc_type": 0.41,
+        "doc_type_language": 0.441,
+        "tenant": 0.411,
+        "tenant_language": 0.44
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-duplicate-flood-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.546,
+        "doc_type": 0.543,
+        "doc_type_language": 0.546,
+        "tenant": 0.538,
+        "tenant_language": 0.544
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-duplicate-flood-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.53,
+        "doc_type": 0.517,
+        "doc_type_language": 0.53,
+        "tenant": 0.514,
+        "tenant_language": 0.527
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-duplicate-flood-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.522,
+        "doc_type": 0.506,
+        "doc_type_language": 0.522,
+        "tenant": 0.502,
+        "tenant_language": 0.517
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-exact-term-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.52,
+        "doc_type": 0.538,
+        "doc_type_language": 0.52,
+        "tenant": 0.434,
+        "tenant_language": 0.455
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-exact-term-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.566,
+        "doc_type": 0.56,
+        "doc_type_language": 0.566,
+        "tenant": 0.405,
+        "tenant_language": 0.432
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-exact-term-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.563,
+        "doc_type": 0.557,
+        "doc_type_language": 0.563,
+        "tenant": 0.475,
+        "tenant_language": 0.504
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.563,
+        "doc_type": 0.538,
+        "doc_type_language": 0.563,
+        "tenant": 0.451,
+        "tenant_language": 0.446
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.528,
+        "doc_type": 0.512,
+        "doc_type_language": 0.528,
+        "tenant": 0.454,
+        "tenant_language": 0.456
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.5,
+        "doc_type": 0.5,
+        "doc_type_language": 0.5,
+        "tenant": 0.484,
+        "tenant_language": 0.483
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.59,
+        "doc_type": 0.593,
+        "doc_type_language": 0.59,
+        "tenant": 0.551,
+        "tenant_language": 0.536
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.551,
+        "doc_type": 0.535,
+        "doc_type_language": 0.551,
+        "tenant": 0.478,
+        "tenant_language": 0.472
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-006",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.582,
+        "doc_type": 0.582,
+        "doc_type_language": 0.582,
+        "tenant": 0.448,
+        "tenant_language": 0.453
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-general-007",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.501,
+        "doc_type": 0.482,
+        "doc_type_language": 0.498,
+        "tenant": 0.486,
+        "tenant_language": 0.501
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-identifier-near-miss-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.365,
+        "doc_type": 0.352,
+        "doc_type_language": 0.361,
+        "tenant": 0.355,
+        "tenant_language": 0.365
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-identifier-near-miss-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.359,
+        "doc_type": 0.336,
+        "doc_type_language": 0.357,
+        "tenant": 0.338,
+        "tenant_language": 0.359
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-identifier-near-miss-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.377,
+        "doc_type": 0.379,
+        "doc_type_language": 0.376,
+        "tenant": 0.38,
+        "tenant_language": 0.377
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-identifier-near-miss-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.416,
+        "doc_type": 0.404,
+        "doc_type_language": 0.413,
+        "tenant": 0.407,
+        "tenant_language": 0.416
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-implicit-condition-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.565,
+        "doc_type": 0.565,
+        "doc_type_language": 0.565,
+        "tenant": 0.548,
+        "tenant_language": 0.546
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-implicit-condition-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.569,
+        "doc_type": 0.581,
+        "doc_type_language": 0.569,
+        "tenant": 0.526,
+        "tenant_language": 0.538
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-implicit-condition-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.542,
+        "doc_type": 0.571,
+        "doc_type_language": 0.542,
+        "tenant": 0.522,
+        "tenant_language": 0.521
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-implicit-condition-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.528,
+        "doc_type": 0.509,
+        "doc_type_language": 0.521,
+        "tenant": 0.518,
+        "tenant_language": 0.528
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.469,
+        "doc_type": 0.445,
+        "doc_type_language": 0.465,
+        "tenant": 0.439,
+        "tenant_language": 0.469
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.48,
+        "doc_type": 0.44,
+        "doc_type_language": 0.474,
+        "tenant": 0.447,
+        "tenant_language": 0.48
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.476,
+        "doc_type": 0.453,
+        "doc_type_language": 0.475,
+        "tenant": 0.454,
+        "tenant_language": 0.476
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.416,
+        "doc_type": 0.422,
+        "doc_type_language": 0.407,
+        "tenant": 0.419,
+        "tenant_language": 0.416
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.4,
+        "doc_type": 0.392,
+        "doc_type_language": 0.395,
+        "tenant": 0.398,
+        "tenant_language": 0.4
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.452,
+        "doc_type": 0.442,
+        "doc_type_language": 0.451,
+        "tenant": 0.439,
+        "tenant_language": 0.452
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.463,
+        "doc_type": 0.456,
+        "doc_type_language": 0.456,
+        "tenant": 0.436,
+        "tenant_language": 0.463
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.489,
+        "doc_type": 0.469,
+        "doc_type_language": 0.482,
+        "tenant": 0.475,
+        "tenant_language": 0.489
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.464,
+        "doc_type": 0.463,
+        "doc_type_language": 0.459,
+        "tenant": 0.456,
+        "tenant_language": 0.464
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-injection-evasive-006",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.525,
+        "doc_type": 0.498,
+        "doc_type_language": 0.52,
+        "tenant": 0.503,
+        "tenant_language": 0.525
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.479,
+        "doc_type": 0.446,
+        "doc_type_language": 0.476,
+        "tenant": 0.45,
+        "tenant_language": 0.479
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.48,
+        "doc_type": 0.452,
+        "doc_type_language": 0.476,
+        "tenant": 0.456,
+        "tenant_language": 0.48
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.429,
+        "doc_type": 0.404,
+        "doc_type_language": 0.425,
+        "tenant": 0.409,
+        "tenant_language": 0.429
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.531,
+        "doc_type": 0.497,
+        "doc_type_language": 0.528,
+        "tenant": 0.501,
+        "tenant_language": 0.531
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-005",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.522,
+        "doc_type": 0.49,
+        "doc_type_language": 0.518,
+        "tenant": 0.495,
+        "tenant_language": 0.522
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-006",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.493,
+        "doc_type": 0.459,
+        "doc_type_language": 0.488,
+        "tenant": 0.465,
+        "tenant_language": 0.493
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-007",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.492,
+        "doc_type": 0.464,
+        "doc_type_language": 0.487,
+        "tenant": 0.469,
+        "tenant_language": 0.492
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-008",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.492,
+        "doc_type": 0.462,
+        "doc_type_language": 0.487,
+        "tenant": 0.467,
+        "tenant_language": 0.492
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-009",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.431,
+        "doc_type": 0.405,
+        "doc_type_language": 0.425,
+        "tenant": 0.407,
+        "tenant_language": 0.431
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-010",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.48,
+        "doc_type_language": 0.511,
+        "tenant": 0.486,
+        "tenant_language": 0.516
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-011",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.489,
+        "doc_type": 0.469,
+        "doc_type_language": 0.483,
+        "tenant": 0.458,
+        "tenant_language": 0.489
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-012",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.458,
+        "doc_type": 0.455,
+        "doc_type_language": 0.458,
+        "tenant": 0.427,
+        "tenant_language": 0.456
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-013",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.545,
+        "doc_type": 0.512,
+        "doc_type_language": 0.542,
+        "tenant": 0.517,
+        "tenant_language": 0.545
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-014",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.52,
+        "doc_type": 0.492,
+        "doc_type_language": 0.517,
+        "tenant": 0.497,
+        "tenant_language": 0.52
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-multi-step-calc-015",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.477,
+        "doc_type": 0.447,
+        "doc_type_language": 0.474,
+        "tenant": 0.452,
+        "tenant_language": 0.477
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-001",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.552,
+        "doc_type": 0.542,
+        "doc_type_language": 0.552,
+        "tenant": 0.471,
+        "tenant_language": 0.471
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-002",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.63,
+        "doc_type": 0.596,
+        "doc_type_language": 0.63,
+        "tenant": 0.418,
+        "tenant_language": 0.436
+      },
+      "split": "dev"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "en-no-answer-003",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.363,
+        "doc_type": 0.353,
+        "doc_type_language": 0.361,
+        "tenant": 0.356,
+        "tenant_language": 0.363
+      },
+      "split": "dev"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "en-no-answer-004",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.335,
+        "doc_type": 0.325,
+        "doc_type_language": 0.333,
+        "tenant": 0.326,
+        "tenant_language": 0.335
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-005",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.645,
+        "doc_type": 0.632,
+        "doc_type_language": 0.645,
+        "tenant": 0.459,
+        "tenant_language": 0.467
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-006",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.436,
+        "doc_type": 0.446,
+        "doc_type_language": 0.436,
+        "tenant": 0.389,
+        "tenant_language": 0.398
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-007",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.534,
+        "doc_type": 0.534,
+        "doc_type_language": 0.534,
+        "tenant": 0.417,
+        "tenant_language": 0.402
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-008",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.497,
+        "doc_type": 0.497,
+        "doc_type_language": 0.497,
+        "tenant": 0.43,
+        "tenant_language": 0.415
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-009",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.605,
+        "doc_type": 0.591,
+        "doc_type_language": 0.605,
+        "tenant": 0.46,
+        "tenant_language": 0.482
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-010",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.553,
+        "doc_type": 0.566,
+        "doc_type_language": 0.553,
+        "tenant": 0.433,
+        "tenant_language": 0.457
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-011",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.356,
+        "doc_type": 0.338,
+        "doc_type_language": 0.352,
+        "tenant": 0.342,
+        "tenant_language": 0.356
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-012",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.372,
+        "doc_type": 0.368,
+        "doc_type_language": 0.372,
+        "tenant": 0.369,
+        "tenant_language": 0.372
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-013",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.493,
+        "doc_type": 0.506,
+        "doc_type_language": 0.493,
+        "tenant": 0.436,
+        "tenant_language": 0.459
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-014",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.558,
+        "doc_type": 0.576,
+        "doc_type_language": 0.558,
+        "tenant": 0.455,
+        "tenant_language": 0.461
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-015",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.522,
+        "doc_type": 0.512,
+        "doc_type_language": 0.522,
+        "tenant": 0.437,
+        "tenant_language": 0.46
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-016",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.574,
+        "doc_type": 0.559,
+        "doc_type_language": 0.574,
+        "tenant": 0.457,
+        "tenant_language": 0.473
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no-answer-017",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.544,
+        "doc_type": 0.553,
+        "doc_type_language": 0.544,
+        "tenant": 0.44,
+        "tenant_language": 0.443
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "en-no_answer-term-001",
+      "pair": "en",
+      "scores": {
+        "d34_all": 0.376,
+        "doc_type": 0.361,
+        "doc_type_language": 0.374,
+        "tenant": 0.364,
+        "tenant_language": 0.376
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-partial-answer-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.462,
+        "doc_type": 0.462,
+        "doc_type_language": 0.457,
+        "tenant": 0.441,
+        "tenant_language": 0.462
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-partial-answer-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.481,
+        "doc_type": 0.434,
+        "doc_type_language": 0.474,
+        "tenant": 0.439,
+        "tenant_language": 0.481
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-partial-answer-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.453,
+        "doc_type": 0.439,
+        "doc_type_language": 0.45,
+        "tenant": 0.441,
+        "tenant_language": 0.453
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-partial-answer-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.433,
+        "doc_type": 0.412,
+        "doc_type_language": 0.433,
+        "tenant": 0.413,
+        "tenant_language": 0.428
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-scanned-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.649,
+        "doc_type": 0.628,
+        "doc_type_language": 0.649,
+        "tenant": 0.446,
+        "tenant_language": 0.461
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-scanned-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.647,
+        "doc_type": 0.671,
+        "doc_type_language": 0.647,
+        "tenant": 0.514,
+        "tenant_language": 0.503
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-selective-filter-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.659,
+        "doc_type": 0.659,
+        "doc_type_language": 0.659,
+        "tenant": 0.52,
+        "tenant_language": 0.538
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-selective-filter-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.641,
+        "doc_type": 0.641,
+        "doc_type_language": 0.641,
+        "tenant": 0.487,
+        "tenant_language": 0.501
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-selective-filter-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.575,
+        "doc_type": 0.575,
+        "doc_type_language": 0.575,
+        "tenant": 0.401,
+        "tenant_language": 0.423
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-selective-filter-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.624,
+        "doc_type": 0.624,
+        "doc_type_language": 0.624,
+        "tenant": 0.432,
+        "tenant_language": 0.443
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "en-stale-version-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.451,
+        "doc_type": 0.429,
+        "doc_type_language": 0.449,
+        "tenant": 0.432,
+        "tenant_language": 0.451
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-stale-version-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.383,
+        "doc_type": 0.371,
+        "doc_type_language": 0.38,
+        "tenant": 0.373,
+        "tenant_language": 0.383
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-stale-version-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.442,
+        "doc_type": 0.423,
+        "doc_type_language": 0.439,
+        "tenant": 0.426,
+        "tenant_language": 0.442
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-stale-version-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.416,
+        "doc_type": 0.402,
+        "doc_type_language": 0.414,
+        "tenant": 0.406,
+        "tenant_language": 0.416
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-table-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.592,
+        "doc_type": 0.599,
+        "doc_type_language": 0.592,
+        "tenant": 0.455,
+        "tenant_language": 0.502
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-table-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.541,
+        "doc_type": 0.487,
+        "doc_type_language": 0.541,
+        "tenant": 0.398,
+        "tenant_language": 0.417
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-table-003",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.509,
+        "doc_type_language": 0.516,
+        "tenant": 0.401,
+        "tenant_language": 0.438
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-table-004",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.453,
+        "doc_type": 0.433,
+        "doc_type_language": 0.453,
+        "tenant": 0.43,
+        "tenant_language": 0.451
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-typo-001",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.532,
+        "doc_type": 0.516,
+        "doc_type_language": 0.529,
+        "tenant": 0.52,
+        "tenant_language": 0.532
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "en-typo-002",
+      "pair": "en->en",
+      "scores": {
+        "d34_all": 0.439,
+        "doc_type": 0.448,
+        "doc_type_language": 0.439,
+        "tenant": 0.42,
+        "tenant_language": 0.422
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-ambiguous-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.561,
+        "doc_type": 0.561,
+        "doc_type_language": 0.561,
+        "tenant": 0.546,
+        "tenant_language": 0.539
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-ambiguous-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.68,
+        "doc_type": 0.637,
+        "doc_type_language": 0.68,
+        "tenant": 0.569,
+        "tenant_language": 0.572
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-near-miss-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.577,
+        "doc_type": 0.571,
+        "doc_type_language": 0.577,
+        "tenant": 0.452,
+        "tenant_language": 0.46
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-near-miss-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.551,
+        "doc_type": 0.578,
+        "doc_type_language": 0.551,
+        "tenant": 0.465,
+        "tenant_language": 0.495
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-near-miss-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.582,
+        "doc_type": 0.58,
+        "doc_type_language": 0.582,
+        "tenant": 0.484,
+        "tenant_language": 0.47
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-near-miss-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.532,
+        "doc_type": 0.497,
+        "doc_type_language": 0.532,
+        "tenant": 0.452,
+        "tenant_language": 0.471
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-near-miss-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.489,
+        "doc_type": 0.471,
+        "doc_type_language": 0.489,
+        "tenant": 0.406,
+        "tenant_language": 0.399
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-paraphrase-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.595,
+        "doc_type": 0.566,
+        "doc_type_language": 0.595,
+        "tenant": 0.465,
+        "tenant_language": 0.462
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-paraphrase-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.562,
+        "doc_type": 0.562,
+        "doc_type_language": 0.562,
+        "tenant": 0.477,
+        "tenant_language": 0.477
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-paraphrase-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.575,
+        "doc_type": 0.575,
+        "doc_type_language": 0.575,
+        "tenant": 0.491,
+        "tenant_language": 0.482
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-cache-paraphrase-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.618,
+        "doc_type": 0.618,
+        "doc_type_language": 0.618,
+        "tenant": 0.48,
+        "tenant_language": 0.461
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.59,
+        "doc_type": 0.569,
+        "doc_type_language": 0.59,
+        "tenant": 0.53,
+        "tenant_language": 0.513
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.563,
+        "doc_type": 0.562,
+        "doc_type_language": 0.563,
+        "tenant": 0.547,
+        "tenant_language": 0.53
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-term-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.437,
+        "doc_type": 0.433,
+        "doc_type_language": 0.433,
+        "tenant": 0.436,
+        "tenant_language": 0.437
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-term-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.446,
+        "doc_type": 0.459,
+        "doc_type_language": 0.44,
+        "tenant": 0.463,
+        "tenant_language": 0.446
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-term-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.467,
+        "doc_type": 0.466,
+        "doc_type_language": 0.46,
+        "tenant": 0.471,
+        "tenant_language": 0.467
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-term-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.462,
+        "doc_type": 0.464,
+        "doc_type_language": 0.457,
+        "tenant": 0.468,
+        "tenant_language": 0.462
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-colloquial-term-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.483,
+        "doc_type": 0.474,
+        "doc_type_language": 0.477,
+        "tenant": 0.48,
+        "tenant_language": 0.483
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-compound-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.581,
+        "doc_type": 0.558,
+        "doc_type_language": 0.581,
+        "tenant": 0.467,
+        "tenant_language": 0.468
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-compound-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.644,
+        "doc_type": 0.606,
+        "doc_type_language": 0.644,
+        "tenant": 0.485,
+        "tenant_language": 0.51
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-compound-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.611,
+        "doc_type": 0.58,
+        "doc_type_language": 0.611,
+        "tenant": 0.489,
+        "tenant_language": 0.472
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-compound-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.652,
+        "doc_type": 0.68,
+        "doc_type_language": 0.652,
+        "tenant": 0.492,
+        "tenant_language": 0.491
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-compound-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.589,
+        "doc_type": 0.589,
+        "doc_type_language": 0.589,
+        "tenant": 0.463,
+        "tenant_language": 0.45
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-context-overflow-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.43,
+        "doc_type": 0.422,
+        "doc_type_language": 0.428,
+        "tenant": 0.425,
+        "tenant_language": 0.43
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-context-overflow-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.418,
+        "doc_type": 0.406,
+        "doc_type_language": 0.417,
+        "tenant": 0.407,
+        "tenant_language": 0.418
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-duplicate-flood-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.531,
+        "doc_type": 0.481,
+        "doc_type_language": 0.531,
+        "tenant": 0.478,
+        "tenant_language": 0.528
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-duplicate-flood-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.55,
+        "doc_type": 0.487,
+        "doc_type_language": 0.55,
+        "tenant": 0.484,
+        "tenant_language": 0.547
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-duplicate-flood-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.565,
+        "doc_type": 0.499,
+        "doc_type_language": 0.565,
+        "tenant": 0.495,
+        "tenant_language": 0.561
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-exact-term-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.545,
+        "doc_type": 0.565,
+        "doc_type_language": 0.545,
+        "tenant": 0.475,
+        "tenant_language": 0.482
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-exact-term-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.534,
+        "doc_type": 0.522,
+        "doc_type_language": 0.534,
+        "tenant": 0.451,
+        "tenant_language": 0.462
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-exact-term-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.633,
+        "doc_type": 0.619,
+        "doc_type_language": 0.633,
+        "tenant": 0.51,
+        "tenant_language": 0.533
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.571,
+        "doc_type": 0.559,
+        "doc_type_language": 0.571,
+        "tenant": 0.468,
+        "tenant_language": 0.465
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.63,
+        "doc_type": 0.591,
+        "doc_type_language": 0.63,
+        "tenant": 0.49,
+        "tenant_language": 0.474
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.585,
+        "doc_type": 0.579,
+        "doc_type_language": 0.585,
+        "tenant": 0.492,
+        "tenant_language": 0.485
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.52,
+        "doc_type": 0.52,
+        "doc_type_language": 0.52,
+        "tenant": 0.47,
+        "tenant_language": 0.475
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.613,
+        "doc_type": 0.613,
+        "doc_type_language": 0.613,
+        "tenant": 0.476,
+        "tenant_language": 0.458
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.572,
+        "doc_type": 0.572,
+        "doc_type_language": 0.572,
+        "tenant": 0.469,
+        "tenant_language": 0.459
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-007",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.498,
+        "doc_type": 0.493,
+        "doc_type_language": 0.495,
+        "tenant": 0.498,
+        "tenant_language": 0.498
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-008",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.461,
+        "doc_type": 0.446,
+        "doc_type_language": 0.458,
+        "tenant": 0.448,
+        "tenant_language": 0.461
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-009",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.459,
+        "doc_type": 0.471,
+        "doc_type_language": 0.459,
+        "tenant": 0.471,
+        "tenant_language": 0.459
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-general-010",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.391,
+        "doc_type": 0.382,
+        "doc_type_language": 0.391,
+        "tenant": 0.382,
+        "tenant_language": 0.389
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-identifier-near-miss-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.421,
+        "doc_type": 0.406,
+        "doc_type_language": 0.419,
+        "tenant": 0.408,
+        "tenant_language": 0.421
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-identifier-near-miss-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.404,
+        "doc_type": 0.401,
+        "doc_type_language": 0.403,
+        "tenant": 0.402,
+        "tenant_language": 0.404
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-identifier-near-miss-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.444,
+        "doc_type": 0.413,
+        "doc_type_language": 0.441,
+        "tenant": 0.417,
+        "tenant_language": 0.444
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-identifier-near-miss-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.424,
+        "doc_type": 0.418,
+        "doc_type_language": 0.424,
+        "tenant": 0.418,
+        "tenant_language": 0.424
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-implicit-condition-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.583,
+        "doc_type": 0.602,
+        "doc_type_language": 0.583,
+        "tenant": 0.558,
+        "tenant_language": 0.542
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-implicit-condition-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.596,
+        "doc_type": 0.606,
+        "doc_type_language": 0.596,
+        "tenant": 0.526,
+        "tenant_language": 0.511
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-implicit-condition-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.544,
+        "doc_type": 0.566,
+        "doc_type_language": 0.544,
+        "tenant": 0.522,
+        "tenant_language": 0.513
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-implicit-condition-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.547,
+        "doc_type": 0.552,
+        "doc_type_language": 0.542,
+        "tenant": 0.557,
+        "tenant_language": 0.547
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.458,
+        "doc_type": 0.45,
+        "doc_type_language": 0.458,
+        "tenant": 0.414,
+        "tenant_language": 0.423
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.442,
+        "doc_type": 0.441,
+        "doc_type_language": 0.442,
+        "tenant": 0.428,
+        "tenant_language": 0.437
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.452,
+        "doc_type": 0.422,
+        "doc_type_language": 0.449,
+        "tenant": 0.426,
+        "tenant_language": 0.452
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.406,
+        "doc_type": 0.402,
+        "doc_type_language": 0.402,
+        "tenant": 0.407,
+        "tenant_language": 0.406
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.397,
+        "doc_type": 0.394,
+        "doc_type_language": 0.397,
+        "tenant": 0.387,
+        "tenant_language": 0.384
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.446,
+        "doc_type": 0.444,
+        "doc_type_language": 0.441,
+        "tenant": 0.446,
+        "tenant_language": 0.446
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.547,
+        "doc_type": 0.539,
+        "doc_type_language": 0.547,
+        "tenant": 0.457,
+        "tenant_language": 0.463
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.478,
+        "doc_type": 0.456,
+        "doc_type_language": 0.473,
+        "tenant": 0.462,
+        "tenant_language": 0.478
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.434,
+        "doc_type": 0.422,
+        "doc_type_language": 0.43,
+        "tenant": 0.426,
+        "tenant_language": 0.434
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-injection-evasive-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.455,
+        "doc_type": 0.461,
+        "doc_type_language": 0.447,
+        "tenant": 0.457,
+        "tenant_language": 0.455
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.457,
+        "doc_type": 0.442,
+        "doc_type_language": 0.452,
+        "tenant": 0.448,
+        "tenant_language": 0.457
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.445,
+        "doc_type": 0.448,
+        "doc_type_language": 0.445,
+        "tenant": 0.43,
+        "tenant_language": 0.445
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.431,
+        "doc_type": 0.429,
+        "doc_type_language": 0.431,
+        "tenant": 0.397,
+        "tenant_language": 0.4
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.492,
+        "doc_type": 0.482,
+        "doc_type_language": 0.488,
+        "tenant": 0.487,
+        "tenant_language": 0.492
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-005",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.492,
+        "doc_type": 0.481,
+        "doc_type_language": 0.489,
+        "tenant": 0.485,
+        "tenant_language": 0.492
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-006",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.435,
+        "doc_type": 0.43,
+        "doc_type_language": 0.431,
+        "tenant": 0.435,
+        "tenant_language": 0.435
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-007",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.472,
+        "doc_type": 0.484,
+        "doc_type_language": 0.472,
+        "tenant": 0.464,
+        "tenant_language": 0.465
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-008",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.496,
+        "doc_type": 0.492,
+        "doc_type_language": 0.49,
+        "tenant": 0.487,
+        "tenant_language": 0.496
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-009",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.442,
+        "doc_type": 0.457,
+        "doc_type_language": 0.442,
+        "tenant": 0.438,
+        "tenant_language": 0.431
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-010",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.495,
+        "doc_type": 0.488,
+        "doc_type_language": 0.489,
+        "tenant": 0.495,
+        "tenant_language": 0.495
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-011",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.491,
+        "doc_type": 0.492,
+        "doc_type_language": 0.491,
+        "tenant": 0.472,
+        "tenant_language": 0.48
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-012",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.438,
+        "doc_type": 0.439,
+        "doc_type_language": 0.438,
+        "tenant": 0.427,
+        "tenant_language": 0.433
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-013",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.518,
+        "doc_type": 0.518,
+        "doc_type_language": 0.514,
+        "tenant": 0.524,
+        "tenant_language": 0.518
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-014",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.52,
+        "doc_type": 0.517,
+        "doc_type_language": 0.515,
+        "tenant": 0.523,
+        "tenant_language": 0.52
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-multi-step-calc-015",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.504,
+        "doc_type": 0.49,
+        "doc_type_language": 0.499,
+        "tenant": 0.497,
+        "tenant_language": 0.504
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-001",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.56,
+        "doc_type": 0.545,
+        "doc_type_language": 0.56,
+        "tenant": 0.484,
+        "tenant_language": 0.468
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-002",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.694,
+        "doc_type": 0.636,
+        "doc_type_language": 0.694,
+        "tenant": 0.464,
+        "tenant_language": 0.472
+      },
+      "split": "dev"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "it-no-answer-003",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.354,
+        "doc_type": 0.349,
+        "doc_type_language": 0.353,
+        "tenant": 0.352,
+        "tenant_language": 0.354
+      },
+      "split": "dev"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "it-no-answer-004",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.336,
+        "doc_type": 0.323,
+        "doc_type_language": 0.334,
+        "tenant": 0.324,
+        "tenant_language": 0.336
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-005",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.645,
+        "doc_type": 0.635,
+        "doc_type_language": 0.645,
+        "tenant": 0.448,
+        "tenant_language": 0.452
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-006",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.487,
+        "doc_type": 0.48,
+        "doc_type_language": 0.487,
+        "tenant": 0.396,
+        "tenant_language": 0.407
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-007",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.497,
+        "doc_type": 0.497,
+        "doc_type_language": 0.497,
+        "tenant": 0.451,
+        "tenant_language": 0.472
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-008",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.468,
+        "doc_type": 0.468,
+        "doc_type_language": 0.468,
+        "tenant": 0.4,
+        "tenant_language": 0.401
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-009",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.548,
+        "doc_type": 0.548,
+        "doc_type_language": 0.548,
+        "tenant": 0.428,
+        "tenant_language": 0.417
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-010",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.588,
+        "doc_type": 0.579,
+        "doc_type_language": 0.588,
+        "tenant": 0.453,
+        "tenant_language": 0.469
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-011",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.391,
+        "doc_type": 0.389,
+        "doc_type_language": 0.389,
+        "tenant": 0.391,
+        "tenant_language": 0.391
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-012",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.443,
+        "doc_type": 0.419,
+        "doc_type_language": 0.441,
+        "tenant": 0.421,
+        "tenant_language": 0.443
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-014",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.496,
+        "doc_type": 0.51,
+        "doc_type_language": 0.496,
+        "tenant": 0.443,
+        "tenant_language": 0.466
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-015",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.553,
+        "doc_type": 0.579,
+        "doc_type_language": 0.553,
+        "tenant": 0.469,
+        "tenant_language": 0.475
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-016",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.542,
+        "doc_type": 0.522,
+        "doc_type_language": 0.542,
+        "tenant": 0.438,
+        "tenant_language": 0.456
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no-answer-018",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.557,
+        "doc_type": 0.566,
+        "doc_type_language": 0.557,
+        "tenant": 0.41,
+        "tenant_language": 0.416
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "it-no_answer-term-001",
+      "pair": "it",
+      "scores": {
+        "d34_all": 0.357,
+        "doc_type": 0.349,
+        "doc_type_language": 0.355,
+        "tenant": 0.35,
+        "tenant_language": 0.357
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-partial-answer-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.488,
+        "doc_type": 0.508,
+        "doc_type_language": 0.488,
+        "tenant": 0.412,
+        "tenant_language": 0.423
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-partial-answer-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.471,
+        "doc_type": 0.466,
+        "doc_type_language": 0.471,
+        "tenant": 0.452,
+        "tenant_language": 0.46
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-partial-answer-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.421,
+        "doc_type": 0.444,
+        "doc_type_language": 0.421,
+        "tenant": 0.416,
+        "tenant_language": 0.406
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-partial-answer-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.456,
+        "doc_type": 0.471,
+        "doc_type_language": 0.456,
+        "tenant": 0.436,
+        "tenant_language": 0.439
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scanned-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.508,
+        "doc_type": 0.528,
+        "doc_type_language": 0.508,
+        "tenant": 0.429,
+        "tenant_language": 0.41
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-scanned-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.758,
+        "doc_type": 0.618,
+        "doc_type_language": 0.758,
+        "tenant": 0.512,
+        "tenant_language": 0.505
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-selective-filter-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.626,
+        "doc_type": 0.627,
+        "doc_type_language": 0.626,
+        "tenant": 0.514,
+        "tenant_language": 0.507
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-selective-filter-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.409,
+        "doc_type": 0.409,
+        "doc_type_language": 0.409,
+        "tenant": 0.378,
+        "tenant_language": 0.369
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-selective-filter-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.694,
+        "doc_type": 0.657,
+        "doc_type_language": 0.694,
+        "tenant": 0.496,
+        "tenant_language": 0.52
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-selective-filter-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.587,
+        "doc_type": 0.579,
+        "doc_type_language": 0.587,
+        "tenant": 0.447,
+        "tenant_language": 0.445
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-stale-version-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.446,
+        "doc_type": 0.453,
+        "doc_type_language": 0.445,
+        "tenant": 0.453,
+        "tenant_language": 0.446
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-stale-version-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.408,
+        "doc_type": 0.424,
+        "doc_type_language": 0.406,
+        "tenant": 0.424,
+        "tenant_language": 0.408
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-stale-version-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.377,
+        "doc_type": 0.39,
+        "doc_type_language": 0.37,
+        "tenant": 0.394,
+        "tenant_language": 0.377
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-stale-version-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.43,
+        "doc_type": 0.43,
+        "doc_type_language": 0.43,
+        "tenant": 0.395,
+        "tenant_language": 0.378
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-table-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.57,
+        "doc_type": 0.593,
+        "doc_type_language": 0.57,
+        "tenant": 0.477,
+        "tenant_language": 0.503
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-table-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.635,
+        "doc_type": 0.639,
+        "doc_type_language": 0.635,
+        "tenant": 0.426,
+        "tenant_language": 0.431
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-table-003",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.543,
+        "doc_type": 0.518,
+        "doc_type_language": 0.543,
+        "tenant": 0.401,
+        "tenant_language": 0.42
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-table-004",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.46,
+        "doc_type": 0.451,
+        "doc_type_language": 0.457,
+        "tenant": 0.453,
+        "tenant_language": 0.46
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "it-typo-001",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.533,
+        "doc_type": 0.506,
+        "doc_type_language": 0.533,
+        "tenant": 0.478,
+        "tenant_language": 0.471
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "it-typo-002",
+      "pair": "it->it",
+      "scores": {
+        "d34_all": 0.461,
+        "doc_type": 0.469,
+        "doc_type_language": 0.459,
+        "tenant": 0.475,
+        "tenant_language": 0.461
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-it-01",
+      "pair": "en->it",
+      "scores": {
+        "d34_all": 0.603,
+        "doc_type": 0.593,
+        "doc_type_language": 0.603,
+        "tenant": 0.476,
+        "tenant_language": 0.476
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-it-02",
+      "pair": "en->it",
+      "scores": {
+        "d34_all": 0.578,
+        "doc_type": 0.569,
+        "doc_type_language": 0.578,
+        "tenant": 0.429,
+        "tenant_language": 0.445
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-it-03",
+      "pair": "en->it",
+      "scores": {
+        "d34_all": 0.511,
+        "doc_type": 0.511,
+        "doc_type_language": 0.511,
+        "tenant": 0.491,
+        "tenant_language": 0.472
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-it-04",
+      "pair": "en->it",
+      "scores": {
+        "d34_all": 0.588,
+        "doc_type": 0.588,
+        "doc_type_language": 0.588,
+        "tenant": 0.508,
+        "tenant_language": 0.503
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-it-05",
+      "pair": "en->it",
+      "scores": {
+        "d34_all": 0.536,
+        "doc_type": 0.536,
+        "doc_type_language": 0.536,
+        "tenant": 0.487,
+        "tenant_language": 0.483
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-01",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.602,
+        "doc_type": 0.602,
+        "doc_type_language": 0.602,
+        "tenant": 0.401,
+        "tenant_language": 0.406
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-02",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.506,
+        "doc_type": 0.506,
+        "doc_type_language": 0.506,
+        "tenant": 0.437,
+        "tenant_language": 0.435
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-03",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.667,
+        "doc_type": 0.667,
+        "doc_type_language": 0.667,
+        "tenant": 0.456,
+        "tenant_language": 0.467
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-04",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.491,
+        "doc_type": 0.491,
+        "doc_type_language": 0.491,
+        "tenant": 0.452,
+        "tenant_language": 0.454
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-05",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.658,
+        "doc_type": 0.644,
+        "doc_type_language": 0.658,
+        "tenant": 0.503,
+        "tenant_language": 0.501
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-06",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.684,
+        "doc_type": 0.684,
+        "doc_type_language": 0.684,
+        "tenant": 0.468,
+        "tenant_language": 0.46
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-07",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.663,
+        "doc_type": 0.663,
+        "doc_type_language": 0.663,
+        "tenant": 0.491,
+        "tenant_language": 0.478
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-en-zh-08",
+      "pair": "en->zh",
+      "scores": {
+        "d34_all": 0.648,
+        "doc_type": 0.648,
+        "doc_type_language": 0.648,
+        "tenant": 0.498,
+        "tenant_language": 0.501
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-en-01",
+      "pair": "it->en",
+      "scores": {
+        "d34_all": 0.555,
+        "doc_type": 0.53,
+        "doc_type_language": 0.555,
+        "tenant": 0.469,
+        "tenant_language": 0.506
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-en-02",
+      "pair": "it->en",
+      "scores": {
+        "d34_all": 0.58,
+        "doc_type": 0.559,
+        "doc_type_language": 0.58,
+        "tenant": 0.484,
+        "tenant_language": 0.505
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-en-03",
+      "pair": "it->en",
+      "scores": {
+        "d34_all": 0.497,
+        "doc_type": 0.497,
+        "doc_type_language": 0.497,
+        "tenant": 0.459,
+        "tenant_language": 0.455
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-en-04",
+      "pair": "it->en",
+      "scores": {
+        "d34_all": 0.496,
+        "doc_type": 0.51,
+        "doc_type_language": 0.496,
+        "tenant": 0.454,
+        "tenant_language": 0.451
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-en-05",
+      "pair": "it->en",
+      "scores": {
+        "d34_all": 0.592,
+        "doc_type": 0.578,
+        "doc_type_language": 0.592,
+        "tenant": 0.488,
+        "tenant_language": 0.479
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-01",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.599,
+        "doc_type": 0.599,
+        "doc_type_language": 0.599,
+        "tenant": 0.41,
+        "tenant_language": 0.417
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-02",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.638,
+        "doc_type": 0.638,
+        "doc_type_language": 0.638,
+        "tenant": 0.432,
+        "tenant_language": 0.436
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-03",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.516,
+        "doc_type_language": 0.516,
+        "tenant": 0.447,
+        "tenant_language": 0.445
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-04",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.483,
+        "doc_type": 0.483,
+        "doc_type_language": 0.483,
+        "tenant": 0.448,
+        "tenant_language": 0.446
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-05",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.633,
+        "doc_type": 0.633,
+        "doc_type_language": 0.633,
+        "tenant": 0.405,
+        "tenant_language": 0.4
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-06",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.667,
+        "doc_type": 0.667,
+        "doc_type_language": 0.667,
+        "tenant": 0.439,
+        "tenant_language": 0.425
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-07",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.685,
+        "doc_type": 0.685,
+        "doc_type_language": 0.685,
+        "tenant": 0.523,
+        "tenant_language": 0.504
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-it-zh-09",
+      "pair": "it->zh",
+      "scores": {
+        "d34_all": 0.631,
+        "doc_type": 0.631,
+        "doc_type_language": 0.631,
+        "tenant": 0.499,
+        "tenant_language": 0.499
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-en-01",
+      "pair": "zh->en",
+      "scores": {
+        "d34_all": 0.571,
+        "doc_type": 0.542,
+        "doc_type_language": 0.571,
+        "tenant": 0.463,
+        "tenant_language": 0.5
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-en-02",
+      "pair": "zh->en",
+      "scores": {
+        "d34_all": 0.61,
+        "doc_type": 0.591,
+        "doc_type_language": 0.61,
+        "tenant": 0.494,
+        "tenant_language": 0.515
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-en-03",
+      "pair": "zh->en",
+      "scores": {
+        "d34_all": 0.517,
+        "doc_type": 0.517,
+        "doc_type_language": 0.517,
+        "tenant": 0.501,
+        "tenant_language": 0.501
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-en-04",
+      "pair": "zh->en",
+      "scores": {
+        "d34_all": 0.556,
+        "doc_type": 0.566,
+        "doc_type_language": 0.556,
+        "tenant": 0.489,
+        "tenant_language": 0.481
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-it-01",
+      "pair": "zh->it",
+      "scores": {
+        "d34_all": 0.593,
+        "doc_type": 0.594,
+        "doc_type_language": 0.593,
+        "tenant": 0.517,
+        "tenant_language": 0.503
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-it-02",
+      "pair": "zh->it",
+      "scores": {
+        "d34_all": 0.675,
+        "doc_type": 0.657,
+        "doc_type_language": 0.675,
+        "tenant": 0.511,
+        "tenant_language": 0.507
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-it-03",
+      "pair": "zh->it",
+      "scores": {
+        "d34_all": 0.621,
+        "doc_type": 0.607,
+        "doc_type_language": 0.621,
+        "tenant": 0.438,
+        "tenant_language": 0.444
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "xl-zh-it-04",
+      "pair": "zh->it",
+      "scores": {
+        "d34_all": 0.652,
+        "doc_type": 0.652,
+        "doc_type_language": 0.652,
+        "tenant": 0.553,
+        "tenant_language": 0.543
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-ambiguous-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.591,
+        "doc_type": 0.591,
+        "doc_type_language": 0.591,
+        "tenant": 0.517,
+        "tenant_language": 0.505
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-ambiguous-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.603,
+        "doc_type": 0.614,
+        "doc_type_language": 0.603,
+        "tenant": 0.543,
+        "tenant_language": 0.542
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-near-miss-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.509,
+        "doc_type": 0.465,
+        "doc_type_language": 0.509,
+        "tenant": 0.373,
+        "tenant_language": 0.39
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-near-miss-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.643,
+        "doc_type": 0.634,
+        "doc_type_language": 0.643,
+        "tenant": 0.494,
+        "tenant_language": 0.514
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-near-miss-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.651,
+        "doc_type": 0.674,
+        "doc_type_language": 0.651,
+        "tenant": 0.557,
+        "tenant_language": 0.549
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-near-miss-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.619,
+        "doc_type": 0.608,
+        "doc_type_language": 0.619,
+        "tenant": 0.496,
+        "tenant_language": 0.503
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-near-miss-015",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.567,
+        "doc_type": 0.567,
+        "doc_type_language": 0.567,
+        "tenant": 0.456,
+        "tenant_language": 0.451
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-paraphrase-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.6,
+        "doc_type": 0.6,
+        "doc_type_language": 0.6,
+        "tenant": 0.491,
+        "tenant_language": 0.491
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-paraphrase-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.632,
+        "doc_type": 0.622,
+        "doc_type_language": 0.632,
+        "tenant": 0.488,
+        "tenant_language": 0.504
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-paraphrase-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.761,
+        "doc_type": 0.761,
+        "doc_type_language": 0.761,
+        "tenant": 0.518,
+        "tenant_language": 0.502
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-cache-paraphrase-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.649,
+        "doc_type": 0.649,
+        "doc_type_language": 0.649,
+        "tenant": 0.489,
+        "tenant_language": 0.471
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.623,
+        "doc_type": 0.623,
+        "doc_type_language": 0.623,
+        "tenant": 0.513,
+        "tenant_language": 0.511
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.589,
+        "doc_type": 0.602,
+        "doc_type_language": 0.589,
+        "tenant": 0.502,
+        "tenant_language": 0.489
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-term-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.449,
+        "doc_type": 0.444,
+        "doc_type_language": 0.445,
+        "tenant": 0.445,
+        "tenant_language": 0.449
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-term-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.454,
+        "doc_type": 0.444,
+        "doc_type_language": 0.45,
+        "tenant": 0.445,
+        "tenant_language": 0.454
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-term-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.427,
+        "doc_type": 0.408,
+        "doc_type_language": 0.426,
+        "tenant": 0.408,
+        "tenant_language": 0.427
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-term-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.433,
+        "doc_type": 0.417,
+        "doc_type_language": 0.433,
+        "tenant": 0.415,
+        "tenant_language": 0.432
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-colloquial-term-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.453,
+        "doc_type": 0.45,
+        "doc_type_language": 0.449,
+        "tenant": 0.452,
+        "tenant_language": 0.453
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-compound-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.599,
+        "doc_type": 0.599,
+        "doc_type_language": 0.599,
+        "tenant": 0.483,
+        "tenant_language": 0.486
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-compound-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.706,
+        "doc_type": 0.661,
+        "doc_type_language": 0.706,
+        "tenant": 0.486,
+        "tenant_language": 0.495
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-compound-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.544,
+        "doc_type": 0.544,
+        "doc_type_language": 0.544,
+        "tenant": 0.443,
+        "tenant_language": 0.464
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-compound-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.624,
+        "doc_type": 0.604,
+        "doc_type_language": 0.624,
+        "tenant": 0.488,
+        "tenant_language": 0.507
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-compound-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.68,
+        "doc_type": 0.692,
+        "doc_type_language": 0.68,
+        "tenant": 0.514,
+        "tenant_language": 0.509
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-context-overflow-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.461,
+        "doc_type": 0.455,
+        "doc_type_language": 0.461,
+        "tenant": 0.456,
+        "tenant_language": 0.461
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-context-overflow-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.459,
+        "doc_type": 0.455,
+        "doc_type_language": 0.458,
+        "tenant": 0.456,
+        "tenant_language": 0.459
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-duplicate-flood-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.565,
+        "doc_type": 0.496,
+        "doc_type_language": 0.565,
+        "tenant": 0.49,
+        "tenant_language": 0.557
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-duplicate-flood-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.566,
+        "doc_type": 0.494,
+        "doc_type_language": 0.566,
+        "tenant": 0.489,
+        "tenant_language": 0.559
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-duplicate-flood-013",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.543,
+        "doc_type": 0.466,
+        "doc_type_language": 0.543,
+        "tenant": 0.461,
+        "tenant_language": 0.535
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-exact-term-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.597,
+        "doc_type": 0.561,
+        "doc_type_language": 0.597,
+        "tenant": 0.481,
+        "tenant_language": 0.495
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-exact-term-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.637,
+        "doc_type": 0.634,
+        "doc_type_language": 0.637,
+        "tenant": 0.525,
+        "tenant_language": 0.55
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-exact-term-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.607,
+        "doc_type": 0.59,
+        "doc_type_language": 0.607,
+        "tenant": 0.457,
+        "tenant_language": 0.479
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.615,
+        "doc_type": 0.615,
+        "doc_type_language": 0.615,
+        "tenant": 0.502,
+        "tenant_language": 0.496
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.487,
+        "doc_type": 0.487,
+        "doc_type_language": 0.487,
+        "tenant": 0.421,
+        "tenant_language": 0.414
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.493,
+        "doc_type": 0.505,
+        "doc_type_language": 0.493,
+        "tenant": 0.436,
+        "tenant_language": 0.432
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.425,
+        "doc_type": 0.439,
+        "doc_type_language": 0.425,
+        "tenant": 0.411,
+        "tenant_language": 0.408
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.483,
+        "doc_type": 0.483,
+        "doc_type_language": 0.483,
+        "tenant": 0.418,
+        "tenant_language": 0.416
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-006",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.512,
+        "doc_type": 0.512,
+        "doc_type_language": 0.512,
+        "tenant": 0.464,
+        "tenant_language": 0.465
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-general-008",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.52,
+        "doc_type": 0.518,
+        "doc_type_language": 0.515,
+        "tenant": 0.521,
+        "tenant_language": 0.52
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-identifier-near-miss-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.488,
+        "doc_type": 0.473,
+        "doc_type_language": 0.483,
+        "tenant": 0.477,
+        "tenant_language": 0.488
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-identifier-near-miss-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.442,
+        "doc_type": 0.447,
+        "doc_type_language": 0.437,
+        "tenant": 0.45,
+        "tenant_language": 0.442
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-identifier-near-miss-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.475,
+        "doc_type": 0.46,
+        "doc_type_language": 0.471,
+        "tenant": 0.465,
+        "tenant_language": 0.475
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-identifier-near-miss-011",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.51,
+        "doc_type": 0.49,
+        "doc_type_language": 0.503,
+        "tenant": 0.497,
+        "tenant_language": 0.51
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-implicit-condition-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.593,
+        "doc_type": 0.593,
+        "doc_type_language": 0.593,
+        "tenant": 0.567,
+        "tenant_language": 0.555
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-implicit-condition-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.63,
+        "doc_type": 0.637,
+        "doc_type_language": 0.63,
+        "tenant": 0.557,
+        "tenant_language": 0.551
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-implicit-condition-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.564,
+        "doc_type": 0.592,
+        "doc_type_language": 0.564,
+        "tenant": 0.542,
+        "tenant_language": 0.533
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-implicit-condition-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.543,
+        "doc_type": 0.536,
+        "doc_type_language": 0.537,
+        "tenant": 0.544,
+        "tenant_language": 0.543
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.478,
+        "doc_type": 0.479,
+        "doc_type_language": 0.478,
+        "tenant": 0.469,
+        "tenant_language": 0.476
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.488,
+        "doc_type": 0.478,
+        "doc_type_language": 0.484,
+        "tenant": 0.483,
+        "tenant_language": 0.488
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.482,
+        "doc_type_language": 0.512,
+        "tenant": 0.487,
+        "tenant_language": 0.516
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.415,
+        "doc_type": 0.418,
+        "doc_type_language": 0.409,
+        "tenant": 0.423,
+        "tenant_language": 0.415
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.416,
+        "doc_type": 0.411,
+        "doc_type_language": 0.416,
+        "tenant": 0.396,
+        "tenant_language": 0.4
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.483,
+        "doc_type": 0.478,
+        "doc_type_language": 0.479,
+        "tenant": 0.483,
+        "tenant_language": 0.483
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.522,
+        "doc_type": 0.508,
+        "doc_type_language": 0.522,
+        "tenant": 0.456,
+        "tenant_language": 0.489
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.473,
+        "doc_type": 0.47,
+        "doc_type_language": 0.466,
+        "tenant": 0.475,
+        "tenant_language": 0.473
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.519,
+        "doc_type_language": 0.516,
+        "tenant": 0.497,
+        "tenant_language": 0.494
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-injection-evasive-006",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.523,
+        "doc_type": 0.524,
+        "doc_type_language": 0.523,
+        "tenant": 0.506,
+        "tenant_language": 0.508
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.521,
+        "doc_type": 0.521,
+        "doc_type_language": 0.521,
+        "tenant": 0.504,
+        "tenant_language": 0.52
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.482,
+        "doc_type": 0.463,
+        "doc_type_language": 0.473,
+        "tenant": 0.459,
+        "tenant_language": 0.482
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.49,
+        "doc_type": 0.49,
+        "doc_type_language": 0.49,
+        "tenant": 0.462,
+        "tenant_language": 0.484
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.538,
+        "doc_type": 0.527,
+        "doc_type_language": 0.527,
+        "tenant": 0.533,
+        "tenant_language": 0.538
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-005",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.505,
+        "doc_type": 0.48,
+        "doc_type_language": 0.497,
+        "tenant": 0.485,
+        "tenant_language": 0.505
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-006",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.51,
+        "doc_type_language": 0.51,
+        "tenant": 0.499,
+        "tenant_language": 0.516
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-007",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.56,
+        "doc_type": 0.554,
+        "doc_type_language": 0.56,
+        "tenant": 0.559,
+        "tenant_language": 0.551
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-008",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.529,
+        "doc_type": 0.523,
+        "doc_type_language": 0.521,
+        "tenant": 0.531,
+        "tenant_language": 0.529
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-009",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.53,
+        "doc_type": 0.523,
+        "doc_type_language": 0.53,
+        "tenant": 0.52,
+        "tenant_language": 0.51
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-010",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.524,
+        "doc_type": 0.522,
+        "doc_type_language": 0.519,
+        "tenant": 0.527,
+        "tenant_language": 0.524
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-011",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.481,
+        "doc_type": 0.477,
+        "doc_type_language": 0.476,
+        "tenant": 0.482,
+        "tenant_language": 0.481
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-012",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.482,
+        "doc_type": 0.47,
+        "doc_type_language": 0.473,
+        "tenant": 0.477,
+        "tenant_language": 0.482
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-013",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.548,
+        "doc_type": 0.55,
+        "doc_type_language": 0.544,
+        "tenant": 0.555,
+        "tenant_language": 0.548
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-014",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.528,
+        "doc_type": 0.528,
+        "doc_type_language": 0.528,
+        "tenant": 0.523,
+        "tenant_language": 0.524
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-multi-step-calc-015",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.554,
+        "doc_type": 0.554,
+        "doc_type_language": 0.554,
+        "tenant": 0.548,
+        "tenant_language": 0.541
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-001",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.618,
+        "doc_type": 0.594,
+        "doc_type_language": 0.618,
+        "tenant": 0.498,
+        "tenant_language": 0.489
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-002",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.702,
+        "doc_type": 0.657,
+        "doc_type_language": 0.702,
+        "tenant": 0.454,
+        "tenant_language": 0.464
+      },
+      "split": "dev"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "zh-no-answer-003",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.356,
+        "doc_type": 0.355,
+        "doc_type_language": 0.355,
+        "tenant": 0.357,
+        "tenant_language": 0.356
+      },
+      "split": "test"
+    },
+    {
+      "class": "out_of_domain",
+      "id": "zh-no-answer-004",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.398,
+        "doc_type": 0.4,
+        "doc_type_language": 0.398,
+        "tenant": 0.381,
+        "tenant_language": 0.388
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-005",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.669,
+        "doc_type": 0.638,
+        "doc_type_language": 0.669,
+        "tenant": 0.472,
+        "tenant_language": 0.484
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-006",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.554,
+        "doc_type": 0.544,
+        "doc_type_language": 0.554,
+        "tenant": 0.445,
+        "tenant_language": 0.443
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-007",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.671,
+        "doc_type": 0.671,
+        "doc_type_language": 0.671,
+        "tenant": 0.534,
+        "tenant_language": 0.544
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-008",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.536,
+        "doc_type": 0.557,
+        "doc_type_language": 0.536,
+        "tenant": 0.477,
+        "tenant_language": 0.475
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-009",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.669,
+        "doc_type": 0.66,
+        "doc_type_language": 0.669,
+        "tenant": 0.516,
+        "tenant_language": 0.532
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-010",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.556,
+        "doc_type": 0.548,
+        "doc_type_language": 0.556,
+        "tenant": 0.457,
+        "tenant_language": 0.475
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-011",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.489,
+        "doc_type": 0.466,
+        "doc_type_language": 0.484,
+        "tenant": 0.47,
+        "tenant_language": 0.489
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-012",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.509,
+        "doc_type": 0.523,
+        "doc_type_language": 0.509,
+        "tenant": 0.457,
+        "tenant_language": 0.485
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-013",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.469,
+        "doc_type": 0.455,
+        "doc_type_language": 0.462,
+        "tenant": 0.46,
+        "tenant_language": 0.469
+      },
+      "split": "test"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-015",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.606,
+        "doc_type": 0.632,
+        "doc_type_language": 0.606,
+        "tenant": 0.499,
+        "tenant_language": 0.497
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-016",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.537,
+        "doc_type": 0.538,
+        "doc_type_language": 0.537,
+        "tenant": 0.456,
+        "tenant_language": 0.471
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no-answer-017",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.565,
+        "doc_type": 0.584,
+        "doc_type_language": 0.565,
+        "tenant": 0.473,
+        "tenant_language": 0.473
+      },
+      "split": "dev"
+    },
+    {
+      "class": "near_miss",
+      "id": "zh-no_answer-term-001",
+      "pair": "zh",
+      "scores": {
+        "d34_all": 0.403,
+        "doc_type": 0.397,
+        "doc_type_language": 0.399,
+        "tenant": 0.398,
+        "tenant_language": 0.403
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-partial-answer-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.501,
+        "doc_type": 0.522,
+        "doc_type_language": 0.501,
+        "tenant": 0.473,
+        "tenant_language": 0.47
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-partial-answer-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.507,
+        "doc_type": 0.482,
+        "doc_type_language": 0.499,
+        "tenant": 0.487,
+        "tenant_language": 0.507
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-partial-answer-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.489,
+        "doc_type": 0.489,
+        "doc_type_language": 0.489,
+        "tenant": 0.487,
+        "tenant_language": 0.487
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-partial-answer-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.535,
+        "doc_type": 0.549,
+        "doc_type_language": 0.535,
+        "tenant": 0.521,
+        "tenant_language": 0.517
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-scanned-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.708,
+        "doc_type": 0.708,
+        "doc_type_language": 0.708,
+        "tenant": 0.515,
+        "tenant_language": 0.496
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-scanned-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.647,
+        "doc_type": 0.647,
+        "doc_type_language": 0.647,
+        "tenant": 0.482,
+        "tenant_language": 0.463
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-selective-filter-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.677,
+        "doc_type": 0.677,
+        "doc_type_language": 0.677,
+        "tenant": 0.484,
+        "tenant_language": 0.469
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-selective-filter-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.713,
+        "doc_type": 0.713,
+        "doc_type_language": 0.713,
+        "tenant": 0.513,
+        "tenant_language": 0.5
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-selective-filter-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.656,
+        "doc_type": 0.656,
+        "doc_type_language": 0.656,
+        "tenant": 0.472,
+        "tenant_language": 0.47
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-selective-filter-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.607,
+        "doc_type": 0.607,
+        "doc_type_language": 0.607,
+        "tenant": 0.522,
+        "tenant_language": 0.523
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-stale-version-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.525,
+        "doc_type": 0.512,
+        "doc_type_language": 0.52,
+        "tenant": 0.513,
+        "tenant_language": 0.525
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-stale-version-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.443,
+        "doc_type": 0.424,
+        "doc_type_language": 0.437,
+        "tenant": 0.428,
+        "tenant_language": 0.443
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-stale-version-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.481,
+        "doc_type": 0.465,
+        "doc_type_language": 0.477,
+        "tenant": 0.466,
+        "tenant_language": 0.481
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-stale-version-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.513,
+        "doc_type": 0.491,
+        "doc_type_language": 0.502,
+        "tenant": 0.489,
+        "tenant_language": 0.513
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-table-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.656,
+        "doc_type": 0.643,
+        "doc_type_language": 0.656,
+        "tenant": 0.503,
+        "tenant_language": 0.518
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-table-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.551,
+        "doc_type": 0.508,
+        "doc_type_language": 0.551,
+        "tenant": 0.409,
+        "tenant_language": 0.437
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-table-003",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.445,
+        "doc_type": 0.45,
+        "doc_type_language": 0.445,
+        "tenant": 0.377,
+        "tenant_language": 0.394
+      },
+      "split": "test"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-table-004",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.516,
+        "doc_type": 0.442,
+        "doc_type_language": 0.516,
+        "tenant": 0.438,
+        "tenant_language": 0.51
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-typo-001",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.497,
+        "doc_type": 0.497,
+        "doc_type_language": 0.497,
+        "tenant": 0.439,
+        "tenant_language": 0.438
+      },
+      "split": "dev"
+    },
+    {
+      "class": "answerable",
+      "id": "zh-typo-002",
+      "pair": "zh->zh",
+      "scores": {
+        "d34_all": 0.416,
+        "doc_type": 0.408,
+        "doc_type_language": 0.411,
+        "tenant": 0.413,
+        "tenant_language": 0.416
+      },
+      "split": "test"
+    }
+  ],
+  "measurement": "q62-scope-separation",
+  "scoring": "max cosine over the original question and its fixture translations (no HyDE) against the grouping centroids",
+  "threshold_rule": "5th percentile (nearest rank, lower) of dev-split answerable, non-cross-lingual scores, per grouping",
+  "verdict": {
+    "answerable_below": {
+      "doc_type": 11,
+      "doc_type_language": 15
+    },
+    "compared": [
+      "doc_type_language",
+      "doc_type"
+    ],
+    "d34_separates_at_least_as_well": false,
+    "note": "Measurement on synthetic fixtures with a real embedding profile; it calibrates nothing and never changes the D-34 grouping.",
+    "out_of_domain_below": {
+      "doc_type": 6,
+      "doc_type_language": 6
+    }
+  },
+  "version": 1
+}

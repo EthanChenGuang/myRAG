@@ -6,6 +6,7 @@ import { computeCacheKeyHash } from '@/lib/rag/cache/keys';
 import type { CacheQuery, SemanticCache } from '@/lib/rag/cache/types';
 import type { RunRetrievalInput } from '@/lib/rag/types';
 import { chatRequest, installChatPipeline, retrievalWith } from '../helpers/chat-route-fakes';
+import { NO_ANSWER_SENTINEL } from '@/lib/rag/generation/sentinel';
 import { hit } from './fusion/helpers';
 
 const h = await vi.hoisted(async () => {
@@ -15,6 +16,9 @@ const h = await vi.hoisted(async () => {
     scope: { current: null as unknown },
     runRetrieval: vi.fn(),
     embedAnswer: { text: 'A neutral placeholder answer.' },
+    /** A real AI SDK stream for the embed answer, so the answer transforms (sentinel, guard) run. */
+    realEmbed: { on: false, deltas: [] as string[] },
+    logRows: [] as Array<Record<string, unknown>>,
   };
 });
 
@@ -30,13 +34,42 @@ function modelStream() {
   });
 }
 
-vi.mock('ai', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('ai')>()),
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  const { MockLanguageModelV3, convertArrayToReadableStream } = await import('ai/test');
+  return {
+  ...actual,
   streamText: async (params: Record<string, unknown>) => {
     const result = await h.capture.streamText(params);
     const embed = params.maxOutputTokens === 2000 && params.tools === undefined;
+    if (embed && h.realEmbed.on) {
+      const model = new MockLanguageModelV3({
+        modelId: 'fake-embed',
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'text-start' as const, id: 't1' },
+            ...h.realEmbed.deltas.map((delta) => ({ type: 'text-delta' as const, id: 't1', delta })),
+            { type: 'text-end' as const, id: 't1' },
+            {
+              type: 'finish' as const,
+              finishReason: { unified: 'stop' as const, raw: 'stop' },
+              usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } },
+            },
+          ]),
+        }),
+      });
+      return actual.streamText({ ...(params as Parameters<typeof actual.streamText>[0]), model });
+    }
     if (embed) (params.onFinish as ((event: { text: string }) => void) | undefined)?.({ text: h.embedAnswer.text });
     return embed ? { ...result, toUIMessageStream: () => modelStream() } : result;
+  },
+  };
+});
+vi.mock('@/lib/rag/feedback-loop/retrieval-log', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/rag/feedback-loop/retrieval-log')>()),
+  writeRetrievalLog: async (row: Record<string, unknown>) => {
+    h.logRows.push(row);
   },
 }));
 vi.mock('@/lib/document-processor', () => ({ getQueryEmbedding: vi.fn(async () => []) }));
@@ -227,6 +260,9 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
     h.retrieval.mockReset();
     h.retrieval.mockImplementation(async () => retrievalWith([]));
     h.runRetrieval.mockClear();
+    h.realEmbed.on = false;
+    h.realEmbed.deltas = [];
+    h.logRows.length = 0;
     h.supabase.store.reset();
     h.supabase.store.documents = [{ id: DOC_X, filename: 'placeholder.md', created_at: '2026-01-01T00:00:00.000Z', content: 'x', metadata: {} }];
     h.supabase.store.document_chunks = [{ id: `${DOC_X.slice(0, 30)}c0`, document_id: DOC_X, metadata: null }];
@@ -317,6 +353,54 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
     h.capture.reset();
     const control = await (await askEmbed(routes)).text();
     expect(startMetadata(control)?.cache).toBe('hit');
+  });
+
+  it('relevance rule on: a model-relevance refusal is stored as a refusal and logged as refused_no_context', async () => {
+    const names = ['RAG_CONTEXT_RELEVANCE_RULE', 'RAG_RETRIEVAL_LOG'] as const;
+    const before = names.map((name) => env[name]);
+    env.RAG_CONTEXT_RELEVANCE_RULE = 'true';
+    env.RAG_RETRIEVAL_LOG = 'ids';
+    try {
+      h.realEmbed.on = true;
+      h.realEmbed.deltas = [NO_ANSWER_SENTINEL.slice(0, 6), NO_ANSWER_SENTINEL.slice(6)];
+      const routes = await loadRoutes({ ...CACHE_ON, RAG_SEMANTIC_CACHE_EMBED_STORE: 'true' });
+      const body = await (await askEmbed(routes)).text();
+      expect(body).not.toContain(NO_ANSWER_SENTINEL);
+      await stored(1);
+      await vi.waitFor(() => expect(h.logRows).toHaveLength(1), { timeout: 2000, interval: 10 });
+      expect(memory.stores[0].q.entryProfile).toBe('embed');
+      expect(memory.stores[0].answer).toMatchObject({ is_refusal: true, citations: [], sources: [], source_versions: [] });
+      expect(memory.stores[0].answer.groundedness).toMatchObject({ status: 'not_checked', reason: 'refusal' });
+      expect(h.logRows[0]).toMatchObject({ channel: 'embed', outcome: 'refused_no_context' });
+    } finally {
+      names.forEach((name, index) => {
+        if (before[index] === undefined) delete env[name];
+        else env[name] = before[index];
+      });
+    }
+  });
+
+  it('relevance rule on, plain answer: stored as an answer and logged as answered (positive control)', async () => {
+    const names = ['RAG_CONTEXT_RELEVANCE_RULE', 'RAG_RETRIEVAL_LOG'] as const;
+    const before = names.map((name) => env[name]);
+    env.RAG_CONTEXT_RELEVANCE_RULE = 'true';
+    env.RAG_RETRIEVAL_LOG = 'ids';
+    try {
+      h.realEmbed.on = true;
+      h.realEmbed.deltas = ['A neutral placeholder answer.'];
+      const routes = await loadRoutes({ ...CACHE_ON, RAG_SEMANTIC_CACHE_EMBED_STORE: 'true' });
+      await (await askEmbed(routes)).text();
+      await stored(1);
+      await vi.waitFor(() => expect(h.logRows).toHaveLength(1), { timeout: 2000, interval: 10 });
+      expect(memory.stores[0].answer).toMatchObject({ is_refusal: false, answer_text: 'A neutral placeholder answer.' });
+      expect(memory.stores[0].answer.sources?.length).toBeGreaterThan(0);
+      expect(h.logRows[0]).toMatchObject({ channel: 'embed', outcome: 'answered' });
+    } finally {
+      names.forEach((name, index) => {
+        if (before[index] === undefined) delete env[name];
+        else env[name] = before[index];
+      });
+    }
   });
 
   it('cache off: no cacheContext, no check, the model stream as today', async () => {

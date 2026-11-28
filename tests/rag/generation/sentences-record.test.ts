@@ -133,8 +133,8 @@ describe('buildSentenceRecords (D-19, D-23)', () => {
     const hash = createHash('sha256').update(text, 'utf8').digest('hex');
     expect(answerTextHash(text)).toBe(hash);
     expect(out).toEqual([
-      { index: 0, part: 3, start: 0, end: 15, kind: 'sentence', text_hash: hash, factual: true, cited: true, support: 'not_checked', scorer: null, reason: null },
-      { index: 1, part: 3, start: 15, end: text.length, kind: 'sentence', text_hash: hash, factual: true, cited: false, support: 'not_checked', scorer: null, reason: null },
+      { index: 0, part: 3, start: 0, end: 15, kind: 'sentence', text_hash: hash, factual: true, cited: true, support: 'not_checked', scorer: null, reason: 'claim_check_off' },
+      { index: 1, part: 3, start: 15, end: text.length, kind: 'sentence', text_hash: hash, factual: true, cited: false, support: 'not_checked', scorer: null, reason: 'claim_check_off' },
     ]);
   });
 

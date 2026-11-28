@@ -112,10 +112,12 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
 export function planToVariants(plan: QueryPlan): QueryVariant[] {
   const suffix = plan.date_range ? denseDateSuffix(plan.date_range.from_date, plan.date_range.to_date) : null;
   return (plan.variants ?? []).map((variant) => {
-    const filters =
+    const spec =
       variant.kind === 'sub_question' && variant.filter_applied === true && typeof variant.sub_question_index === 'number'
-        ? specFilters(plan.sub_question_specs?.[variant.sub_question_index]?.filter ?? null)
+        ? (plan.sub_question_specs?.[variant.sub_question_index]?.filter ?? null)
         : null;
+    const filters = specFilters(spec);
+    const versions = spec?.versions ?? null;
     return {
       text: variant.text,
       language: variant.language,
@@ -128,6 +130,8 @@ export function planToVariants(plan: QueryPlan): QueryVariant[] {
         ? { denseText: `${variant.text} ${suffix}` }
         : {}),
       ...(filters ? { filters, filterApplied: true } : {}),
+      // P-35: the spec's version scope, already bounded by the request's own; the search stage applies it to this variant only.
+      ...(versions !== null ? { versionScope: versions === 'current' || versions === 'all' ? versions : { ...versions } } : {}),
     };
   });
 }

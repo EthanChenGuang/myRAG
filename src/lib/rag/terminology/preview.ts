@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { TerminologyEntry, TerminologyPreviewResponse, TerminologyValidationIssue } from '@/lib/rag-eval/contracts.generated';
 import { normalizeLexical, queryLexicalTokens } from '../lexical/tokenize';
 import { scopeKey, type TenantScope } from '../tenant/scope';
-import { SHARED, UNAVAILABLE, callTerminologyRpc, errorsOf, layerOf, terminologyEnabledLanguages, type TerminologyAdminFailed } from './admin';
+import { SHARED, UNAVAILABLE, errorsOf, layerOf, listEntriesPage, terminologyEnabledLanguages, type TerminologyAdminFailed } from './admin';
 import { expandMatches, terminologyParams } from './expand';
 import { loadEffectiveDictionary } from './load';
 import { buildMatcher, type TermEntry } from './matcher';
@@ -63,11 +63,7 @@ async function authorize(input: TerminologyPreviewInput): Promise<TerminologyAdm
   const keys = new Set([SHARED, input.layerKey]);
   if (input.scope.kind !== 'single') keys.add(scopeKey(input.scope));
   for (const layerKey of keys) {
-    const check = await callTerminologyRpc(
-      'rag_term_list_entries',
-      { p_actor: input.actorUserId, p_layer_key: layerKey, p_limit: 1, p_offset: 0, p_search: null },
-      input.signal,
-    );
+    const check = await listEntriesPage(input.actorUserId, layerKey, { limit: 1, offset: 0, search: null }, {}, input.signal);
     if (!check.ok) return check;
   }
   return null;

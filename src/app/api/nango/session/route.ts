@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getNango, isNangoEnabled } from '@/lib/nango/client';
 import { type SupportedProvider, PROVIDER_CONFIG } from '@/lib/nango/types';
+import { isSharePointBlocked, isSharePointProvider, sharePointIntegrationKey } from '@/lib/nango/sharepoint/config';
 import { requireSessionUser } from '../_lib/session-user';
 
 export const runtime = 'nodejs';
@@ -30,8 +31,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Provider is required' }, { status: 400 });
     }
 
+    if (isSharePointBlocked(provider)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     const nango = getNango();
-    const integrationId = PROVIDER_CONFIG[provider]?.integrationId || provider;
+    const integrationId = isSharePointProvider(provider)
+      ? sharePointIntegrationKey(provider)
+      : PROVIDER_CONFIG[provider]?.integrationId || provider;
 
     // Create a connect session for the frontend
     // This returns a token the frontend SDK uses to initiate OAuth

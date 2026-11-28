@@ -72,7 +72,12 @@ describe('weaviate collection spec (D-06, D-13, A-4)', () => {
       expect(props.get(name)).toMatchObject({ dataType: 'text', tokenization: 'field', indexSearchable: false });
     }
     expect(props.get('doc_date')).toMatchObject({ dataType: 'date', indexRangeFilters: true });
-    expect(JSON.parse(config.description)).toEqual({ profile_id: PROFILE, dims: 3, lexical_mode: 'bm25_whitespace' });
+    expect(JSON.parse(config.description)).toEqual({
+      profile_id: PROFILE,
+      dims: 3,
+      lexical_mode: 'bm25_whitespace',
+      lexical_bm25: { k1: 1.2, b: 0.75 },
+    });
   });
 
   it('a second ensureCollection is a no-op and other dims are refused', async () => {
@@ -84,8 +89,13 @@ describe('weaviate collection spec (D-06, D-13, A-4)', () => {
 
   it('describeCollection reads exists, dims and lexical mode from the stored description', async () => {
     const { fake, store } = await seeded();
-    expect(await describeWeaviateCollection(fake, PROFILE)).toEqual({ exists: true, dims: 3, lexicalMode: 'bm25_whitespace' });
-    expect(await describeWeaviateCollection(fake, 'other-profile')).toEqual({ exists: false, dims: null, lexicalMode: null });
+    expect(await describeWeaviateCollection(fake, PROFILE)).toEqual({
+      exists: true,
+      dims: 3,
+      lexicalMode: 'bm25_whitespace',
+      lexicalParams: { k1: 1.2, b: 0.75 },
+    });
+    expect(await describeWeaviateCollection(fake, 'other-profile')).toEqual({ exists: false, dims: null, lexicalMode: null, lexicalParams: null });
     expect(await store.describeCollection(PROFILE)).toEqual({ profileId: PROFILE, dims: 3, tenants: 0 });
     expect(await store.describeCollection('other-profile')).toBeNull();
   });

@@ -346,7 +346,8 @@ describe('Phase 5.2 answer metadata persistence (D-11, D-23)', () => {
     cited: true,
     factual: true,
     support: 'not_checked',
-    reason: null,
+    // quick-52 G3: a not_checked sentence carries its reason; a stored null is filled on read (sentence-reason.ts)
+    reason: 'claim_check_off',
     scorer: null,
     text_hash: 'c'.repeat(64),
   };

@@ -1,7 +1,18 @@
 import { createQdrantReader } from '@/lib/rag/backend/qdrant/adapter';
 import type { QdrantApi } from '@/lib/rag/backend/qdrant/client';
 import { qdrantErrorStatus } from '@/lib/rag/backend/qdrant/errors';
-import { QDRANT_DENSE_VECTOR, describeQdrantCollection, ensureQdrantCollection } from '@/lib/rag/backend/qdrant/collection';
+import {
+  QDRANT_DENSE_VECTOR,
+  describeQdrantCollection,
+  ensureQdrantCollection,
+  refreshQdrantLexicalParams,
+} from '@/lib/rag/backend/qdrant/collection';
+import {
+  configuredLexicalParams,
+  type LexicalParams,
+  type LexicalParamsSource,
+  type LexicalParamsStore,
+} from '@/lib/rag/backend/lexical-params';
 import {
   scopedCount,
   scopedDeleteByFilter,
@@ -50,6 +61,9 @@ export interface QdrantStoreDeps {
   writeClient: QdrantApi;
   /** The retrieval path's client (read key); defaults to the write client for the worker and the canary. */
   readClient?: QdrantApi;
+  /** LEX-05: the BM25 pair sent per query and recorded on the collection; default externalLexicalParams of the loaded configuration. */
+  lexicalParams?: LexicalParamsSource;
+  log?: (line: string) => void;
 }
 
 function requireKey(tenantKey: string): string {
@@ -87,9 +101,15 @@ export function qdrantPayload(payload: VectorPointPayload): Record<(typeof QDRAN
 }
 
 /** VectorStore over one shared collection per embedding profile; every data call is built by a scoped builder (D-08). */
-export function createQdrantStore(deps: QdrantStoreDeps): VectorStore {
+export function createQdrantStore(deps: QdrantStoreDeps): VectorStore & LexicalParamsStore {
   const write = deps.writeClient;
-  const reader = createQdrantReader(deps.readClient ?? deps.writeClient);
+  const lexicalParams = deps.lexicalParams ?? configuredLexicalParams;
+  const reader = createQdrantReader(deps.readClient ?? deps.writeClient, { lexicalParams });
+
+  async function configured(): Promise<LexicalParams> {
+    const params = await lexicalParams();
+    return { k1: params.k1, b: params.b };
+  }
   const ensured = new Map<string, number>();
 
   async function scrollIds(profileId: string, tenantKey: string, request: QdrantScrollRequest): Promise<string[]> {
@@ -164,8 +184,19 @@ export function createQdrantStore(deps: QdrantStoreDeps): VectorStore {
 
   return {
     target: 'qdrant',
+    lexicalBinding: 'query',
     async ensureCollection(spec: CollectionSpec): Promise<void> {
-      await ensureQdrantCollection(write, spec, ensured);
+      await ensureQdrantCollection(write, spec, ensured, { params: await configured(), log: deps.log });
+    },
+    async recordedLexicalParams(profileId: string): Promise<LexicalParams | null> {
+      return (await describeQdrantCollection(write, profileId))?.lexicalParams ?? null;
+    },
+    configuredLexicalParams: configured,
+    /** Query-bound: nothing is dropped; the recorded pair is refreshed so it describes the pair queries are sent with. */
+    async rebuildLexical(profileId: string): Promise<void> {
+      const info = await describeQdrantCollection(write, profileId);
+      if (!info) return;
+      await refreshQdrantLexicalParams(write, profileId, info.lexicalParams, await configured(), deps.log);
     },
     async describeCollection(profileId: string): Promise<CollectionInfo | null> {
       return describeQdrantCollection(write, profileId);

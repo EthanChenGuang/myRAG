@@ -123,6 +123,20 @@ test('source-recheck-rpc: rag_source_recheck called outside src/lib/rag is flagg
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_source_recheck_report', {});\n// db.rpc('rag_source_recheck')\n" }), []);
 });
 
+test('purge-rpc: rag_purge_* called outside src/lib/rag/ingest/purge.ts is flagged; inside it is allowed (D-11)', () => {
+  const code = "const r = await db.rpc('rag_purge_lineage', { p_tenant_key: key, p_lineage_id: id });\n";
+  const multiLine = 'const r = await admin.rpc(\n  `rag_purge_verify`,\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/api/rag/admin/purges/route.ts': code, 'src/lib/rag/ingest/soft-delete.ts': multiLine }).sort(), [
+    'src/app/api/rag/admin/purges/route.ts:purge-rpc',
+    'src/lib/rag/ingest/soft-delete.ts:purge-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/ingest/purge.ts': code + multiLine }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_purge_old_rows_report', {});\n// db.rpc('rag_purge_lineage')\n" }).filter((v) => v.endsWith(':purge-rpc')), [
+    'src/lib/a.ts:purge-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/feedback-loop/purge.ts': "await client.rpc('rag_purge_retrieval_log', args);\n" }), []);
+});
+
 test('retired-module: alias and relative imports fail', () => {
   const files = {
     'src/app/a.ts': "import { x } from '@/lib/enhanced-rag-retrieval';\n",
@@ -967,4 +981,32 @@ test('run-retrieval-access: a file outside src/lib/rag that calls runRetrieval m
 test('run-retrieval-access and content-table-read pass on the repository routes of plan 04.3-09', () => {
   const violations = checkBoundary(ROOT).filter((v) => v.rule === 'run-retrieval-access' || v.rule === 'content-table-read');
   assert.deepEqual(violations, []);
+});
+
+test('eval-harness-import: src/ must not import eval/harness (static, type, side-effect, dynamic and require forms)', () => {
+  const files = {
+    'src/lib/rag/generation/a.ts': "import { createFakeQueryLlm } from '../../../../eval/harness/fake-query-llm.mts';\n",
+    'src/app/api/b/route.ts': "import type { RunConfig } from '../../../../eval/harness/run-eval.mts';\n",
+    'src/lib/c.ts': "import '../../eval/harness/setup';\n",
+    'src/lib/d.ts': "const m = await import('../../eval/harness/run-judge.mts');\n",
+    'src/lib/e.cjs': "const m = require('../../eval/harness/index.cjs');\n",
+    'src/lib/f.ts': "import { x } from 'eval/harness/fake-query-llm';\n",
+  };
+  assert.deepEqual(
+    rulesFor(files).filter((v) => v.endsWith(':eval-harness-import')).sort(),
+    Object.keys(files).map((rel) => `${rel}:eval-harness-import`).sort(),
+  );
+});
+
+test('eval-harness-import: tests, scripts and the harness itself may import it; a src mention in a comment or a look-alike path passes', () => {
+  assert.deepEqual(
+    rulesFor({
+      'tests/rag/a.test.ts': "import { createFakeQueryLlm } from '../../eval/harness/fake-query-llm.mts';\n",
+      'scripts/rag/b.mjs': "import { run } from '../../eval/harness/run-eval.mts';\n",
+      'eval/harness/c.mts': "import { y } from './fake-query-llm.mts';\n",
+      'src/lib/rag/generation/d.ts': "// Only the eval calibration harness (eval/harness/run-judge.mts) calls this\nexport const d = 1;\n",
+      'src/lib/e.ts': "import { z } from './eval/harness-like';\n",
+    }).filter((v) => v.endsWith(':eval-harness-import')),
+    [],
+  );
 });

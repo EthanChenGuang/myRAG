@@ -19,6 +19,7 @@ type Row = Record<string, unknown>;
 type Comparison = Record<string, unknown> & {
   doc_type: string;
   fixture_embedder: boolean;
+  population?: string;
   gate_passed: boolean;
   recommended_profile: string | null;
   provenance_counts: Record<string, number>;
@@ -145,24 +146,25 @@ describe('fixture binding comparison as activation evidence', () => {
     assert.ok((comparison.notes as string[]).some((note) => note.startsWith('Fixture evidence')));
   });
 
-  test('recording the fixture comparison succeeds, and activation is refused', async () => {
+  // quick-311 (I-2): a fixture-population comparison is no longer stored at all.
+  test('recording the fixture comparison is refused for its population, and activation stays refused', async () => {
+    assert.equal(comparison.population, 'fixture');
     const candidate = comparison.candidates[0]!;
     const { bindingId, runId } = await stagedBinding(candidate.profile_id, candidate.model);
     const evidence = write('fixture', { ...comparison, reembed_run_ids: { ...comparison.reembed_run_ids, [candidate.profile_id]: runId } });
 
     const recorded = await run('record-binding-evidence', evidence, '--binding', bindingId);
-    assert.equal(recorded.code, 0, recorded.text);
-    const stored = (await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [bindingId]))[0]!.eval_evidence as Row;
-    assert.equal(stored.gate_passed, false, 'a fixture-embedder verdict never passes');
-    assert.equal((stored.doc_type_slice as Row).real_n, 0, 'synthetic items never count as real');
+    assert.equal(recorded.code, 2, recorded.text);
+    assert.match(recorded.text, /population/);
+    assert.equal((await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [bindingId]))[0]!.eval_evidence, null);
 
     const refused = await run('activate-binding', bindingId);
     assert.equal(refused.code, 1, refused.text);
-    assert.match(refused.text, /refused: binding_refused: eval_failed/);
+    assert.match(refused.text, /refused: binding_refused: eval_missing/);
     assert.equal((await rows('SELECT status FROM embedding_profile_bindings WHERE id = $1', [bindingId]))[0]!.status, 'backfilling');
   });
 
-  test('the same fixture comparison with its fixture flag and verdict forged is refused for its real items', async () => {
+  test('the same fixture comparison forged to a real population with 3 real items is refused by the gate for its real items', async () => {
     const candidate = comparison.candidates[0]!;
     const { bindingId, runId } = await stagedBinding(candidate.profile_id, candidate.model);
     const forgedCandidates = comparison.candidates.map((entry) =>
@@ -182,6 +184,8 @@ describe('fixture binding comparison as activation evidence', () => {
     const forged = {
       ...comparison,
       fixture_embedder: false,
+      population: 'real',
+      provenance_counts: { human: 3 },
       gate_passed: true,
       recommended_profile: candidate.profile_id,
       candidates: forgedCandidates,
@@ -193,7 +197,7 @@ describe('fixture binding comparison as activation evidence', () => {
     assert.equal(recorded.code, 0, recorded.text);
     const stored = (await rows('SELECT eval_evidence FROM embedding_profile_bindings WHERE id = $1', [bindingId]))[0]!.eval_evidence as Row;
     assert.equal(stored.gate_passed, true);
-    assert.equal((stored.doc_type_slice as Row).real_n, 0);
+    assert.equal((stored.doc_type_slice as Row).real_n, 3);
 
     const refused = await run('activate-binding', bindingId);
     assert.equal(refused.code, 1, refused.text);

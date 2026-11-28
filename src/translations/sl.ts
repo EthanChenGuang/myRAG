@@ -395,6 +395,7 @@ export const sl = {
   executingTool: "Izvajanje orodja, prosimo počakajte...",
   toolError: "Med izvajanjem orodja je prišlo do napake.",
   voiceUnavailable: "Glas začasno ni na voljo. Poskusite znova pozneje.",
+  emptyReply: "Tokrat odgovora ni bilo mogoče pripraviti. Poskusite znova ali preoblikujte vprašanje.",
 
   // Chat message action tooltips
   copyTooltip: "Kopiraj",

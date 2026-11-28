@@ -9,6 +9,8 @@
 -- grants are unchanged and re-asserted here. 0967 re-creates the rag_review_items check later in file order and lists the two
 -- values too, so a database built in order keeps them.
 -- One common file (the values do not differ by deployment mode). Not folded into the setup files (D-02). Idempotent.
+-- Re-run order: when 0984 is present the four-argument rag_enqueue_review_item is dropped again at the end; re-running this file after
+-- 0984 still restores the older mining body, so re-run 0984, 0986, 0990 and 0410 after it.
 
 BEGIN;
 
@@ -339,6 +341,16 @@ $fn$;
 
 REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
+
+-- Re-run safety (quick review-items-hardening): once 0984 has replaced this function with its five-argument version, the
+-- four-argument one created above is dropped again, so a later four-argument call does not fail with "function is not unique".
+DO $enqueue_overload$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_enqueue_review_item(text, text, jsonb, jsonb, jsonb)') IS NOT NULL THEN
+    DROP FUNCTION IF EXISTS public.rag_enqueue_review_item(text, text, jsonb, jsonb);
+  END IF;
+END
+$enqueue_overload$;
 
 NOTIFY pgrst, 'reload schema';
 

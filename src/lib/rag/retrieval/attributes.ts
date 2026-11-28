@@ -403,6 +403,35 @@ async function automaticMatches(scope: TenantScope, query: string, lexicon: Attr
  * id cap of config/rag/attribute-filter.json is never a hard list: it is too broad and its first ids go to softIds. Nothing named and nothing
  * explicit costs no document call. Logs and errors carry codes and counts only.
  */
+/**
+ * 03.3 G4: the route pre-check of an explicit attributes filter. Throws AttributeFilterError when the tenant's resolver refuses a key, so
+ * the route answers a structured 400; no filter makes no call; any other failure is left to the attribute stage, which fails closed.
+ */
+export async function checkExplicitAttributeFilter(
+  scope: TenantScope,
+  explicit: Record<string, readonly string[]> | null | undefined,
+  options: AttributeOptions = {},
+): Promise<void> {
+  assertTenantScope(scope);
+  const explicitSets = normalizeExplicit(explicit);
+  if (explicitSets.size === 0) return;
+  let lexicon: AttributeLexicon | null = null;
+  try {
+    lexicon = await attributeLexiconFor(scope, options);
+  } catch (error) {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (!(error instanceof RetrievalBackendError)) throw error;
+  }
+  try {
+    await documentsFor(scope, canonical(explicitSets), 0, options, () => unknownAttribute(explicitSets, lexicon));
+  } catch (error) {
+    if (error instanceof AttributeFilterError) throw error;
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (!(error instanceof RetrievalBackendError)) throw error;
+    console.warn('[Document Search] attribute filter pre-check unavailable:', { code: error.code });
+  }
+}
+
 export async function resolveAttributeFilter(
   scope: TenantScope,
   query: string,
