@@ -657,28 +657,33 @@ class SecurityEventsPanel {
     return this.el('time', { className: 'tabular-nums', text: this.formatTime(value), attrs: { datetime: valid ? date.toISOString() : null } });
   }
 
-  /** Short date and time (no year in the current year); the full form stays in the title. */
+  /** Short date and time as two lines (no year in the current year); the full form stays in the title. */
   formatCompactTime(value) {
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return securityEventsText(value);
-    const options = { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' };
-    if (date.getFullYear() !== new Date().getFullYear()) options.year = '2-digit';
+    if (Number.isNaN(date.getTime())) return [securityEventsText(value)];
+    const day = { month: 'numeric', day: 'numeric' };
+    if (date.getFullYear() !== new Date().getFullYear()) day.year = '2-digit';
     try {
-      return new Intl.DateTimeFormat(this.locale, options).format(date);
+      return [
+        new Intl.DateTimeFormat(this.locale, day).format(date),
+        new Intl.DateTimeFormat(this.locale, { hour: 'numeric', minute: '2-digit' }).format(date),
+      ];
     } catch {
-      return date.toISOString().slice(0, 16).replace('T', ' ');
+      const iso = date.toISOString();
+      return [iso.slice(0, 10), iso.slice(11, 16)];
     }
   }
 
-  /** UI-SPEC 10: the full time from 768px up, a compact one-line time below it. */
+  /** UI-SPEC 10: the full time from 768px up, a compact date line and time line below it. */
   responsiveTimeEl(value) {
     if (!value) return this.el('span', { text: '—' });
     const date = new Date(value);
     const valid = !Number.isNaN(date.getTime());
     const full = this.formatTime(value);
+    const lines = this.formatCompactTime(value).map((text) => this.el('span', { className: 'block whitespace-nowrap', text }));
     return this.el('time', { className: 'tabular-nums', attrs: { datetime: valid ? date.toISOString() : null, title: full } }, [
       this.el('span', { className: 'max-md:hidden', text: full, attrs: { 'data-time-full': '' } }),
-      this.el('span', { className: 'md:hidden', text: this.formatCompactTime(value), attrs: { 'data-time-compact': '' } }),
+      this.el('span', { className: 'md:hidden', attrs: { 'data-time-compact': '' } }, lines),
     ]);
   }
 
@@ -1220,7 +1225,7 @@ class SecurityEventsPanel {
       ? this.el('span', { className: 'font-mono text-xs break-words', text: row.rules.join(', '), attrs: { translate: 'no' } })
       : this.el('span', { text: '—' });
     return this.el('tr', { attrs: { 'data-security-event-row': row.id, 'data-security-row-key': row.id } }, [
-      this.el('td', { className: 'align-top whitespace-nowrap' }, [this.responsiveTimeEl(row.createdAt)]),
+      this.el('td', { className: 'align-top md:whitespace-nowrap' }, [this.responsiveTimeEl(row.createdAt)]),
       multi ? this.el('td', { className: 'align-top max-md:hidden' }, [this.workspaceEl(row)]) : null,
       this.el('td', { className: 'align-top min-w-0 md:min-w-[9rem]' }, [
         this.sourceBadge(row),
