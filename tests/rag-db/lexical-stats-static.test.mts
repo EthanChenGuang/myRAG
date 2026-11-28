@@ -13,6 +13,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MIGRATIONS = path.join(REPO_ROOT, 'supabase/migrations');
 const BLOCK = /^09(0\d|1\d)_.+\.sql$/;
 const EXPECTED_FIRST = ['0900', '0901', '0902', '0903', '0904'];
+/** Phase 4.4 files numbered outside the block: 0938 (p_df_mode), 0746 (lexical purge hook), 1014 (compaction guard, T-04.4-09). */
+const EXTRA_FILES = ['0938', '0746', '1014'];
 const BUILTINS = ['unnest', 'ts_rank', 'ts_rank_cd', 'cardinality', 'ln', 'quote_literal'];
 /**
  * The one function that takes p_tenant_key without the guard: 0902's shared compaction body. Its callers assert (rag_lexstats_compact) or
@@ -94,6 +96,11 @@ describe('Phase 4.4 migration block, static scan', () => {
   test('the block holds 0900 to 0904 and at least one function', () => {
     assert.deepEqual(files.slice(0, EXPECTED_FIRST.length).map((file) => file.name.slice(0, 4)), EXPECTED_FIRST);
     assert.ok(defs.length >= 14, `found ${defs.length} function definitions`);
+  });
+
+  test('the scan also covers the Phase 4.4 files outside the block: 0938, 0746 and 1014', () => {
+    const scanned = files.map((file) => file.name.slice(0, 4));
+    for (const number of EXTRA_FILES) assert.ok(scanned.includes(number), `${number} is not scanned`);
   });
 
   test("every CREATE OR REPLACE FUNCTION public.* sets search_path = ''", () => {
