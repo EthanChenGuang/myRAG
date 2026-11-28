@@ -383,3 +383,25 @@ describe('AGENTS.md reflects the Phase 4.3 document access groups', () => {
     expect(fs.existsSync(path.resolve(__dirname, '../../supabase/migrations/0920_access_groups_tables.sql'))).toBe(true);
   });
 });
+
+describe('AGENTS.md reflects the Phase 7 RAG pipeline guide', () => {
+  test.each([
+    'README_RAG_PIPELINE.md',
+    'RAG_RETRIEVAL_BACKEND',
+    '[Vector Sync]',
+    'npm run rag:vector-sync',
+    'npm run rag:reconcile',
+    'rag_eval.regression',
+    'rag_eval.failure_report',
+    'external vector stores always filter by tenant',
+  ])('mentions %s', (fragment) => {
+    expect(AGENTS).toContain(fragment);
+  });
+
+  test('links the pipeline guide from the RAG pipeline section and from section 17', () => {
+    const pipeline = AGENTS.slice(AGENTS.indexOf('### RAG pipeline'), AGENTS.indexOf('### Image RAG'));
+    const section17 = AGENTS.slice(AGENTS.indexOf('## 17. Supplementary Documentation'));
+    expect(pipeline).toContain('README_RAG_PIPELINE.md');
+    expect(section17).toContain('README_RAG_PIPELINE.md');
+  });
+});
