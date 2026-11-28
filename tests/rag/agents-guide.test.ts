@@ -463,3 +463,15 @@ describe('AGENTS.md reflects the Phase 7 revision-4 workflows', () => {
     expect(fs.existsSync(path.resolve(__dirname, '../../eval/harness/calibrate-language-confidence.mts'))).toBe(true);
   });
 });
+
+describe('AGENTS.md reflects the Phase 7 setup fold (07-31)', () => {
+  test('the fold sentence names Phase 7 (0701–0707) as the part that closes the setup files', () => {
+    expect(AGENTS).toContain('Phase 6.1 (0651–0654) and Phase 7 (0701–0707), which closes the file');
+    expect(AGENTS).not.toContain('Phase 6.1 (0651–0654), which closes the file');
+  });
+
+  test('the fold sentence keeps the unfolded Phase 7 migrations as migrations', () => {
+    expect(AGENTS).toContain('Phase 7 migrations 0708, 0709, 0720–0728 and 0740–0746 stay migrations and are not folded');
+    expect(AGENTS).not.toContain('the later 07xx–10xx blocks are not folded yet');
+  });
+});
