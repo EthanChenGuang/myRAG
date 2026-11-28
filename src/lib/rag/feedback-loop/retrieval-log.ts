@@ -9,6 +9,7 @@ import { queryFingerprint, toLanguageCode } from './query-codes';
 import { topkRedundancy } from '../v2/diversify';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
+import type { LangConfidenceMode } from '../config';
 import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
@@ -28,6 +29,10 @@ export interface BuildRetrievalLogRowInput {
   mode: Exclude<RetrievalLogLevel, 'off'>;
   /** Held in memory only: masked and stored in masked_query mode, otherwise read for its language code alone. */
   query: string | undefined;
+  /** RAG_LANG_CONFIDENCE for the stored query-language confidence; defaults to the RAG config (mapped). */
+  languageConfidence?: LangConfidenceMode;
+  /** The calibration file read under calibrated; defaults to eval/config/language-confidence-calibration.json. */
+  calibrationFile?: string;
 }
 
 export const MAX_LOGGED_CANDIDATES = 50;
