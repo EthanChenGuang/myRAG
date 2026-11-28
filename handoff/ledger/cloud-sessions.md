@@ -1058,3 +1058,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:16Z 06.3-18 DONE (exec/06.3-18 3b578d16: source-sync Config UI panel plus connector reconcile pill; design gate PASS) and archived; queued for train 42.
   - Dispatched 06.3-22: session_01X342shU9UPiKZRUv7airoP, base 06.3-18 + 06.3-21.
   - 05.2.1-24 is READY but HELD: its phase comparison needs the 7 gated runs to pass, and the budget-overflow runs wait on the owner's must_keep decision.
+- 01:20Z 04.4-16 DONE (exec/04.4-16 f8c57a9c, migration 0905; 0935 is an empty placeholder) and archived; queued for train 42.
+  - Dispatched 04.4-17: session_01X342siro2bxbQKWoMmoV4K, base 04.4-16 + 04.2-40 + min-gate-n. It takes a new number above 0936 and rebuilds on the 0936 body.
+  - Lesson: the READY detector reads plans from the t41 worktree, so plans that live only on exec branches (04.4-17..19) are invisible to it. Check their deps by hand.
