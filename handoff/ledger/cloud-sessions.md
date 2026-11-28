@@ -1069,3 +1069,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
     - decide whether the main and q62 prechunked tenants should also record documents.language.
 - 01:24Z 06.3-28 DONE (exec/06.3-28 dfdee820: an incomplete listing never removes orphans; D-31 resolved) and archived; goes into train 42. No new plans are READY.
 - 01:25Z PR #137 CI fix pushed (7a7f2cee): canary and access-groups-client-writes now insert as service_role. Session archived. Waiting for CI to re-run before merging.
+- 01:30Z 06.3-22 DONE (exec/06.3-22 fe7843aa: purge dialog, records panel, withdrawn count) and archived; queued for train 42. Dispatched 06.3-29: session_01X342sjJe2PGw6SEbAw4ex9 (base 06.3-22 + t40).
