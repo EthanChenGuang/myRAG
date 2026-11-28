@@ -34,8 +34,8 @@ const SNIPPET_LENGTH = 80;
 const WINDOW_LENGTH = 20_000;
 const WINDOW_OVERLAP = 512;
 
-const INVISIBLE_GLOBAL = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gu;
-const INVISIBLE_ANY = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/u;
+const INVISIBLE_GLOBAL = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/gu;
+const INVISIBLE_ANY = /[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/u;
 const CJK = /[㐀-鿿]/u;
 const CONTROL = /\p{Cc}/gu;
 
