@@ -303,3 +303,14 @@ def test_the_cli_subcommand_writes_the_file_and_refuses_live_without_a_report(tm
     assert not out.exists()
     assert "separation" in capsys.readouterr().err
 
+
+
+# --- the committed, tool-written calibration -------------------------------------------------------------------------
+
+
+def test_the_committed_calibration_has_fixture_cells_for_the_fixture_run_profile_only():
+    parsed = ScopeGateCalibration.model_validate_json(COMMITTED.read_text(encoding="utf-8"))
+    assert parsed.source == "fixture"
+    assert sorted(cell.rag_mode for cell in parsed.cells) == ["balanced", "flexible", "strict"]
+    assert {cell.embedding_profile_id for cell in parsed.cells} == {scope.LEGACY_PROFILE_ID}
+    assert COMMITTED.read_text(encoding="utf-8") == scope.stable_json(parsed)
