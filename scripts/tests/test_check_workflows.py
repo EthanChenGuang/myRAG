@@ -607,7 +607,12 @@ def canary_job() -> dict:
             },
             {
                 "name": "Canary",
-                "run": "npx vitest run tests/rag/canary tests/rag/backend-conformance",
+                "run": "npx vitest run tests/rag/canary",
+                "env": {"CI_BACKEND_CANARY": "1", "RAG_CANARY_BACKENDS": "pgvector,weaviate,qdrant"},
+            },
+            {
+                "name": "Conformance",
+                "run": "npx vitest run tests/rag/backend-conformance",
                 "env": {"CI_BACKEND_CANARY": "1", "RAG_CANARY_BACKENDS": "pgvector,weaviate,qdrant"},
             },
         ],
@@ -691,8 +696,26 @@ class BackendCanaryJobTest(unittest.TestCase):
 
     def test_a_dropped_suite_is_reported(self):
         job = canary_job()
-        self.step(job, "Canary")["run"] = "npx vitest run tests/rag/canary"
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Conformance"]
         self.assert_reported(job, "tests/rag/backend-conformance")
+
+    def test_canary_and_conformance_in_one_step_is_reported(self):
+        job = canary_job()
+        job["steps"] = [s for s in job["steps"] if s.get("name") != "Conformance"]
+        self.step(job, "Canary")["run"] = "npx vitest run tests/rag/canary tests/rag/backend-conformance"
+        self.assert_reported(job, "separate")
+
+    def test_conformance_before_the_canary_is_reported(self):
+        job = canary_job()
+        canary, conformance = self.step(job, "Canary"), self.step(job, "Conformance")
+        rest = [s for s in job["steps"] if s.get("name") not in ("Canary", "Conformance")]
+        job["steps"] = rest + [conformance, canary]
+        self.assert_reported(job, "after the canary")
+
+    def test_a_conformance_step_without_the_backend_env_is_reported(self):
+        job = canary_job()
+        self.step(job, "Conformance")["env"]["RAG_CANARY_BACKENDS"] = "pgvector"
+        self.assert_reported(job, "RAG_CANARY_BACKENDS")
 
     def test_a_missing_health_wait_is_reported(self):
         job = canary_job()

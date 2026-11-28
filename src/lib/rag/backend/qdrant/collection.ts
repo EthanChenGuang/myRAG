@@ -31,6 +31,8 @@ export const QDRANT_PAYLOAD_INDEXES: ReadonlyArray<{ field: string; schema: Fiel
   { field: 'chunking_profile_id', schema: { type: 'keyword' } },
   { field: 'parent_id', schema: { type: 'keyword' } },
   { field: 'doc_date', schema: { type: 'datetime' } },
+  // SEC-12: the Phase 4.3 access keys; filtered only while RAG_DOC_ACCESS_GROUPS is on.
+  { field: 'access_groups', schema: { type: 'keyword' } },
   {
     field: QDRANT_LEXICAL_FIELD,
     schema: { type: 'text', tokenizer: 'whitespace', lowercase: false, scoring: { type: 'bm25' } } as FieldSchema,

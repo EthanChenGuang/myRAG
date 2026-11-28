@@ -9,6 +9,7 @@ import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
 import { resetActiveProfileForTests } from '@/lib/rag/embeddings/active-profile';
 import { activateEmbeddingProfile } from '@/lib/rag/embeddings/profile-ops';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { purgeLineage, resetPurgeDepsForTests, setPurgeDepsForTests } from '@/lib/rag/ingest/purge';
 import { softDeleteLineage } from '@/lib/rag/ingest/soft-delete';
 import { createIngestWriter } from '@/lib/rag/ingest/writer';
 import { mintScope } from '@/lib/rag/tenant/scope';
@@ -16,6 +17,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 const USER = '0f0e0d0c-0b0a-4908-8706-050403020100';
 const DOC = '11111111-2222-4333-8444-555555555555';
 const LINEAGE = '66666666-7777-4888-8999-aaaaaaaaaaaa';
+const AUDIT = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
 
 function client(responder: (fn: string) => RpcResponse): RpcClient {
   return {
@@ -39,6 +41,8 @@ afterEach(() => {
   resetRagDepsForTests();
   resetIngestDepsForTests();
   resetActiveProfileForTests();
+  resetPurgeDepsForTests();
+  vi.restoreAllMocks();
 });
 
 describe('kickVectorSync call sites', () => {
@@ -81,5 +85,30 @@ describe('kickVectorSync call sites', () => {
     const result = await activateEmbeddingProfile('voyage-4-large-1024', 'operator-1');
     expect(result.ok).toBe(true);
     expect(kickMock).toHaveBeenCalledTimes(1);
+  });
+  test('a committed purge kicks exactly once; a refused one kicks zero times', async () => {
+    for (const method of ['log', 'warn', 'error'] as const) vi.spyOn(console, method).mockImplementation(() => undefined);
+    const reason = { code: 'source_deleted' as const, note: null };
+    const actor = { kind: 'source_sync' as const, id: USER };
+    const install = (responder: (fn: string) => RpcResponse) =>
+      setPurgeDepsForTests({
+        db: () => client(responder),
+        lineageDocuments: async () => [],
+        cacheTarget: () => null,
+        scopeOf: async () => scope,
+      });
+    install((fn) =>
+      fn === 'rag_purge_lineage'
+        ? { data: [{ audit_id: AUDIT, counts: {}, object_keys: [], parse_cache_prefixes: [], image_prefixes: [] }], error: null }
+        : { data: [], error: null },
+    );
+    const result = await purgeLineage(scope, LINEAGE, actor, reason, { signal: new AbortController().signal });
+    expect(result.ok).toBe(true);
+    expect(kickMock).toHaveBeenCalledTimes(1);
+    kickMock.mockReset();
+    install(() => ({ data: null, error: { message: 'tenant_mismatch', code: '22023' } }));
+    const refused = await purgeLineage(scope, LINEAGE, actor, reason, { signal: new AbortController().signal });
+    expect(refused.ok).toBe(false);
+    expect(kickMock).not.toHaveBeenCalled();
   });
 });

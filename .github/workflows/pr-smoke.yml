@@ -155,6 +155,7 @@ jobs:
       - name: Config drift check
         run: |
           node scripts/check-config.mjs
+          node scripts/check-release-defaults.mjs
           node scripts/rag/gen-vendor-doc.mjs --check
       - name: RAG boundary check
         run: |
@@ -169,7 +170,7 @@ jobs:
           node scripts/ci/check-migration-numbers.mjs
           node --test scripts/tests/check-migration-numbers.node-test.mjs
       - name: Config check and type-check self-tests
-        run: node --test scripts/check-config.test.mjs scripts/tests/gen-vendor-doc.node-test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
+        run: node --test scripts/check-config.test.mjs scripts/tests/gen-vendor-doc.node-test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs scripts/tests/check-release-defaults.node-test.mjs
       - name: Release gate, promotion and branch protection script self-tests
         run: node --test scripts/tests/post-release-status.node-test.mjs scripts/tests/promote-production.node-test.mjs scripts/tests/check-branch-protection.node-test.mjs
       - name: Zod generator self-test
@@ -585,8 +586,16 @@ jobs:
           docker logs --tail 50 qdrant || true
           docker logs --tail 50 weaviate || true
           exit 1
-      - name: Canary and conformance suites on pgvector, Weaviate and Qdrant
-        run: npx vitest run tests/rag/canary tests/rag/backend-conformance
+      # Two steps: the conformance suite drops and recreates collections, so it runs after the canary, never alongside it.
+      - name: Canary suite on pgvector, Weaviate and Qdrant
+        run: npx vitest run tests/rag/canary
+        env:
+          CI_BACKEND_CANARY: '1'
+          RAG_CANARY_BACKENDS: pgvector,weaviate,qdrant
+          QDRANT_URL: http://127.0.0.1:6333
+          WEAVIATE_URL: http://127.0.0.1:8080
+      - name: Conformance suite on pgvector, Weaviate and Qdrant
+        run: npx vitest run tests/rag/backend-conformance
         env:
           CI_BACKEND_CANARY: '1'
           RAG_CANARY_BACKENDS: pgvector,weaviate,qdrant

@@ -217,8 +217,11 @@ def test_default_config_carries_the_d24_and_d44_numbers():
         "online_judge_mean",
         "test_set_not_representative",
         "offline_online_gap",
+        "language_drop",
     ]
-    assert "language_drop" not in rules
+    drop = rules["language_drop"]
+    assert (drop.kind, drop.metric, drop.min_sample, drop.baseline_min_sample) == ("language_drop", None, 50, 200)
+    assert drop.params["metrics"] == ["refusal_rate", "not_helpful_rate", "judge_mean"]
     for rule in config.rules:
         if rule.kind == "rate":
             assert (rule.ratio, rule.min_abs_delta, rule.min_z) == (2.0, 0.05, 3.0)

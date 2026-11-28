@@ -152,6 +152,8 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_rebuild_candidates',
       'rag_rebuild_rollback',
       'rag_rebuild_start',
+      'rag_rollout_rebuild_publish_tenant',
+      'rag_rollout_rebuild_restore_tenant',
       'rag_recaption_candidates',
       'rag_recaption_rollback_run',
       'rag_recaption_start_run',
@@ -208,6 +210,11 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     reason:
       'Scope gate (0983, 0987): returns per-kind group and chunk counts only. While access is enforced it averages only chunks whose chunk and document access_groups are {all}, so no restricted document reaches a centroid, group key or count (q62-scope-centroids-access).',
     functions: ['rag_scope_centroids_rebuild'],
+  },
+  {
+    reason:
+      'Language-add planning (0745, 07-52): service_role-only admin and CLI read that lists current, ready document ids with doc type, ingest fingerprint, stored fingerprint parts (settings) and the und / scanned flags; it returns no chunk, title or document text, and its ids only drive a reprocess the operator starts.',
+    functions: ['rag_language_add_candidates'],
   },
   {
     reason: 'Statistics: counts, shares or coverage per tenant, language or profile; no row content and no document id.',

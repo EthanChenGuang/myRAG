@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "observation_days": 7,
+  "min_samples": 30,
+  "max_window_days": 90,
+  "metrics": {
+    "refusal_rate": { "band": 0.05, "required": true },
+    "not_helpful_rate": { "band": 0.1, "required": false },
+    "judge_score": { "band": 0.1, "required": false }
+  }
+}

@@ -383,6 +383,7 @@ describe('deletion canary', () => {
             lexical_text: 'neutral sample words',
             content_hash: 'h',
             lexical_version: 1,
+            access_groups: ['all'],
           },
         },
       ]);

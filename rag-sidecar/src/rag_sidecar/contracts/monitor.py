@@ -45,7 +45,7 @@ Share = Annotated[float, Field(ge=0, le=1)]
 MonitorRuleKind = Literal[
     "rate", "distribution", "latency", "judge_mean", "drift", "offline_online_gap", "language_drop"
 ]
-# language_drop is reserved for Phase 7 plan 07-46 (LANG-10); this phase writes no entry for it.
+# language_drop is the LANG-10 per-language rule (Phase 7 plan 07-46); the app evaluates it in src/lib/rag/monitor/language-drop.ts.
 MonitorRuleId = Literal[
     "refusal_rate",
     "zero_result_rate",
@@ -477,6 +477,22 @@ def default_monitor_alerts() -> MonitorAlertsConfig:
             metric="judge_gap",
             min_sample=50,
             alert=drift.gap_alert,
+        ),
+        MonitorRule(
+            id="language_drop",
+            kind="language_drop",
+            min_sample=50,
+            baseline_min_sample=200,
+            params={
+                "metrics": ["refusal_rate", "not_helpful_rate", "judge_mean"],
+                "window_days": 1,
+                "language_band_refusal_rate": 0.05,
+                "overall_band_refusal_rate": 0.02,
+                "language_band_not_helpful_rate": 0.10,
+                "overall_band_not_helpful_rate": 0.05,
+                "language_band_judge_mean": 0.10,
+                "overall_band_judge_mean": 0.05,
+            },
         ),
     ]
     return MonitorAlertsConfig(

@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { describeStageCause } from './stage-error-cause';
 import { RetrievalBackendError, searchByEmbedding, type RawChunk, type RpcClient } from './backend/supabase-rpc';
 import { warnBackendIgnoredOnLegacy } from './backend/factory';
+import { warnRolloutsIgnoredOnLegacy } from './rollout/resolve';
 import {
   CORE_STAGES,
   FALLBACK_STAGE_TIMEOUT_MS,
@@ -1083,6 +1084,7 @@ async function dispatchRetrieval(
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
     warnBackendIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()).backend);
+    warnRolloutsIgnoredOnLegacy(loadRagConfig(getRagDeps().ragEnv()));
     return withLogOutcome(await runLegacyPipeline(input, collector, access), 'legacy');
   }
 

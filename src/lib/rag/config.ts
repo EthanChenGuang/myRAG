@@ -459,6 +459,8 @@ export interface RagEnvInput {
   RAG_RETRIEVAL_BACKEND?: string;
   RAG_RETRIEVAL_BACKEND_VOICE?: string;
   RAG_VECTOR_SYNC_MAX_LAG_SECONDS?: string;
+  RAG_ROLLOUTS?: string;
+  RAG_LANG_CONFIDENCE?: string;
 }
 
 /** D-11, D-24: where retrieval runs per profile, and the sync lag bound for index readiness. Keys never live here. */
@@ -469,6 +471,19 @@ export interface BackendConfig {
 }
 
 export const DEFAULT_MAX_LAG_SECONDS = 300;
+
+/** LANG-11: off never reads the rollout tables; every tenant uses the globally active profiles. */
+export interface RolloutsConfig {
+  enabled: boolean;
+}
+
+export const LANG_CONFIDENCE_MODES = ['mapped', 'calibrated'] as const;
+export type LangConfidenceMode = (typeof LANG_CONFIDENCE_MODES)[number];
+
+/** OBS-03: mapped keeps the three-value query language confidence (1, 0.5, null). */
+export interface LangConfig {
+  confidence: LangConfidenceMode;
+}
 
 export interface RagConfig {
   pipeline: 'legacy' | 'v2';
@@ -502,6 +517,8 @@ export interface RagConfig {
   modelRouting: ModelRoutingConfig;
   semanticCache: SemanticCacheConfig;
   backend: BackendConfig;
+  rollouts: RolloutsConfig;
+  lang: LangConfig;
   /** D-09: document access groups; anything but on resolves to off. */
   accessGroups: AccessGroupsMode;
   /** D-07: the access-group key embedded chat and WhatsApp answer for, trimmed; empty when unset. */
@@ -1392,6 +1409,8 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RETRIEVAL_BACKEND ?? '',
     env.RAG_RETRIEVAL_BACKEND_VOICE ?? '',
     env.RAG_VECTOR_SYNC_MAX_LAG_SECONDS ?? '',
+    env.RAG_ROLLOUTS ?? '',
+    env.RAG_LANG_CONFIDENCE ?? '',
   ]);
 }
 
@@ -1509,6 +1528,8 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     modelRouting,
     semanticCache,
     backend: parseBackend(env, warnings),
+    rollouts: { enabled: parseNamedFlag('RAG_ROLLOUTS', env.RAG_ROLLOUTS, warnings) },
+    lang: { confidence: parseNamedChoice('RAG_LANG_CONFIDENCE', env.RAG_LANG_CONFIDENCE, LANG_CONFIDENCE_MODES, 'mapped', warnings) },
     accessGroups: parseAccessGroups(env.RAG_DOC_ACCESS_GROUPS, warnings),
     embedAccessGroup: (env.RAG_EMBED_ACCESS_GROUP ?? '').trim(),
     warnings,

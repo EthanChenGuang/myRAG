@@ -18,7 +18,7 @@ import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { anchorToStandalone } from '../../fusion/anchor';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
-import { getEmbeddingProfileById, LEGACY_PROFILE } from '../../embeddings/active-profile';
+import { getEmbeddingProfileById, LEGACY_PROFILE, type EmbeddingProfile } from '../../embeddings/active-profile';
 import {
   embedQueries,
   embedQueriesForEvalProfile,
@@ -43,7 +43,7 @@ import type { Profile, QueryVariant, RetrievalBackendSelection, RunRetrievalInpu
 import { getV2StartupVerdict } from '../startup';
 import { terminologyParams } from '../../terminology/expand';
 import { reserveTerminologyHits } from '../../terminology/reserve';
-import { evalChunkingOverride, evalTuningOverrides } from '../overrides';
+import { evalTuningOverrides, requestChunkingOverride } from '../overrides';
 import { effectiveTuningParams } from '../tuning-params';
 import {
   applyVariantFilters,
@@ -106,6 +106,10 @@ export interface SearchStagesInput {
   maxSearches?: number;
   /** Phase 6.2 D-21: the original's speculative search; adopted for the original variant only when the request is equal. */
   speculative?: SpeculativeHandle;
+  /** LANG-11: the candidate chunking profiles of the tenant's rollout arm (server side only); eval overrides win. */
+  rolloutChunkingOverride?: Record<string, string>;
+  /** LANG-11: `rollout=<id>:<arm>` for the search span; absent while no rollout applies. */
+  rolloutDetail?: string;
 }
 
 /**
@@ -133,11 +137,12 @@ export async function runSpeculativeSearch(args: {
   embedding: QueryEmbedding;
   filters: RetrievalFilters;
   signal: AbortSignal;
+  rolloutChunkingOverride?: Record<string, string>;
 }): Promise<SpeculativeSearchOutcome> {
   const { input, config } = args;
   const profile = input.profile;
   const resolved = resolveRetrievalBackend(profile, config, input.stageOverrides?.retrievalOverrides);
-  const chunkingOverride = evalChunkingOverride(profile, input.stageOverrides?.retrievalOverrides);
+  const chunkingOverride = requestChunkingOverride(profile, input.stageOverrides?.retrievalOverrides, args.rolloutChunkingOverride);
   const request = variantSearchRequest({
     scope: args.scope,
     variant: args.variant,
@@ -233,15 +238,25 @@ function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
 }
 
-/** Embeds texts for the request's dense legs: the eval embedding profile when set, else the active one. */
-export async function embedForRetrieval(input: RunRetrievalInput, texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
+/**
+ * Embeds texts for the request's dense legs: the eval embedding profile when set, else the candidate profile of the tenant's LANG-11
+ * rollout arm (resolved server side by the pipeline), else the active one.
+ */
+export async function embedForRetrieval(
+  input: RunRetrievalInput,
+  texts: string[],
+  signal: AbortSignal,
+  rolloutProfile?: EmbeddingProfile,
+): Promise<QueryEmbedding[]> {
   const profileId = evalEmbeddingProfileId(input);
   if (texts.length === 1) {
     const [text] = texts;
     if (profileId) return [await embedQueryForEvalProfile(text!, signal, await getEmbeddingProfileById(profileId))];
+    if (rolloutProfile) return [await embedQueryForEvalProfile(text!, signal, rolloutProfile)];
     return [await embedQuery(text!, signal)];
   }
   if (profileId) return embedQueriesForEvalProfile(texts, signal, await getEmbeddingProfileById(profileId));
+  if (rolloutProfile) return embedQueriesForEvalProfile(texts, signal, rolloutProfile);
   return embedQueries(texts, signal);
 }
 
@@ -254,10 +269,11 @@ export async function embedVariantTexts(
   texts: string[],
   signal: AbortSignal,
   precomputed?: ReadonlyMap<string, QueryEmbedding>,
+  rolloutProfile?: EmbeddingProfile,
 ): Promise<QueryEmbedding[]> {
-  if (!precomputed || precomputed.size === 0) return embedForRetrieval(input, texts, signal);
+  if (!precomputed || precomputed.size === 0) return embedForRetrieval(input, texts, signal, rolloutProfile);
   const missing = [...new Set(texts.filter((text) => !precomputed.has(text)))];
-  const fresh = missing.length > 0 ? await embedForRetrieval(input, missing, signal) : [];
+  const fresh = missing.length > 0 ? await embedForRetrieval(input, missing, signal, rolloutProfile) : [];
   const byText = new Map<string, QueryEmbedding>(precomputed);
   missing.forEach((text, index) => byText.set(text, fresh[index]!));
   return texts.map((text) => byText.get(text)!);
@@ -682,12 +698,13 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       anyHistoryScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
       route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
       ...legCodes,
+      ctx.rolloutDetail,
     ];
     const versionDegraded = route.reason === 'backend_field_unsupported';
     const lexicalEnabled = config.v2.lexicalSearch;
     const verdict = getV2StartupVerdict();
     const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
-    const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
+    const chunkingOverride = requestChunkingOverride(profile, stageOverrides?.retrievalOverrides, ctx.rolloutChunkingOverride);
     const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
     const searchSpec = spec('search', 'throw');
     const bindingTimeoutMs = Math.max(

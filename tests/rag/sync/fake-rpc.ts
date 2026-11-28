@@ -49,6 +49,8 @@ export interface FakeChunk {
   /** Defaults to `h-<last 4 of id>`; lexical_version defaults to 1. */
   content_hash?: string | null;
   lexical_version?: number | null;
+  /** 0742 access keys; defaults to ['all']. */
+  access_groups?: string[];
 }
 
 export interface FakeIndexState {
@@ -191,6 +193,7 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
       source: 'upload',
       chunking_profile_id: null,
       parent_id: null,
+      access_groups: chunk.access_groups ?? ['all'],
     };
   }
 
