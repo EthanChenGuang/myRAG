@@ -295,6 +295,12 @@ export interface RetrievalCacheContext {
   webSearch: boolean;
   mcpTools: boolean;
   chatId: string | null;
+  /**
+   * 06.2 G2: true only when the entry point passes the GEN-13 decomposed-answer block to the prompt (RAG_DECOMPOSED_ANSWER effective).
+   * The cache stage then folds the block template into systemPromptHash for a plan of two or more sub-questions; absent or false
+   * leaves the key unchanged.
+   */
+  decomposedAnswer?: boolean;
 }
 
 export interface RunRetrievalInput {

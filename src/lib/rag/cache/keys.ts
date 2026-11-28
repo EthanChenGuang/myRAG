@@ -70,3 +70,15 @@ export function computeCacheKeyHash(parts: CacheKeyParts): string {
 export function hashSystemPromptTemplate(template: string): string {
   return sha256Hex(template);
 }
+
+/**
+ * 06.2 G2: systemPromptHash with the switch-gated prompt blocks the entry point adds after the template. Each block enters only
+ * while present, so with none the caller's hash is returned unchanged.
+ */
+export function systemPromptHashWithBlocks(systemPromptHash: string, blocks: { decomposedAnswer?: string | null }): string {
+  const parts = Object.entries(blocks)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .sort(([a], [b]) => a.localeCompare(b));
+  if (parts.length === 0) return systemPromptHash;
+  return sha256Hex([systemPromptHash, ...parts.map(([name, text]) => `${name}:${sha256Hex(text)}`)].join('\u0000'));
+}
