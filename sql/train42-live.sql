@@ -1,6 +1,11 @@
--- Train 42 live SQL (ci/merge-train-42 @ 900a22e75). Apply after train 41 is live (sql/train41-live.sql, including 0720-0722, 0728,
--- 0937, 0987, 0990, 1011 and its 0410 r23 delta). One file for both deployment modes: every train-42 migration is a common file.
--- Order: 0729, 0905, 0935 (empty placeholder), 0932 (re-run, see below), 0936, 0938, 0992, then the 0410 r24 delta (grants only).
+-- Train 42 live SQL (ci/merge-train-42 @ 228737718). Apply after train 41 is live (sql/train41-live.sql, which runs after train 40's SQL,
+-- 0989 and 0991 from main) and after 0991 (UF-1, PR #137). One file for both deployment modes: every train-42 migration is common.
+-- Order: 0728 (re-run: six inventory rows), 0729, 0905, 0935 (empty placeholder), 0932 (re-run, see below), 0936, 0938, 0992, 0746,
+-- then the 0410 r24 delta (grants only).
+-- 0728 is re-run whole because train 42 adds the six lexical statistics relations to rag_purge_store_inventory(); the file is additive
+-- and idempotent (CREATE OR REPLACE of its functions, no table, no data). 0746 = Phase 6.3 purge covers the lexical statistics (04.4-07
+-- hand-off): rag_purge_lineage runs rag_purge_hook_lexical_stats after its chunk delete and records counts.lexical_stats; rag_purge_verify
+-- reports lexical_stats. It redefines both from their 0727 bodies (0727 unchanged; after re-running 0727, re-run 0746).
 -- 0932 is live since train 40 and is repeated here on purpose: 0936 stops with 55000 on a database that already has 0938, so a
 -- second apply of this file would fail without it. 0932 redefines only rag_bm25_search_chunks (catalog drop, same body as live, service
 -- role only), and 0936 replaces it in the next transaction. With it the whole file can be applied again (rehearsed twice per mode).
@@ -20,6 +25,7 @@
 -- App compatibility: additive for the app on main. 0729 adds nullable columns and a new table; 0905 adds two tables and two nullable columns
 -- (cluster_status NULL = off, so raw-only tenants write nothing new); 0936 with p_identifiers_norm NULL builds the same SQL and returns
 -- the same rows as 0930/0932/0933; 0938 with p_df_mode omitted or 'raw' returns what 0936 returns (p_df_mode is last, DEFAULT 'raw').
+-- 0746 keeps both purge signatures and grants; a purge of a tenant without lexical statistics returns the same counts as before.
 -- 0992 adds a function and only widens two CHECK constraints (an empty tenant_keys is allowed once tainted_at is set).
 -- RAG_LEXICAL_DF_MODE and RAG_SOURCE_PURGE_DAILY_CAP stay at their defaults; nothing here flips a default.
 -- DROP sections (each followed by a re-create in the same transaction):
@@ -29,12 +35,243 @@
 --         catalog lookup and re-created in the same transaction (grants re-applied: service_role only).
 --   0938: every overload of rag_bm25_search_chunks is dropped by catalog lookup and re-created with p_df_mode (service_role only).
 --   0992: DROP CONSTRAINT IF EXISTS embedding_model_versions_tenant_keys_shape and _tenant_scope_single, re-added (wider) right after.
---   0729 and 0935 drop nothing.
+--   0728, 0729, 0746 and 0935 drop nothing.
 -- Operational notes:
 --   Retrieval calls hybrid_search_chunks and rag_bm25_search_chunks; between the drop and the re-create inside 0936/0938 a concurrent
 --   call waits on the transaction lock, it does not fail. Apply in a quiet window anyway.
 --   0905 writes no existing row; cluster statistics are built only by `npm run rag:lexstats -- enable --cluster` (operator, later).
 --   0729 sets no pause_reason on existing runs. 0992 changes no row.
+
+-- ==== supabase/migrations/0728_purge_foreign_stores.sql
+-- 0728: The purge store inventory, and guarded purge and verify steps for stores owned by other phases (DATA-24, D-11, D-14, D-17,
+-- D-37, D-41). rag_purge_store_inventory() lists every public table that references documents, document_chunks or document_parents
+-- (by foreign key, or by a document_id / chunk_id / lineage_id column), each marked purge_step, cascade or exempt with a reason;
+-- tests/rag-db/purge-store-coverage.test.mts fails when a table found in the catalog is missing here, so a phase that lands a new store
+-- adds its row (and a rag_purge_hook_<name>) in the same change. Additive and idempotent, not folded into the setup files.
+
+BEGIN;
+
+-- A fixed list: no table is read, so the function needs no definer rights.
+CREATE OR REPLACE FUNCTION public.rag_purge_store_inventory()
+RETURNS TABLE (relation text, store_id text, handling text, reason text)
+LANGUAGE sql
+IMMUTABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT v.relation, v.store_id, v.handling, v.reason
+    FROM (VALUES
+      ('documents', 'documents', 'purge_step', 'every version of the lineage is deleted by rag_purge_lineage (0727)'),
+      ('document_chunks', 'chunks', 'purge_step', 'deleted explicitly by rag_purge_lineage; the single-tenant schema has no cascade'),
+      ('ingestion_jobs', 'ingestion_jobs', 'purge_step', 'deleted by tenant and lineage or version id (0727)'),
+      ('ingestion_jobs_archive', 'ingestion_jobs', 'purge_step', 'deleted by tenant and lineage or version id (0727)'),
+      ('rag_parse_cache', 'parse_cache', 'purge_step', 'rows whose file hash no other lineage of the tenant shares are deleted (0727)'),
+      ('rag_semantic_cache', 'semantic_cache', 'purge_step', 'invalidated by version id through rag_cache_invalidate (0727)'),
+      ('rag_answer_records', 'answer_citations', 'purge_step', 'citation snapshots scrubbed by rag_purge_scrub_answer_records (0724)'),
+      ('chats', 'chat_messages', 'purge_step', 'saved citations scrubbed by rag_purge_scrub_chats (0724)'),
+      ('nango_sync_records', 'sync_records', 'purge_step', 'deleted by version id or connection and file id (0727)'),
+      ('chunk_translations', 'translations', 'purge_step', 'rag_purge_hook_chunk_translations (0810) through rag_purge_foreign_stores'),
+      ('chunk_translation_gaps', 'translation_gaps', 'purge_step', 'rag_purge_hook_chunk_translation_gaps (0820) through rag_purge_foreign_stores'),
+      ('rag_table_rows', 'table_rows', 'purge_step', 'rag_purge_hook_table_rows (0852) through rag_purge_foreign_stores'),
+      ('rag_dup_clusters', 'duplicate_groups', 'purge_step', 'rag_purge_hook_dup_clusters (0853) removes the members and marks the cluster for recompute'),
+      ('rag_supersession_candidates', 'supersession', 'purge_step', 'rag_purge_hook_supersession (0806) through rag_purge_foreign_stores'),
+      ('rag_supersession_links', 'supersession', 'purge_step', 'rag_purge_hook_supersession (0806) through rag_purge_foreign_stores'),
+      ('rag_rebuild_items', 'rebuild', 'purge_step', 'rag_purge_hook_rebuild (0809) through rag_purge_foreign_stores'),
+      ('rag_rebuild_saved_vectors', 'rebuild', 'purge_step', 'rag_purge_hook_rebuild (0809) through rag_purge_foreign_stores'),
+      ('rag_recaption_items', 'recaption', 'purge_step', 'rag_purge_hook_recaption (0813) through rag_purge_foreign_stores'),
+      ('chunk_embeddings', 'vectors', 'cascade', 'ON DELETE CASCADE from document_chunks; counted before the chunk delete'),
+      ('embedding_backfill_gaps', 'vectors', 'cascade', 'ON DELETE CASCADE from document_chunks'),
+      ('document_parents', 'parents', 'cascade', 'ON DELETE CASCADE from documents; counted before the delete'),
+      ('chunking_build_gaps', 'chunks', 'cascade', 'ON DELETE CASCADE from documents'),
+      ('chunk_translation_embeddings', 'translations', 'cascade', 'ON DELETE CASCADE from chunk_translations'),
+      ('rag_golden_evidence_index', 'golden_items', 'purge_step', 'rag_purge_hook_golden_items (0976) through rag_purge_foreign_stores'),
+      ('rag_judge_labels', 'golden_items', 'purge_step', 'answer-check labels of the purged evidence, cleared by rag_purge_hook_golden_items (0976)'),
+      ('rag_lexical_stats_pending', 'lexical_stats', 'purge_step', 'staged signed deltas, folded by rag_purge_hook_lexical_stats (0903, 0905), which rag_purge_lineage runs after its chunk delete (0746)'),
+      ('rag_lexical_df', 'lexical_stats', 'purge_step', 'per-tenant document frequencies (no document id); the purged chunks are folded out by rag_purge_hook_lexical_stats (0746)'),
+      ('rag_lexical_corpus', 'lexical_stats', 'purge_step', 'per-tenant chunk count and length (no document id); the purged chunks are folded out by rag_purge_hook_lexical_stats (0746)'),
+      ('rag_lexical_cluster_dirty', 'lexical_stats', 'purge_step', 'markers of clusters to reconcile (no document id), emptied by the compaction rag_purge_hook_lexical_stats runs (0905, 0746)'),
+      ('rag_lexical_cluster_units', 'lexical_stats', 'purge_step', 'cluster unit ledger (chunk id, lexemes, length); rag_purge_hook_lexical_stats marks every row whose chunk is gone and reconciles it away (0905, 0746)'),
+      ('rag_connector_document_access', 'access_labels', 'cascade', 'ON DELETE CASCADE from documents (0925)'),
+      ('rag_connector_document_principals', 'access_labels', 'cascade', 'ON DELETE CASCADE from documents (0920)'),
+      ('rag_dup_chunk_bands', 'duplicate_groups', 'cascade', 'ON DELETE CASCADE from document_chunks (0857); the clusters are purged by rag_purge_hook_dup_clusters'),
+      ('rag_purge_audit', '', 'exempt', 'the purge''s own record; ids and hashes only, kept on purpose as the tombstone record (D-12, D-35)'),
+      ('rag_admin_audit', '', 'exempt', 'admin action log; ids only, no document content (D-37)'),
+      ('rag_lexical_stats_state', '', 'exempt', 'per-tenant lexical statistics settings and status (0900, 0905); no document reference'),
+      ('rag_access_audit', '', 'exempt', 'access label and group change log (0920); ids, groups and reasons only, no document content (D-37)'),
+      ('rag_access_security_events', '', 'exempt', 'access violation events (0920); tenant, user, chunk and document ids only, no content (D-37)'),
+      ('rag_security_events', '', 'exempt', 'security finding events (0942); ids, rule ids and counts only, no content (D-37)'),
+      ('vector_sync_purges', '', 'exempt', 'the purge''s own outbox record for external backends (0740); tenant, lineage and version ids only (D-45)'),
+      ('vector_sync_outbox', '', 'exempt', 'ids only; the purge enqueues its own delete rows here for the external backends (D-45)'),
+      ('chunking_build_runs', '', 'exempt', 'run cursor: one position id, no content; a resumed run skips missing rows (D-37)'),
+      ('embedding_backfill_runs', '', 'exempt', 'run cursor: one position id, no content; a resumed run skips missing rows (D-37)'),
+      ('rag_recaption_runs', '', 'exempt', 'run cursor: one position id, no content; a resumed run skips missing rows (D-37)'),
+      ('rag_rebuild_runs', '', 'exempt', 'run header: counts and settings, no document content; its items are purged (D-37)'),
+      ('rag_retrieval_log', '', 'exempt', 'ids only, 30 and 90 day retention'),
+      ('rag_review_items', '', 'exempt', 'ids only, 30 and 90 day retention'),
+      ('rag_upload_approval_exemptions', '', 'exempt', 'tenant and user configuration, not per-document data'),
+      ('ingestion_batches', '', 'exempt', 'batch header and hold_publish flag, not per-document data'),
+      ('rag_identifier_patterns', '', 'exempt', 'tenant settings, not per-document data')
+    ) AS v(relation, store_id, handling, reason)
+   ORDER BY v.relation
+$$;
+
+-- One step per store: the reserved hook name first, then the owner phase's hook, then (for plain per-document tables) a guarded delete
+-- by tenant and version id. Every hook is resolved by its fixed signature; relation names are literals of this file (%I) and values are
+-- bound with USING. A store with neither hook nor relation adds no key to the counts.
+CREATE OR REPLACE FUNCTION public.rag_purge_foreign_stores(p_tenant_key text, p_lineage_id uuid, p_version_ids uuid[])
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids uuid[] := COALESCE(p_version_ids, '{}'::uuid[]);
+  v_counts jsonb := '{}'::jsonb;
+  v_n bigint;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_translations(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_translations($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regprocedure('public.rag_purge_hook_chunk_translations(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_chunk_translations($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.chunk_translations') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'chunk_translations')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translations', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_chunk_translation_gaps(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_chunk_translation_gaps($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translation_gaps', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.chunk_translation_gaps') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'chunk_translation_gaps')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('translation_gaps', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_table_rows(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_table_rows($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('table_rows', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regclass('public.rag_table_rows') IS NOT NULL THEN
+    EXECUTE pg_catalog.format('DELETE FROM %I.%I t WHERE t.tenant_key = $1 AND t.document_id = ANY ($2)', 'public', 'rag_table_rows')
+      USING p_tenant_key, v_ids;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('table_rows', v_n);
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_duplicate_clusters(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_duplicate_clusters($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('duplicate_groups', COALESCE(v_n, 0));
+  ELSIF pg_catalog.to_regprocedure('public.rag_purge_hook_dup_clusters(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_dup_clusters($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('duplicate_groups', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_supersession(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_supersession($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('supersession', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_rebuild(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_rebuild($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('rebuild', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_recaption(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_recaption($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('recaption', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_scope_tags(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_scope_tags($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('scope_tags', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_identifiers(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_identifiers($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('identifiers', COALESCE(v_n, 0));
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_golden_items(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_golden_items($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('golden_items', COALESCE(v_n, 0));
+  END IF;
+
+  RETURN v_counts;
+END
+$$;
+
+-- Rows still present per foreign store, for rag_purge_verify. A store is reported only when its relation exists.
+CREATE OR REPLACE FUNCTION public.rag_purge_foreign_leftovers(p_tenant_key text, p_lineage_id uuid, p_version_ids uuid[])
+RETURNS TABLE (store text, remaining bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_ids uuid[] := COALESCE(p_version_ids, '{}'::uuid[]);
+  v_step record;
+  v_n bigint;
+  v_total bigint;
+  v_seen boolean;
+  v_last text := NULL;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+
+  FOR v_step IN
+    SELECT * FROM (VALUES
+      (1, 'translations', 'chunk_translations', 't.document_id = ANY ($2)'),
+      (2, 'translation_gaps', 'chunk_translation_gaps', 't.document_id = ANY ($2)'),
+      (3, 'table_rows', 'rag_table_rows', 't.document_id = ANY ($2)'),
+      (4, 'duplicate_groups', 'rag_dup_clusters', 't.source_document_ids OPERATOR(pg_catalog.&&) $2'),
+      (5, 'supersession', 'rag_supersession_candidates',
+          't.document_id = ANY ($2) OR t.candidate_document_id = ANY ($2) OR t.older_document_id = ANY ($2)'),
+      (6, 'supersession', 'rag_supersession_links',
+          't.older_document_id = ANY ($2) OR t.newer_document_id = ANY ($2) OR t.older_lineage_id = $3 OR t.newer_lineage_id = $3'),
+      (7, 'rebuild', 'rag_rebuild_items', 't.document_id = ANY ($2) OR t.new_document_id = ANY ($2) OR t.lineage_id = $3'),
+      (8, 'rebuild', 'rag_rebuild_saved_vectors', 't.document_id = ANY ($2)'),
+      (9, 'recaption', 'rag_recaption_items', 't.document_id = ANY ($2)')
+    ) AS s(ord, store, relation, predicate)
+    ORDER BY s.ord
+  LOOP
+    IF v_last IS DISTINCT FROM v_step.store THEN
+      IF v_last IS NOT NULL AND v_seen THEN
+        store := v_last;
+        remaining := v_total;
+        RETURN NEXT;
+      END IF;
+      v_last := v_step.store;
+      v_total := 0;
+      v_seen := false;
+    END IF;
+    IF pg_catalog.to_regclass(pg_catalog.format('public.%I', v_step.relation)) IS NOT NULL THEN
+      EXECUTE pg_catalog.format('SELECT pg_catalog.count(*) FROM %I.%I t WHERE t.tenant_key = $1 AND (%s)', 'public', v_step.relation, v_step.predicate)
+        INTO v_n USING p_tenant_key, v_ids, p_lineage_id;
+      v_total := v_total + v_n;
+      v_seen := true;
+    END IF;
+  END LOOP;
+  IF v_last IS NOT NULL AND v_seen THEN
+    store := v_last;
+    remaining := v_total;
+    RETURN NEXT;
+  END IF;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_purge_store_inventory() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_store_inventory() TO service_role;
+REVOKE ALL ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_foreign_leftovers(text, uuid, uuid[]) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
 
 -- ==== supabase/migrations/0729_source_purge_daily_cap.sql
 -- 0729: Phase 6.3 daily cap on change-feed purges per connection (owner decision 2026-11-25, D-49).
@@ -3556,6 +3793,384 @@ NOTIFY pgrst, 'reload schema';
 
 COMMIT;
 
+-- ==== supabase/migrations/0746_purge_lexical_stats.sql
+-- 0746: the Phase 6.3 purge covers the lexical statistics (04.4-07 hand-off, completed by 04.4-16's 0905; train 42).
+-- rag_purge_lineage runs rag_purge_hook_lexical_stats after its chunk delete: the 0901/0905 delete triggers stage the purged chunks'
+-- -1 rows and cluster markers there, and the hook folds them and reconciles every cluster ledger row whose chunk is gone, so no
+-- counter, marker or unit lexeme of the purged versions is left. The folded count is recorded under counts.lexical_stats.
+-- rag_purge_verify adds a lexical_stats row for a tenant whose statistics are on: its staged rows, its cluster markers and its ledger
+-- rows whose chunk is gone (expect 0). The counters hold no document id, so this check is tenant-wide (hand-off call-order rule).
+-- The six lexical relations are listed in rag_purge_store_inventory() (0728).
+-- Bodies: both functions from 0727, their only definition; the only edits are the hook call, its count, the verify row and their
+-- variables. Security mode (SECURITY DEFINER), volatility, empty search_path and grants (service_role only) are unchanged.
+-- Every lexical reference is resolved at run time (to_regprocedure, to_regclass), so this file applies before or after 0900-0905.
+-- Precheck (55000): rag_purge_lineage and rag_purge_verify exist with the 0727 signatures.
+-- Operator rule: after re-running 0727, re-run this file. Idempotent; one common file for both modes; not folded into the setup files.
+
+BEGIN;
+
+DO $$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_purge_lineage(text,uuid,jsonb,jsonb)') IS NULL
+     OR pg_catalog.to_regprocedure('public.rag_purge_verify(text,uuid)') IS NULL THEN
+    RAISE EXCEPTION '0746: rag_purge_lineage and rag_purge_verify (0727) are required' USING ERRCODE = '55000';
+  END IF;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_purge_lineage(p_tenant_key text, p_lineage_id uuid, p_actor jsonb, p_reason jsonb)
+RETURNS TABLE (audit_id uuid, counts jsonb, object_keys text[], parse_cache_prefixes text[], image_prefixes text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_n_lexical bigint;
+  v_admin_codes constant text[] := ARRAY['owner_request', 'added_in_error', 'retention_ended', 'legal_or_policy', 'restricted_content', 'other'];
+  v_actor_kind text;
+  v_actor_id uuid;
+  v_reason_code text;
+  v_reason_note text;
+  v_connection text;
+  v_ids uuid[];
+  v_hashes text[];
+  v_keys text[];
+  v_file_ids text[];
+  v_newest public.documents%ROWTYPE;
+  v_source_key text;
+  v_prefixes text[];
+  v_counts jsonb;
+  v_foreign jsonb;
+  v_chunk_ids uuid[];
+  v_n_documents bigint;
+  v_n_chunks bigint;
+  v_n_vectors bigint;
+  v_n_parents bigint;
+  v_n_jobs bigint;
+  v_n_archive bigint;
+  v_n_parse bigint;
+  v_n_cache bigint;
+  v_n_citations bigint;
+  v_n_chats bigint;
+  v_n_sync bigint;
+  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_audit uuid;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_actor IS NULL OR pg_catalog.jsonb_typeof(p_actor) <> 'object'
+     OR pg_catalog.jsonb_typeof(p_actor -> 'kind') IS DISTINCT FROM 'string'
+     OR pg_catalog.jsonb_typeof(p_actor -> 'id') IS DISTINCT FROM 'string'
+     OR (p_actor ->> 'kind') NOT IN ('admin', 'source_sync')
+     OR (p_actor ->> 'id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023', DETAIL = 'actor';
+  END IF;
+  v_actor_kind := p_actor ->> 'kind';
+  v_actor_id := (p_actor ->> 'id')::uuid;
+
+  IF p_reason IS NULL OR pg_catalog.jsonb_typeof(p_reason) <> 'object'
+     OR pg_catalog.jsonb_typeof(p_reason -> 'code') IS DISTINCT FROM 'string'
+     OR (p_reason ? 'note' AND pg_catalog.jsonb_typeof(p_reason -> 'note') NOT IN ('string', 'null')) THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023', DETAIL = 'reason';
+  END IF;
+  v_reason_code := p_reason ->> 'code';
+  v_reason_note := NULLIF(pg_catalog.btrim(COALESCE(p_reason ->> 'note', '')), '');
+  IF (v_actor_kind = 'admin' AND v_reason_code <> ALL (v_admin_codes))
+     OR (v_actor_kind = 'source_sync' AND v_reason_code <> 'source_deleted')
+     OR (v_reason_code = 'other' AND v_reason_note IS NULL)
+     OR pg_catalog.char_length(COALESCE(v_reason_note, '')) > 500 THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023', DETAIL = 'reason';
+  END IF;
+
+  -- The actor must be entitled to the tenant; otherwise the answer equals an unknown lineage.
+  IF v_actor_kind = 'admin' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = v_actor_id)
+       OR NOT (p_tenant_key = ANY (public.rag_admin_tenant_keys(v_actor_id))) THEN
+      RAISE EXCEPTION 'not_found';
+    END IF;
+  ELSE
+    SELECT c.connection_id INTO v_connection FROM public.nango_connections c WHERE c.id = v_actor_id;
+    IF v_connection IS NULL THEN
+      RAISE EXCEPTION 'not_found';
+    END IF;
+  END IF;
+
+  PERFORM 1 FROM public.documents d
+   WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key
+   ORDER BY d.id
+     FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF v_actor_kind = 'source_sync' AND EXISTS (
+       SELECT 1 FROM public.documents d
+        WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key
+          AND (d.source IS DISTINCT FROM 'nango' OR d.source_connection_id IS DISTINCT FROM v_connection)
+     ) THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+
+  SELECT pg_catalog.array_agg(d.id ORDER BY d.version, d.id),
+         COALESCE(pg_catalog.array_agg(DISTINCT d.file_sha256) FILTER (WHERE d.file_sha256 IS NOT NULL), '{}'::text[])
+    INTO v_ids, v_hashes
+    FROM public.documents d
+   WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key;
+  v_file_ids := ARRAY(
+    SELECT DISTINCT f.id FROM public.documents d
+     CROSS JOIN LATERAL (VALUES (d.source_key), (d.source_file_id)) AS f(id)
+     WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key AND d.source = 'nango'
+       AND f.id IS NOT NULL AND f.id <> ''
+  );
+
+  SELECT * INTO v_newest FROM public.documents d
+   WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key
+   ORDER BY d.is_current DESC, d.version DESC, d.id
+   LIMIT 1;
+  v_source_key := CASE WHEN v_newest.source = 'nango' THEN COALESCE(NULLIF(v_newest.source_file_id, ''), v_newest.source_key)
+                       ELSE v_newest.source_key END;
+
+  v_keys := ARRAY(
+    SELECT DISTINCT s.key FROM public.documents d
+     CROSS JOIN LATERAL (
+       SELECT e.value AS key
+         FROM pg_catalog.jsonb_each_text(CASE WHEN pg_catalog.jsonb_typeof(d.processing_state -> 'artifacts') = 'object'
+                                              THEN d.processing_state -> 'artifacts' ELSE '{}'::jsonb END) AS e
+       UNION ALL
+       SELECT d.original_path
+     ) AS s
+     WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key AND s.key IS NOT NULL AND s.key <> ''
+     ORDER BY s.key
+  );
+
+  -- Phase 7 external backends (D-45): the version ids are resolved before any delete; no applicable target writes nothing.
+  IF pg_catalog.to_regprocedure('public.rag_vector_sync_enqueue_purge(text,uuid,uuid[],text,text)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.rag_vector_sync_enqueue_purge($1, $2, $3, $4, $5)'
+      USING p_tenant_key, p_lineage_id, v_ids, v_actor_kind || ':' || v_actor_id::text, v_reason_code;
+  END IF;
+
+  -- Citation snapshots and saved chats of the tenant (D-13, 0724).
+  v_n_citations := public.rag_purge_scrub_answer_records(p_tenant_key, p_lineage_id, v_ids, v_now);
+  v_n_chats := public.rag_purge_scrub_chats(p_tenant_key, p_lineage_id, v_ids, v_now);
+
+  -- Stores owned by other phases (D-14, plan 06.3-19); counted before the chunk delete so cascading rows are still there.
+  IF pg_catalog.to_regprocedure('public.rag_purge_foreign_stores(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT public.rag_purge_foreign_stores($1, $2, $3)' INTO v_foreign USING p_tenant_key, p_lineage_id, v_ids;
+  END IF;
+
+  v_chunk_ids := ARRAY(SELECT c.id FROM public.document_chunks c WHERE c.document_id = ANY (v_ids));
+  SELECT pg_catalog.count(*) INTO v_n_vectors FROM public.chunk_embeddings e WHERE e.chunk_id = ANY (v_chunk_ids);
+  SELECT pg_catalog.count(*) INTO v_n_parents FROM public.document_parents p WHERE p.document_id = ANY (v_ids);
+
+  UPDATE public.documents d SET superseded_by = NULL WHERE d.superseded_by = ANY (v_ids) AND d.tenant_key = p_tenant_key;
+
+  -- The single-tenant schema has no cascade from documents to document_chunks; vectors, gaps and parents cascade.
+  DELETE FROM public.document_chunks c WHERE c.document_id = ANY (v_ids);
+  GET DIAGNOSTICS v_n_chunks = ROW_COUNT;
+
+  -- Lexical statistics (04.4-07 hand-off, 0903 and 0905): the delete triggers have just staged the purged chunks' -1 rows and
+  -- cluster markers; the hook folds them and reconciles every ledger row whose chunk is gone, so no counter, marker or unit
+  -- lexeme of the purged versions is left. It runs here, after the chunk delete, because nothing of the purge is staged before it.
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_lexical_stats(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT public.rag_purge_hook_lexical_stats($1, $2, $3)' INTO v_n_lexical USING p_tenant_key, p_lineage_id, v_ids;
+  END IF;
+
+  DELETE FROM public.ingestion_jobs j
+   WHERE j.tenant_key = p_tenant_key AND (j.lineage_id = p_lineage_id OR j.document_id = ANY (v_ids));
+  GET DIAGNOSTICS v_n_jobs = ROW_COUNT;
+  DELETE FROM public.ingestion_jobs_archive j
+   WHERE j.tenant_key = p_tenant_key AND (j.lineage_id = p_lineage_id OR j.document_id = ANY (v_ids));
+  GET DIAGNOSTICS v_n_archive = ROW_COUNT;
+
+  WITH removed AS (
+    DELETE FROM public.rag_parse_cache pc
+     WHERE pc.tenant_key = p_tenant_key
+       AND pc.file_sha256 = ANY (v_hashes)
+       AND NOT EXISTS (
+         SELECT 1 FROM public.documents d
+          WHERE d.tenant_key = p_tenant_key AND d.file_sha256 = pc.file_sha256 AND d.lineage_id <> p_lineage_id
+       )
+    RETURNING pc.object_prefix
+  )
+  SELECT pg_catalog.count(*), COALESCE(pg_catalog.array_agg(DISTINCT r.object_prefix ORDER BY r.object_prefix), '{}'::text[])
+    INTO v_n_parse, v_prefixes
+    FROM removed r;
+
+  DELETE FROM public.nango_sync_records r
+   WHERE r.document_id = ANY (v_ids)
+      OR (v_newest.source = 'nango' AND r.connection_id = v_newest.source_connection_id AND r.file_id = ANY (v_file_ids));
+  GET DIAGNOSTICS v_n_sync = ROW_COUNT;
+
+  v_n_cache := public.rag_cache_invalidate(p_tenant_key, v_ids);
+
+  DELETE FROM public.documents d WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key;
+  GET DIAGNOSTICS v_n_documents = ROW_COUNT;
+
+  v_counts := pg_catalog.jsonb_build_object(
+    'documents', v_n_documents,
+    'chunks', v_n_chunks,
+    'vectors', v_n_vectors,
+    'parents', v_n_parents,
+    'ingestion_jobs', v_n_jobs + v_n_archive,
+    'parse_cache', v_n_parse,
+    'semantic_cache', v_n_cache,
+    'answer_citations', v_n_citations,
+    'chat_messages', v_n_chats,
+    'sync_records', v_n_sync
+  );
+  IF v_n_lexical IS NOT NULL THEN
+    v_counts := v_counts || pg_catalog.jsonb_build_object('lexical_stats', v_n_lexical);
+  END IF;
+  IF v_foreign IS NOT NULL AND pg_catalog.jsonb_typeof(v_foreign) = 'object' THEN
+    v_counts := v_foreign || v_counts;
+  END IF;
+
+  INSERT INTO public.rag_purge_audit (
+    tenant_key, lineage_id, version_ids, file_sha256_values, source, source_key_sha256, source_connection_id,
+    actor_kind, actor_id, reason_code, reason_note, started_at, counts
+  ) VALUES (
+    p_tenant_key, p_lineage_id, v_ids, v_hashes, v_newest.source,
+    CASE WHEN v_source_key IS NULL OR v_source_key = '' THEN NULL
+         ELSE pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_source_key, 'UTF8')), 'hex') END,
+    CASE WHEN v_newest.source = 'nango' THEN v_newest.source_connection_id ELSE NULL END,
+    v_actor_kind, v_actor_id, v_reason_code, v_reason_note, v_now, v_counts
+  )
+  RETURNING id INTO v_audit;
+
+  RETURN QUERY SELECT v_audit, v_counts, v_keys, v_prefixes,
+                      ARRAY['rag/' || p_tenant_key || '/' || p_lineage_id::text || '/'];
+END
+$$;
+
+-- Remaining rows per store after a purge, from the version ids and hashes of the newest audit row of the lineage. state is NULL for
+-- database stores; with Phase 7's 0740, one external:<target> row per target (done, pending, dead or not_applicable). A purge is
+-- successful only when every database count is 0 and no target is pending or dead. No audit row: not_found.
+CREATE OR REPLACE FUNCTION public.rag_purge_verify(p_tenant_key text, p_lineage_id uuid)
+RETURNS TABLE (store text, remaining bigint, state text)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_lexical_on boolean;
+  v_lexical_left bigint;
+  v_audit public.rag_purge_audit%ROWTYPE;
+  v_ids uuid[];
+  v_hashes text[];
+  v_text_ids text[];
+  r record;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_audit FROM public.rag_purge_audit a
+   WHERE a.tenant_key = p_tenant_key AND a.lineage_id = p_lineage_id
+   ORDER BY a.started_at DESC, a.id DESC
+   LIMIT 1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  v_ids := v_audit.version_ids;
+  v_hashes := v_audit.file_sha256_values;
+  v_text_ids := ARRAY(SELECT u.id::text FROM pg_catalog.unnest(v_ids) AS u(id));
+
+  RETURN QUERY SELECT 'documents'::text, (
+    SELECT pg_catalog.count(*) FROM public.documents d
+     WHERE d.tenant_key = p_tenant_key AND (d.lineage_id = p_lineage_id OR d.id = ANY (v_ids))
+  ), NULL::text;
+  RETURN QUERY SELECT 'chunks'::text, (
+    SELECT pg_catalog.count(*) FROM public.document_chunks c WHERE c.document_id = ANY (v_ids)
+  ), NULL::text;
+  RETURN QUERY SELECT 'vectors'::text, (
+    SELECT pg_catalog.count(*) FROM public.chunk_embeddings e
+      JOIN public.document_chunks c ON c.id = e.chunk_id
+     WHERE c.document_id = ANY (v_ids)
+  ), NULL::text;
+  RETURN QUERY SELECT 'parents'::text, (
+    SELECT pg_catalog.count(*) FROM public.document_parents p WHERE p.document_id = ANY (v_ids)
+  ), NULL::text;
+  RETURN QUERY SELECT 'ingestion_jobs'::text, (
+    SELECT pg_catalog.count(*) FROM public.ingestion_jobs j
+     WHERE j.tenant_key = p_tenant_key AND (j.lineage_id = p_lineage_id OR j.document_id = ANY (v_ids))
+  ) + (
+    SELECT pg_catalog.count(*) FROM public.ingestion_jobs_archive j
+     WHERE j.tenant_key = p_tenant_key AND (j.lineage_id = p_lineage_id OR j.document_id = ANY (v_ids))
+  ), NULL::text;
+  RETURN QUERY SELECT 'parse_cache'::text, (
+    SELECT pg_catalog.count(*) FROM public.rag_parse_cache pc
+     WHERE pc.tenant_key = p_tenant_key AND pc.file_sha256 = ANY (v_hashes)
+       AND NOT EXISTS (
+         SELECT 1 FROM public.documents d
+          WHERE d.tenant_key = p_tenant_key AND d.file_sha256 = pc.file_sha256 AND d.lineage_id <> p_lineage_id
+       )
+  ), NULL::text;
+  RETURN QUERY SELECT 'semantic_cache'::text, (
+    SELECT pg_catalog.count(*) FROM public.rag_semantic_cache sc
+     WHERE sc.tenant_key = p_tenant_key
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(sc.source_versions) AS e(v) WHERE (e.v ->> 'document_id') = ANY (v_text_ids)
+       )
+  ), NULL::text;
+  FOR r IN SELECT l.store, l.remaining FROM public.rag_purge_citation_leftovers(p_tenant_key, v_ids) AS l LOOP
+    RETURN QUERY SELECT r.store::text, r.remaining::bigint, NULL::text;
+  END LOOP;
+  RETURN QUERY SELECT 'sync_records'::text, (
+    SELECT pg_catalog.count(*) FROM public.nango_sync_records s
+     WHERE s.document_id = ANY (v_ids)
+        OR (v_audit.source = 'nango' AND v_audit.source_key_sha256 IS NOT NULL
+            AND s.connection_id = v_audit.source_connection_id
+            AND pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(s.file_id, 'UTF8')), 'hex') = v_audit.source_key_sha256)
+  ), NULL::text;
+
+  -- Lexical statistics (0746): staged rows and cluster markers of the tenant, and ledger rows whose chunk is gone. Reported only for
+  -- a tenant whose statistics are on (a state row); the counters hold no document id, so the check is tenant-wide, as the hand-off asks.
+  IF pg_catalog.to_regclass('public.rag_lexical_stats_state') IS NOT NULL THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.rag_lexical_stats_state s WHERE s.tenant_key = $1)' INTO v_lexical_on USING p_tenant_key;
+    IF v_lexical_on THEN
+      EXECUTE 'SELECT (SELECT pg_catalog.count(*) FROM public.rag_lexical_stats_pending p WHERE p.tenant_key = $1)'
+           || CASE WHEN pg_catalog.to_regclass('public.rag_lexical_cluster_units') IS NOT NULL THEN
+                ' + (SELECT pg_catalog.count(*) FROM public.rag_lexical_cluster_dirty m WHERE m.tenant_key = $1)'
+                || ' + (SELECT pg_catalog.count(*) FROM public.rag_lexical_cluster_units u WHERE u.tenant_key = $1'
+                || ' AND NOT EXISTS (SELECT 1 FROM public.document_chunks c WHERE c.id = u.chunk_id))'
+              ELSE '' END
+        INTO v_lexical_left USING p_tenant_key;
+      RETURN QUERY SELECT 'lexical_stats'::text, v_lexical_left, NULL::text;
+    END IF;
+  END IF;
+
+  IF pg_catalog.to_regprocedure('public.rag_purge_foreign_leftovers(text,uuid,uuid[])') IS NOT NULL THEN
+    FOR r IN EXECUTE 'SELECT f.store::text AS store, f.remaining::bigint AS remaining FROM public.rag_purge_foreign_leftovers($1, $2, $3) AS f'
+             USING p_tenant_key, p_lineage_id, v_ids LOOP
+      RETURN QUERY SELECT r.store, r.remaining, NULL::text;
+    END LOOP;
+  END IF;
+
+  IF pg_catalog.to_regprocedure('public.rag_vector_sync_purge_status(text,uuid)') IS NOT NULL THEN
+    FOR r IN EXECUTE 'SELECT s.target::text AS target, s.state::text AS state FROM public.rag_vector_sync_purge_status($1, $2) AS s'
+             USING p_tenant_key, p_lineage_id LOOP
+      RETURN QUERY SELECT 'external:' || r.target,
+                          CASE WHEN r.state IN ('done', 'not_applicable') THEN 0::bigint ELSE 1::bigint END,
+                          r.state;
+    END LOOP;
+  END IF;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_purge_lineage(text, uuid, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_verify(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_lineage(text, uuid, jsonb, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_verify(text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
 -- ==== 0410 r24 delta (the guarded lines train 42 adds to supabase/migrations/0410_security_definer_rpc_grants.sql)
 BEGIN;
 DO $r24_service_role_only$
@@ -3639,3 +4254,9 @@ ORDER BY 1;
 
 -- 8. Access readiness (expect ready: 0936 keeps the access predicate in every leg).
 SELECT public.rag_access_readiness();
+
+-- 9. The purge covers the lexical statistics (0728 inventory, 0746). Expect six rows (five purge_step under lexical_stats, the state
+--    row exempt) and true for both purge functions.
+SELECT relation, store_id, handling FROM public.rag_purge_store_inventory() WHERE relation LIKE 'rag\_lexical\_%' ORDER BY relation;
+SELECT pg_catalog.pg_get_functiondef('public.rag_purge_lineage(text,uuid,jsonb,jsonb)'::regprocedure) LIKE '%rag_purge_hook_lexical_stats%' AS purge_folds_lexical,
+       pg_catalog.pg_get_functiondef('public.rag_purge_verify(text,uuid)'::regprocedure) LIKE '%lexical_stats%' AS verify_reports_lexical;
