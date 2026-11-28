@@ -1159,3 +1159,9 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 05:45Z t42 found a real gap: the 04.4-07 purge-inventory hand-off (6 lexical relations, the hook is never called). Orchestrator decision: fix it in t42 with a new migration at the next free number (~0746; 0742-0745 are taken by the 07-x line). Nudged the idle t41 builder with priority now about the #141 CI failures.
 - 05:59Z t41 #141 CI fixes pushed (ccdb82821; 4 root causes, each reproduced). Forwarded to t42. Waiting for CI.
 - 05:59Z t42 lexical purge hand-off done (228737718, migration 0746). train42-live.sql is at f01e0a09e (runs after t41's SQL and 0991). Eval pytest passes. Next: test-rag, then the 4.2/4.4 gates, then wait for #141.
+- 06:00Z 07-31 DONE (exec/07-31 c536c9e5: 0701-0707 folded into the setup files; phase7-off-parity) and archived. It contains the whole 07 line, so it is the train 43 head.
+  - No autonomous plans are READY. What remains is held or owner live work.
+  - Dispatched phase verifications:
+    - 6.3: session_01X342smV68om84un9T1GJiE (on t42)
+    - 4.4: session_01X342siScUe5821Y1A8MRqu (on t42)
+    - 7: session_01X342sjikryTA7Cv2W9WYTA (on 07-31)
