@@ -1,0 +1,28 @@
+{
+  "description": "Hand-written synthetic Microsoft Graph drive delta recording (D-25): the changes read from delta-0001 on drive-a. Neutral names and made-up ids only.",
+  "responses": {
+    "/v1.0/drives/drive-a/root/delta?token=delta-0001": {
+      "status": 200,
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#Collection(driveItem)",
+        "@odata.deltaLink": "https://graph.microsoft.com/v1.0/drives/drive-a/root/delta?token=delta-0002",
+        "value": [
+          {
+            "id": "item-file-b",
+            "name": "file-b.docx",
+            "eTag": "\"{00000000-0000-0000-0000-0000000000b1},2\"",
+            "lastModifiedDateTime": "2026-02-01T00:00:00Z",
+            "file": { "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            "parentReference": { "driveId": "drive-a", "id": "item-root", "siteId": "site-a" }
+          },
+          {
+            "id": "item-file-c",
+            "deleted": { "state": "deleted" },
+            "file": {},
+            "parentReference": { "driveId": "drive-a" }
+          }
+        ]
+      }
+    }
+  }
+}
