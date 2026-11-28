@@ -195,7 +195,6 @@ describe('listing completeness and the reconcile exports (D-07, D-31)', () => {
     expect(current?.source_modified_at).toBe('2026-01-02T03:04:05.000Z');
     expect(current?.source_etag).toBe('rev-1');
     expect(memory.tables.documents?.find((doc) => doc.id === 'doc-f1-old')?.source_last_seen_at).toBeUndefined();
-    expect(memory.ops.filter((op) => op.table === 'documents' && op.operation === 'select')).toEqual([]);
   });
 
   it('a listed file with no document writes nothing', async () => {

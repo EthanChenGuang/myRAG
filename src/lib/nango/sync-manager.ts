@@ -5,6 +5,7 @@ import { fetchFileContent } from './file-fetcher';
 import { notionWorkspaceId, syncSourcePermissions, type PermissionSyncSummary } from './permission-sync';
 import {
     applySourceDeletions,
+    connectionTenantKey,
     deletionModeOf,
     guardListingRemoval,
     loadSourceConnection,
@@ -16,7 +17,6 @@ import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import {
     nangoOwnerScope,
-    scopeKey,
     type ConnectorProvider,
 } from '@/lib/rag';
 
@@ -246,6 +246,48 @@ async function fetchGoogleDriveFiles(
     return { files, complete: false };
 }
 
+interface SourceSeenInput {
+    userId: string;
+    connectionId: string;
+    fileId: string;
+    /** The document a sync record or the ingest named; the legacy fallback when no tenant key applies. */
+    documentId: string | null | undefined;
+    modifiedAt?: string | null;
+    etag?: string | null;
+}
+
+/**
+ * D-07: stamp the current documents of a listed file with when the source last showed it, and the modification time
+ * and revision tag when the provider reported them. One update and never a select; a failure is logged and ignored.
+ * Under unified the rows are found by identity in the owner's tenant; under legacy by the document id, as the legacy
+ * deletion does.
+ */
+async function markSourceSeen(supabaseAdmin: SupabaseAdmin, input: SourceSeenInput): Promise<void> {
+    if (!input.documentId) return;
+    const values: Record<string, string> = { source_last_seen_at: new Date().toISOString() };
+    const modified = input.modifiedAt ? new Date(input.modifiedAt) : null;
+    if (modified && !Number.isNaN(modified.getTime())) values.source_modified_at = modified.toISOString();
+    if (typeof input.etag === 'string' && input.etag !== '') values.source_etag = input.etag.slice(0, 512);
+    try {
+        const tenantKey = nangoPipeline() === 'unified' ? connectionTenantKey({ user_id: input.userId }) : null;
+        const query = supabaseAdmin.from('documents').update(values);
+        const { error } = tenantKey !== null
+            ? await query
+                .eq('tenant_key', tenantKey)
+                .eq('source', 'nango')
+                .eq('source_connection_id', input.connectionId)
+                .eq('source_key', input.fileId)
+                .eq('is_current', true)
+            : await query
+                .eq('id', input.documentId)
+                .eq('user_id', input.userId)
+                .eq('source', 'nango');
+        if (error) logger.debug('Nango', 'Source seen time not stored', { code: (error as { code?: string }).code ?? null });
+    } catch (error) {
+        logger.debug('Nango', 'Source seen time not stored', { error: error instanceof Error ? error.name : 'unknown' });
+    }
+}
+
 /**
  * Delete documents that no longer exist in the source (Google Drive)
  * This handles the case where files are deleted from Google Drive
@@ -325,7 +367,7 @@ async function deleteOrphanedDocuments(
         if (guard.paused) {
             return 0;
         }
-        if (!complete && deletionModeOf(source) !== null) {
+        if (!complete && (deletionModeOf(source) !== null || listing.origin === 'scheduled')) {
             logger.error('Nango', 'Orphan deletion skipped: the listing is incomplete');
             return 0;
         }
@@ -447,6 +489,7 @@ async function syncGoogleDriveDocuments(
                         permissionsApplied = true;
                         await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existing.document_id, stats, true);
                         logger.debug('Nango', `Skipping ${file.name}: not modified since last sync and document exists`);
+                        await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: existing.document_id, modifiedAt: file.modifiedTime });
                         stats.skipped++;
                         continue;
                     } else if (!documentExists && existing.document_id) {
@@ -502,6 +545,7 @@ async function syncGoogleDriveDocuments(
                     mimeType: file.mimeType,
                     accessKeys: ownerOnlyLabel(userId),
                 });
+                await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: documentId, modifiedAt: file.modifiedTime });
                 permissionsApplied = true;
                 await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats);
 
@@ -614,6 +658,7 @@ async function syncGoogleDriveFilesByIds(
                         // D-20: the content skip must not skip the sharing.
                         permissionsApplied = true;
                         await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, true);
+                        await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: existingDocumentId, modifiedAt: file.modifiedTime });
                         stats.skipped++;
                         continue;
                     }
@@ -667,6 +712,7 @@ async function syncGoogleDriveFilesByIds(
                     mimeType: file.mimeType,
                     accessKeys: ownerOnlyLabel(userId),
                 });
+                await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: documentId, modifiedAt: file.modifiedTime });
                 permissionsApplied = true;
                 await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats);
 
@@ -775,6 +821,7 @@ async function syncNotionPagesByIds(
                             // D-20, D-21: the content skip must not skip the workspace and public mapping.
                             permissionsApplied = true;
                             await syncSourcePermissionsSafely(supabaseAdmin, run, pageId, existing.document_id, stats, true, { notionPage: pageObject });
+                            await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: pageId, documentId: existing.document_id, modifiedAt: modifiedAt });
                             stats.skipped++;
                             logger.debug('Nango', `Skipping unchanged page: ${pageName}`);
                             continue;
@@ -824,6 +871,7 @@ async function syncNotionPagesByIds(
                     mimeType: fileRecord.mime_type,
                     accessKeys: ownerOnlyLabel(userId),
                 });
+                await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: pageId, documentId: documentId, modifiedAt: modifiedAt });
                 permissionsApplied = true;
                 await syncSourcePermissionsForFile(supabaseAdmin, run, pageId, documentId, stats, { notionPage: pageObject });
 
@@ -912,6 +960,12 @@ async function syncNotionPageWithChildren(
     }
 }
 
+/** A provider listing. `complete` is false when the listing was cut short or failed (D-31). */
+interface ProviderListing {
+    files: NangoFileRecord[];
+    complete: boolean;
+}
+
 /**
  * Fetch files from a provider using the appropriate method
  * Some providers have configured syncs, others require direct API access
@@ -921,11 +975,13 @@ async function fetchFilesForProvider(
     provider: string,
     connectionId: string,
     folderId: string
-): Promise<NangoFileRecord[]> {
+): Promise<ProviderListing> {
     try {
         // Try to use Nango's listRecords first (for providers with configured syncs)
         if (provider === 'google-drive') {
-            return await listGoogleDriveFilesViaProxy(nango, connectionId, folderId);
+            const files = await listGoogleDriveFilesViaProxy(nango, connectionId, folderId);
+            // One page of at most 100 is read: a full page may have been cut.
+            return { files, complete: files.length < 100 };
         } else if (provider === 'dropbox') {
             return await listDropboxFilesViaProxy(nango, connectionId, folderId);
         } else if (provider === 'notion') {
@@ -941,10 +997,11 @@ async function fetchFilesForProvider(
                     model: fileModel,
                     limit: MAX_FILES_PER_SYNC,
                 });
-                return filesResponse.records || [];
+                const nextCursor = (filesResponse as { next_cursor?: string | null }).next_cursor;
+                return { files: filesResponse.records || [], complete: nextCursor === null || nextCursor === undefined };
             } catch (e) {
                 logger.warn('Nango', `Could not list records for ${provider}, returning empty list`, e);
-                return [];
+                return { files: [], complete: false };
             }
         }
     } catch (error) {
@@ -997,7 +1054,7 @@ async function listDropboxFilesViaProxy(
     nango: ReturnType<typeof getNango>,
     connectionId: string,
     folderId: string
-): Promise<NangoFileRecord[]> {
+): Promise<ProviderListing> {
     const path = folderId === 'root' ? '' : folderId;
 
     const response = await nango.proxy({
@@ -1011,13 +1068,13 @@ async function listDropboxFilesViaProxy(
         },
     });
 
-    const data = response.data as { entries?: any[] };
+    const data = response.data as { entries?: any[]; has_more?: boolean };
     const entries = data.entries || [];
 
     // Filter to files only (not folders)
     const files = entries.filter(entry => entry['.tag'] === 'file');
 
-    return files.map(file => {
+    const records = files.map(file => {
         // Ensure path starts with '/' as required by Dropbox API
         let filePath = file.path_display || file.path_lower || file.name;
         if (!filePath.startsWith('/')) {
@@ -1034,8 +1091,11 @@ async function listDropboxFilesViaProxy(
             ...(typeof file.sharing_info?.parent_shared_folder_id === 'string'
                 ? { parent_shared_folder_id: file.sharing_info.parent_shared_folder_id }
                 : {}),
+            ...(typeof file.rev === 'string' ? { etag: file.rev } : {}),
         };
     }) as NangoFileRecord[];
+    // One list_folder page is read; has_more means the folder holds more entries than this listing.
+    return { files: records, complete: data.has_more !== true };
 }
 
 /**
@@ -1044,7 +1104,7 @@ async function listDropboxFilesViaProxy(
 async function listNotionPages(
     nango: ReturnType<typeof getNango>,
     connectionId: string
-): Promise<NangoFileRecord[]> {
+): Promise<ProviderListing> {
     try {
         logger.debug('Nango', `Attempting to list Notion pages for connection: ${connectionId}`);
 
@@ -1069,12 +1129,12 @@ async function listNotionPages(
 
         logger.debug('Nango', `Notion search response: ${JSON.stringify(response.data).substring(0, 500)}`);
 
-        const data = response.data as { results?: any[] };
+        const data = response.data as { results?: any[]; has_more?: boolean };
         const results = data.results || [];
 
         if (!results || !Array.isArray(results)) {
             logger.warn('Nango', 'No pages returned from Notion search');
-            return [];
+            return { files: [], complete: false };
         }
 
         logger.info('Nango', `Found ${results.length} Notion pages`);
@@ -1093,23 +1153,25 @@ async function listNotionPages(
 
         // Recursively fetch child pages for each parent page
         const allPages: NangoFileRecord[] = [...pages];
+        let childrenComplete = true;
 
         for (const page of pages) {
             try {
                 const childPages = await fetchNotionChildPages(nango, connectionId, page.id, page.name);
                 allPages.push(...childPages);
             } catch (childError) {
+                childrenComplete = false;
                 logger.warn('Nango', `Failed to fetch children for page ${page.id}`, childError);
             }
         }
 
         logger.info('Nango', `Total pages including children: ${allPages.length}`);
-        return allPages;
+        return { files: allPages, complete: data.has_more !== true && childrenComplete };
     } catch (error) {
         const axiosError = error as any;
         logger.error('Nango', 'Failed to list Notion pages - Status:', axiosError?.status);
         logger.error('Nango', 'Failed to list Notion pages - Error:', error);
-        return [];
+        return { files: [], complete: false };
     }
 }
 
@@ -1364,14 +1426,18 @@ export async function syncDocumentsForConnection(
             // Collect all files from all folders first
             const allFiles: NangoFileRecord[] = [];
             const folderOfFile = new Map<string, string>();
+            let listingsComplete = true;
             for (const folderPath of fileIds) {
                 try {
-                    const files = await fetchFilesForProvider(nango, provider, connectionId, folderPath || 'root');
+                    const listed = await fetchFilesForProvider(nango, provider, connectionId, folderPath || 'root');
+                    const files = listed.files;
+                    if (!listed.complete) listingsComplete = false;
                     logger.debug('Nango', `Found ${files.length} files in folder ${folderPath}`);
                     for (const listed of files) folderOfFile.set(listed.id, folderPath || 'root');
                     allFiles.push(...files);
                 } catch (folderError) {
                     logger.error('Nango', `Failed to fetch files from folder ${folderPath} for ${provider}`, folderError);
+                    listingsComplete = false;
                 }
             }
 
@@ -1384,7 +1450,7 @@ export async function syncDocumentsForConnection(
 
             // Build set of current file IDs for deletion detection
             const currentFileIds = new Set(allFiles.map(f => f.id));
-            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin, sourceConnection, { complete: true });
+            combinedStats.deleted = await deleteOrphanedDocuments(connectionId, userId, currentFileIds, supabaseAdmin, sourceConnection, { complete: listingsComplete });
 
             // Filter to supported file types
             const supportedFiles = allFiles.filter(file => provider === 'notion' || isSupportedFile(file.name));
@@ -1412,6 +1478,7 @@ export async function syncDocumentsForConnection(
                             // D-20: the content skip must not skip the sharing.
                             permissionsApplied = true;
                             await syncSourcePermissionsSafely(supabaseAdmin, multiRun, file.id, existingDocumentId, combinedStats, true, permissionSource);
+                            await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: existingDocumentId, modifiedAt: file.modified_at, etag: file.etag });
                             combinedStats.skipped++;
                             continue;
                         }
@@ -1440,6 +1507,7 @@ export async function syncDocumentsForConnection(
                         mimeType: file.mime_type,
                         accessKeys: ownerOnlyLabel(userId),
                     });
+                    await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: documentId, modifiedAt: file.modified_at, etag: file.etag });
                     permissionsApplied = true;
                     await syncSourcePermissionsForFile(supabaseAdmin, multiRun, file.id, documentId, combinedStats, permissionSource);
 
@@ -1473,12 +1541,13 @@ export async function syncDocumentsForConnection(
 
         // Fetch files - use provider-specific methods instead of listRecords
         // (listRecords requires a configured sync which not all providers have)
-        const files = await fetchFilesForProvider(
+        const listing = await fetchFilesForProvider(
             nango,
             provider,
             connectionId,
             folderId || 'root'
         );
+        const files = listing.files;
         logger.debug('Nango', `Found ${files.length} files for ${provider}`);
 
         // Build set of current file IDs for deletion detection
@@ -1492,7 +1561,7 @@ export async function syncDocumentsForConnection(
             currentFileIds,
             supabaseAdmin,
             sourceConnection,
-            { complete: true }
+            { complete: listing.complete }
         );
 
         // Filter to supported file types
@@ -1524,6 +1593,7 @@ export async function syncDocumentsForConnection(
                         // D-20: the content skip must not skip the sharing.
                         permissionsApplied = true;
                         await syncSourcePermissionsSafely(supabaseAdmin, run, file.id, existingDocumentId, stats, true, permissionSource);
+                        await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: existingDocumentId, modifiedAt: file.modified_at, etag: file.etag });
                         stats.skipped++;
                         continue;
                     }
@@ -1567,6 +1637,7 @@ export async function syncDocumentsForConnection(
                     mimeType: file.mime_type,
                     accessKeys: ownerOnlyLabel(userId),
                 });
+                await markSourceSeen(supabaseAdmin, { userId, connectionId, fileId: file.id, documentId: documentId, modifiedAt: file.modified_at, etag: file.etag });
                 permissionsApplied = true;
                 await syncSourcePermissionsForFile(supabaseAdmin, run, file.id, documentId, stats, permissionSource);
 
@@ -1645,10 +1716,82 @@ export async function syncAllUserConnections(userId: string): Promise<SyncStats[
     return results;
 }
 
-export async function listConnectionFiles(_connection: SourceConnectionRow): Promise<{ fileIds: string[]; complete: boolean }> {
-    return { fileIds: [], complete: true };
+/** A connection row with the selection the listing follows (nango_connections). */
+export interface ListableConnectionRow extends SourceConnectionRow {
+    sync_folder_id?: string | null;
+    sync_file_ids?: string[] | null;
 }
 
-export async function removeOrphans(_connection: SourceConnectionRow, _currentFileIds: readonly string[], _origin: 'sync' | 'scheduled', _options: { complete?: boolean } = {}): Promise<number> {
-    return 0;
+/**
+ * The full listing of what a connection selects, for the scheduled source reconcile (plan 06.3-11, D-31). Uses the
+ * listing code of the sync and ingests nothing. `complete` is false when any listing was cut short or failed, and for a
+ * selection whose sync never removes (named Google Drive files, Notion page selections).
+ */
+export async function listConnectionFiles(connection: ListableConnectionRow): Promise<{ fileIds: string[]; complete: boolean }> {
+    const folderId = connection.sync_folder_id ?? null;
+    const selected = connection.sync_file_ids ?? null;
+    const fileIds: string[] = [];
+    let complete = true;
+    try {
+        if (connection.provider === 'google-drive') {
+            const folders = folderId === 'multi-folder-mode' && selected && selected.length > 0
+                ? selected
+                : selected && selected.length > 0
+                    ? null
+                    : folderId
+                        ? [folderId]
+                        : null;
+            if (folders === null) return { fileIds: [], complete: false };
+            for (const folder of folders) {
+                try {
+                    const listing = await fetchGoogleDriveFiles(connection.connection_id, folder);
+                    fileIds.push(...listing.files.map((file) => file.id));
+                    if (!listing.complete) complete = false;
+                } catch (error) {
+                    logger.error('Nango', 'Failed to list a Google Drive folder for reconcile', { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
+                    complete = false;
+                }
+            }
+            return { fileIds: Array.from(new Set(fileIds)), complete };
+        }
+
+        const nango = getNango();
+        if (connection.provider === 'notion') {
+            const listing = await listNotionPages(nango, connection.connection_id);
+            return { fileIds: Array.from(new Set(listing.files.map((file) => file.id))), complete: listing.complete };
+        }
+
+        const folders = folderId === 'multi-folder-mode' && selected && selected.length > 0 ? selected : [folderId || 'root'];
+        for (const folder of folders) {
+            try {
+                const listing = await fetchFilesForProvider(nango, connection.provider, connection.connection_id, folder || 'root');
+                fileIds.push(...listing.files.map((file) => file.id));
+                if (!listing.complete) complete = false;
+            } catch (error) {
+                logger.error('Nango', `Failed to list a ${connection.provider} folder for reconcile`, { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
+                complete = false;
+            }
+        }
+        return { fileIds: Array.from(new Set(fileIds)), complete };
+    } catch (error) {
+        logger.error('Nango', 'Connection listing failed', { connectionId: connection.id, error: error instanceof Error ? error.name : 'unknown' });
+        return { fileIds: Array.from(new Set(fileIds)), complete: false };
+    }
+}
+
+/**
+ * The guarded listing removal for the scheduled reconcile (plan 06.3-11): the mass-delete pause, then the one deletion
+ * entry point. An incomplete listing removes nothing and records an incomplete run. Returns the removed count.
+ */
+export async function removeOrphans(
+    connection: SourceConnectionRow,
+    currentFileIds: Iterable<string>,
+    origin: 'sync' | 'scheduled',
+    options: { complete?: boolean; admin?: SupabaseAdmin } = {}
+): Promise<number> {
+    const supabaseAdmin = options.admin ?? getSupabaseAdmin();
+    return deleteOrphanedDocuments(connection.connection_id, connection.user_id, new Set(currentFileIds), supabaseAdmin, connection, {
+        complete: options.complete ?? true,
+        origin,
+    });
 }
