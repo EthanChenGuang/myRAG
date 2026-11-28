@@ -39,7 +39,7 @@ const proxy = vi.hoisted(() =>
   }),
 );
 const listRecords = vi.hoisted(() => vi.fn(async () => remote.records));
-const raiseSourceAlert = vi.hoisted(() => vi.fn(async () => 'connection_status' as const));
+const raiseSourceAlert = vi.hoisted(() => vi.fn(async (..._args: unknown[]) => 'connection_status' as const));
 const softDeleteLineage = vi.hoisted(() =>
   vi.fn(async (_scope: unknown, lineageId: string) => ({ ok: true as const, outcome: 'deleted' as const, lineageId, jobId: null })),
 );
