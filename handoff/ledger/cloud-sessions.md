@@ -1107,3 +1107,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - Excluded: 05.2.1-23, 04.1-18-r2, 06.2-30.
 - 02:29Z 06.2-28 DONE (exec/06.2-28 24e3d5dc: scope-gate Config UI panel; design gate PASS) and archived; added to train 42.
 - 02:31Z 04.4-18 DONE (exec/04.4-18 46c927ae: cluster-DF eval harness plus a derived spec, pre-registered under D-37) and archived. Added to t42 in place of 04.4-17. Dispatched 04.4-19 (gate run) session_01X342sjmxb25zX8B4v5sWaQ; no default flip, the owner decides.
+- 02:38Z t40 PR #140 opened (c6a990d7: 20 plans, main merged; train40-live.sql at ac86d6b0c). Subscribed. Asked the builder whether the 11 pre-existing failures are fixed. Merge when all green, then t41.
