@@ -182,7 +182,24 @@ No `TBD`/`FIXME`/`XXX` in `src/lib/rag/query/`, `src/lib/rag/cache/`, `v2/stages
 
 ## Local test results
 
-(filled by orchestrator)
+These were run by the orchestrator on `verify/06` (origin/main `00afa6d9`) on 2026-11-27/28. The install was `npm ci --ignore-scripts --onnxruntime-node-install-cuda=skip` and `uv sync --locked` (sidecar extras chunking and preflight; eval all extras), followed by `fill-tiktoken-cache.py`.
+
+| Gate | Result |
+|------|--------|
+| `npx next typegen && npx tsc --noEmit -p tsconfig.json` | 0 errors |
+| `npx vitest run` on the 75 Phase 6 test files named in the 06-01…06-45 SUMMARYs | 75 files, 1935 tests passed |
+| `node --import tsx --test` on 39 Phase 6 files (the 28 `.mts` tests from the SUMMARYs plus `tests/rag-db` cache, language-shares, query, hybrid, grants, search-path, translation-query, cross-language and bm25-filter-parity), `MYRAG_DEPLOYMENT_MODE=single` | 1124 tests: 1120 passed, 0 failed, 4 skipped |
+| The same 39 files, `MYRAG_DEPLOYMENT_MODE=multi` (run as 3 parallel parts) | 1124 tests: 1120 passed, 0 failed, 4 skipped |
+| `uv run --directory eval --frozen python -m pytest -q` (full eval suite) | 2719 passed, 1 warning |
+| `npm run test-rag -- --out eval/out/verify-06` (default tier) | exit 0, gate PASS (7 skipped). The absolute gate is report-only for this tier and records `false_refusal_rate language:en 0.3143 > 0.25`; exit code unchanged. This is not Phase 6 code: the mode comes from `eval/reports/phase-05.3/absolute-gate-measurement.json` |
+| `npm run test-rag -- --fixture-mode ingest --out eval/out/verify-06-ingest` | exit 0, absolute gate PASS (enforce), gate PASS (8 skipped) |
+| Full sharded `tests/rag-db` suite | Not run locally (owner speed rule 2026-11-28); CI `pr-smoke.yml` covers it (10 shards) |
+
+`eval/fixtures/parse/` was restored after pytest, and no product file changed.
+
+### Orchestrator addenda (from the security audit and the integration check)
+- **Security W-1 (medium, not in the register).** Client-supplied `retrievalFilters` are neither in the semantic cache key nor a bypass reason. `cacheKeyFilterParts` (`src/lib/rag/cache/keys.ts:35`) is never called from `run-layer.ts:390-399`, and `bypass.ts` only checks `versionScope` (confirmed). Within one tenant, a filtered answer or refusal can therefore be replayed to an unfiltered question. This bears on CACHE-01 and is listed in 06-SECURITY.md. Fix: bypass the cache when any request filter is set, or hash the normalised filters into the key, and add a filtered/unfiltered test pair.
+- **Gap 2 also covers attribute writers.** Migration `1005_attribute_writers.sql:208,398` invalidates pgvector only, so the RedisVL fix should cover the attribute writers too.
 
 ### Human Verification Required
 
