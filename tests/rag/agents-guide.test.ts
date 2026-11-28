@@ -538,3 +538,10 @@ describe('AGENTS.md and the pipeline guide carry the quick-deferred-batch rules'
     expect(README).toContain('offered as an API only: no Config UI panel or app page calls it');
   });
 });
+
+describe('AGENTS.md routes the fine-tune slot comparison through the lifecycle harness', () => {
+  test('section 6.1 says run-profile-compare has no slot arm and names the lifecycle harness', () => {
+    expect(AGENTS).toContain('`eval/harness/run-profile-compare.mts` has no slot arm');
+    expect(AGENTS).toContain('`tests/helpers/finetune-lifecycle.mts`');
+  });
+});
