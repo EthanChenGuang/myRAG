@@ -1070,3 +1070,7 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 01:24Z 06.3-28 DONE (exec/06.3-28 dfdee820: an incomplete listing never removes orphans; D-31 resolved) and archived; goes into train 42. No new plans are READY.
 - 01:25Z PR #137 CI fix pushed (7a7f2cee): canary and access-groups-client-writes now insert as service_role. Session archived. Waiting for CI to re-run before merging.
 - 01:30Z 06.3-22 DONE (exec/06.3-22 fe7843aa: purge dialog, records panel, withdrawn count) and archived; queued for train 42. Dispatched 06.3-29: session_01X342sjJe2PGw6SEbAw4ex9 (base 06.3-22 + t40).
+- 01:31Z 04.1-18-r2 DONE (exec/04.1-18-r2 c12fa16e) and archived; result not_flipped, no default changed.
+  - D-28 revision applied: ingest false refusal 0.241 -> 0.195. Fixture floors refit: prechunked 0.1761, ingest 0.1818.
+  - HOLD FROM TRAINS: tests/rag/p52-corpus.test.ts fails one case. en-off-topic-context-002 was designed to score above the floor, and it now scores 0.1742 against the new floor 0.1761.
+  - MORNING (owner): the fix needs a golden item edit after seeing results (D-37), so the owner decides. Options: (a) edit the item, (b) re-label its planned band, (c) keep the old floor.
