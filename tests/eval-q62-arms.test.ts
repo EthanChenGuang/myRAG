@@ -31,9 +31,10 @@ describe('Phase 6.2 comparison arms (06.2-30, D-10)', () => {
     expect(config.entryProfile).toBeUndefined();
   });
 
-  test('only the routing arm selects a model, and it selects auto', () => {
+  test('routing selects auto against single-pass on the fixed D-35 quality model; no other arm selects a model', () => {
     expect(load('routing').selectedModel).toBe('auto');
-    for (const name of ['single-pass', 'decompose', 'completeness', 'subq-filters', 'glossary', 'scope-gate', 'speculative']) {
+    expect(load('single-pass').selectedModel).toBe('anthropic/claude-sonnet-5.5');
+    for (const name of ['decompose', 'completeness', 'subq-filters', 'glossary', 'scope-gate', 'speculative']) {
       expect(load(name).selectedModel).toBeUndefined();
     }
   });
