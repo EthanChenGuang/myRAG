@@ -17,7 +17,7 @@ import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTabl
 import { isTemplatedItem } from './templated-fixtures.mts';
 import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
 import { closeQ62Tenant, isQ62Item, Q62_USER_ID, withQ62Tenant, type Q62Tenant } from './q62-fixtures.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedIngestDupClusters, seedRunLexicalStats, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import {
@@ -516,6 +516,30 @@ export async function prepareInProcessEval(options: {
     }
   }
 
+  // Plan 04.4-18: the ingest mode clusters at ingestion only with RAG_DUP_CLUSTERS in its build env, which it leaves off; a run whose
+  // effective config turns the switch on gets the prechunked mode's rag:dup-clusters step on the database this build made.
+  if (!ingestFixture && fixtureMode === 'ingest') {
+    try {
+      const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+      await seedIngestDupClusters(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+      const q62Tenant = fixture.q62Tenant;
+      if (q62Tenant) {
+        await withQ62Tenant(startedEdge, fixture.db, q62Tenant, () =>
+          seedIngestDupClusters(
+            { db: q62Tenant.db, fixtureUserId: Q62_USER_ID, sqlSha256: {} },
+            { deploymentMode, admin: fixtureAdminClient(startedEdge.url) },
+          ),
+        );
+      }
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await closeTableSplitTenants(fixture.tableSplitTenants);
+      await closeQ62Tenant(fixture.q62Tenant);
+      await fixture.db.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
   // Plan 04.4-13 (D-36): statistics for a bm25 run, in both fixture modes, after relex and the feature rebuilds.
   let lexicalStats: import('./pglite-supabase.mts').RunLexicalStatsReport | null = null;
   try {
@@ -689,6 +713,7 @@ async function writeLexicalOverlap(session: InProcessEval, deploymentMode: Deplo
       tenantHash: tenantHash(tenantKey),
       k1: stats.k1,
       b: stats.b,
+      ...(stats.dfMode === 'cluster' ? { dfMode: 'cluster' as const } : {}),
       ...(lexicalOptionsOn(config)
         ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
         : {}),
@@ -729,6 +754,7 @@ async function writeLexicalTies(session: InProcessEval, deploymentMode: Deployme
       tenantHash: tenantHash(tenantKey),
       k1: stats.k1,
       b: stats.b,
+      ...(stats.dfMode === 'cluster' ? { dfMode: 'cluster' as const } : {}),
       ...(lexicalOptionsOn(config)
         ? { lexicalOptionsFor: async (question: string) => (await resolveLexicalOptions(scope, config, { language: queryLanguage(question) })).options }
         : {}),

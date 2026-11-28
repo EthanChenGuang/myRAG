@@ -500,29 +500,62 @@ export async function seedFixtureFeatures(
     report.inputs['table_rows:on'] = sha256Hex('on');
   }
 
-  if (dupClusters) {
-    const { runDupBackfill } = await import('@/lib/rag/dedupe/backfill');
-    const clustered = await runDupBackfill({ db: options.admin, tenantKey, evalRun: true });
-    report.dupClustered = clustered.clustered;
-    const paramsPath = path.join(REPO_ROOT, 'eval/config/dup-cluster-params.json');
-    report.inputs['dup_clusters:eval_run'] = sha256Hex(fs.existsSync(paramsPath) ? fs.readFileSync(paramsPath, 'utf8') : '');
-  }
+  if (dupClusters) report.dupClustered = await runFixtureDupClusters(options.admin, tenantKey, report.inputs);
 
   Object.assign(fixture.sqlSha256, report.inputs);
   return report;
+}
+
+/** rag:dup-clusters with evalRun for one tenant (a fixture threshold entry applies here only); records the dup_clusters:eval_run input. */
+async function runFixtureDupClusters(admin: RpcClient, tenantKey: string, inputs: Record<string, string>): Promise<number> {
+  const { runDupBackfill } = await import('@/lib/rag/dedupe/backfill');
+  const clustered = await runDupBackfill({ db: admin, tenantKey, evalRun: true });
+  const paramsPath = path.join(REPO_ROOT, 'eval/config/dup-cluster-params.json');
+  inputs['dup_clusters:eval_run'] = sha256Hex(fs.existsSync(paramsPath) ? fs.readFileSync(paramsPath, 'utf8') : '');
+  return clustered.clustered;
+}
+
+/**
+ * Plan 04.4-18: the ingest fixture mode builds no duplicate clusters at ingestion (its build env leaves RAG_DUP_CLUSTERS off). For a run
+ * whose effective config has dupClusters on, and only while no chunk of the tenant has a cluster yet, run the same rag:dup-clusters step
+ * as the prechunked mode and record `dup_clusters:eval_run` plus the clustered count. Every other run reads one config value and writes
+ * nothing.
+ */
+export async function seedIngestDupClusters(
+  fixture: { db: PGlite; fixtureUserId: string; sqlSha256: Record<string, string> },
+  options: { deploymentMode: DeploymentMode; admin: RpcClient },
+): Promise<number | null> {
+  const { loadRagConfig } = await import('@/lib/rag/config');
+  const { getRagDeps } = await import('@/lib/rag/deps');
+  if (!loadRagConfig(getRagDeps().ragEnv()).v2.dupClusters) return null;
+  const { mintScope, scopeKey } = await import('@/lib/rag/tenant/scope');
+  const scope = options.deploymentMode === 'multi-tenant' ? mintScope('personal', fixture.fixtureUserId, null) : mintScope('single', null, null);
+  const tenantKey = scopeKey(scope).toLowerCase();
+  const existing = await fixture.db.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM public.document_chunks WHERE tenant_key = $1 AND dup_cluster_id IS NOT NULL',
+    [tenantKey],
+  );
+  if ((existing.rows[0]?.n ?? 0) > 0) return null;
+  const inputs: Record<string, string> = {};
+  const clustered = await runFixtureDupClusters(options.admin, tenantKey, inputs);
+  inputs[`dup_clusters:clustered:${clustered}`] = sha256Hex(String(clustered));
+  Object.assign(fixture.sqlSha256, inputs);
+  return clustered;
 }
 
 /** What lexical statistics seeding did for a bm25 run (D-36); null when the run's effective scoring is ts_rank_cd. */
 export interface RunLexicalStatsReport {
   k1: number;
   b: number;
+  /** The run's effective DF mode (D-44, D-45): `cluster` also enabled and rebuilt corpus chunks_cluster. */
+  dfMode: 'raw' | 'cluster';
   tenants: import('./lexical-stats.mts').TenantLexicalStats[];
 }
 
 /**
- * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures), enable and rebuild the lexical statistics of every
- * fixture tenant, the isolated table_split tenants included, when the run's effective scoring (the app config under the run's
- * environment) is bm25. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
+ * D-36: after the corpus is loaded and relexed (and after seedFixtureFeatures and the ingest clustering step), enable and rebuild the
+ * lexical statistics of every fixture tenant, the isolated table_split tenants included, when the run's effective scoring (the app
+ * config under the run's environment) is bm25; with the effective DF mode `cluster` (plan 04.4-18) the cluster corpus too. Under ts_rank_cd nothing is read or written and the database inputs hash is unchanged, so the four statistics
  * tables stay empty.
  */
 export async function seedRunLexicalStats(fixture: {
@@ -535,10 +568,12 @@ export async function seedRunLexicalStats(fixture: {
   const scoring = loadRagConfig(getRagDeps().ragEnv()).v2.lexicalScoring;
   if (scoring.mode !== 'bm25') return null;
   const { fixtureTenantKeys, seedFixtureLexicalStats } = await import('./lexical-stats.mts');
-  const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db));
-  for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey])));
+  const seedOptions = scoring.dfMode === 'cluster' ? { cluster: true } : {};
+  const tenants = await seedFixtureLexicalStats(fixture.db, await fixtureTenantKeys(fixture.db), seedOptions);
+  for (const tenant of fixture.tableSplitTenants ?? []) tenants.push(...(await seedFixtureLexicalStats(tenant.db, [tenant.tenantKey], seedOptions)));
   fixture.sqlSha256['lexical_stats:bm25'] = sha256Hex('bm25');
-  return { k1: scoring.k1, b: scoring.b, tenants };
+  if (scoring.dfMode === 'cluster') fixture.sqlSha256['lexical_stats:cluster'] = sha256Hex('cluster');
+  return { k1: scoring.k1, b: scoring.b, dfMode: scoring.dfMode, tenants };
 }
 
 export async function createFixtureDatabase(options: {

@@ -58,6 +58,10 @@ JSON_NAME = "lexical-compare.json"
 MARKDOWN_NAME = "lexical-compare.md"
 BASE_RUN_CONFIG = "eval/config/runs/v2-default.json"
 TOKENIZER_SWITCHES = ("RAG_LEXICAL_DICTIONARY", "RAG_LEXICAL_STEM_IT", "RAG_LEXICAL_QUANTITY", "RAG_IDENTIFIER_INDEX")
+#: Plan 04.4-18: document-frequency modes of the bm25 arms. `cluster` adds the arms lexical_bm25_cluster and rrf_bm25_cluster.
+DF_MODES = ("raw", "cluster")
+CLUSTER = "cluster"
+DfMode = Literal["raw", "cluster"]
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -83,14 +87,29 @@ class ArmSpec(_Model):
     b: float | None = None
     #: the lexical-leg harness label (`ts_rank_cd`, `bm25` or `bm25:k1=..,b=..`) of a lexical arm.
     leg_label: str | None = None
+    #: plan 04.4-18: None in the default raw-only comparison (today's arms); `raw` or `cluster` when the cluster DF mode is compared.
+    df_mode: DfMode | None = None
 
 
 def _combo_suffix(k1: float, b: float) -> str:
     return f"_k1={k1:g}_b={b:g}"
 
 
-def arm_grid(k1s: Sequence[float] = (DEFAULT_K1,), bs: Sequence[float] = (DEFAULT_B,)) -> list[ArmSpec]:
-    """The two ts_rank_cd arms plus one bm25 arm pair per k1 x b combination (at most 9); a single default combination is unsuffixed."""
+def parse_df_modes(values: Sequence[str]) -> tuple[str, ...]:
+    """`raw` (default) or `raw,cluster`: cluster arms are always compared with the raw bm25 arms, so raw is listed with them."""
+    modes = [value.strip() for value in values if value.strip() != ""]
+    if not modes or any(mode not in DF_MODES for mode in modes):
+        raise CompareError("--df-mode takes raw or raw,cluster")
+    if "raw" not in modes:
+        raise CompareError("--df-mode cluster is compared against the raw bm25 arms; list raw,cluster")
+    return tuple(mode for mode in DF_MODES if mode in modes)
+
+
+def arm_grid(k1s: Sequence[float] = (DEFAULT_K1,), bs: Sequence[float] = (DEFAULT_B,), df_modes: Sequence[str] = ("raw",)) -> list[ArmSpec]:
+    """The two ts_rank_cd arms plus one bm25 arm pair per k1 x b combination (at most 9); a single default combination is unsuffixed.
+
+    With `cluster` in df_modes every bm25 arm also gets a cluster twin (label suffix `_cluster` after `bm25`), and the raw bm25 arms are
+    marked df_mode raw; the default raw-only grid is unchanged."""
     k1_values = list(dict.fromkeys(k1s))
     b_values = list(dict.fromkeys(bs))
     if not k1_values or not b_values:
@@ -99,24 +118,37 @@ def arm_grid(k1s: Sequence[float] = (DEFAULT_K1,), bs: Sequence[float] = (DEFAUL
         raise CompareError("k1 must be finite and not negative, b from 0 to 1")
     if len(k1_values) * len(b_values) > MAX_GRID:
         raise CompareError(f"the k1 x b grid is capped at {MAX_GRID} combinations")
+    modes = parse_df_modes(df_modes)
+    with_cluster = CLUSTER in modes
     single = k1_values == [DEFAULT_K1] and b_values == [DEFAULT_B]
     arms = [
         ArmSpec(label=f"lexical_{TS}", kind="lexical", scoring=TS, leg_label=TS),
         ArmSpec(label=f"rrf_{TS}", kind="rrf", scoring=TS),
     ]
+    raw_mode: dict[str, Any] = {"df_mode": "raw"} if with_cluster else {}
     for k1 in k1_values:
         for b in b_values:
             suffix = "" if single else _combo_suffix(k1, b)
             leg = BM25 if single else f"bm25:k1={k1:g},b={b:g}"
-            arms.append(ArmSpec(label=f"lexical_{BM25}{suffix}", kind="lexical", scoring=BM25, k1=k1, b=b, leg_label=leg))
-            arms.append(ArmSpec(label=f"rrf_{BM25}{suffix}", kind="rrf", scoring=BM25, k1=k1, b=b))
+            arms.append(ArmSpec(label=f"lexical_{BM25}{suffix}", kind="lexical", scoring=BM25, k1=k1, b=b, leg_label=leg, **raw_mode))
+            arms.append(ArmSpec(label=f"rrf_{BM25}{suffix}", kind="rrf", scoring=BM25, k1=k1, b=b, **raw_mode))
+    if with_cluster:
+        for k1 in k1_values:
+            for b in b_values:
+                suffix = "" if single else _combo_suffix(k1, b)
+                leg = BM25 if single else f"bm25:k1={k1:g},b={b:g}"
+                arms.append(ArmSpec(label=f"lexical_{BM25}_{CLUSTER}{suffix}", kind="lexical", scoring=BM25, k1=k1, b=b, leg_label=leg, df_mode=CLUSTER))
+                arms.append(ArmSpec(label=f"rrf_{BM25}_{CLUSTER}{suffix}", kind="rrf", scoring=BM25, k1=k1, b=b, df_mode=CLUSTER))
     return arms
 
 
 def arm_pairs(arms: Sequence[ArmSpec]) -> list[tuple[ArmSpec, ArmSpec]]:
-    """(ts_rank_cd arm, bm25 arm) per kind and combination."""
+    """(ts_rank_cd arm, bm25 arm) per kind and combination; then (raw bm25 arm, cluster bm25 arm) per kind and combination."""
     base = {arm.kind: arm for arm in arms if arm.scoring == TS}
-    return [(base[arm.kind], arm) for arm in arms if arm.scoring == BM25]
+    pairs = [(base[arm.kind], arm) for arm in arms if arm.scoring == BM25]
+    raw = {(arm.kind, arm.k1, arm.b): arm for arm in arms if arm.scoring == BM25 and arm.df_mode != CLUSTER}
+    pairs += [(raw[(arm.kind, arm.k1, arm.b)], arm) for arm in arms if arm.scoring == BM25 and arm.df_mode == CLUSTER and (arm.kind, arm.k1, arm.b) in raw]
+    return pairs
 
 
 # ---------- ranked lists
@@ -306,6 +338,12 @@ def _expected_env(spec: ArmSpec) -> dict[str, str]:
     if spec.scoring == BM25:
         env["RAG_LEXICAL_BM25_K1"] = f"{spec.k1:g}"
         env["RAG_LEXICAL_BM25_B"] = f"{spec.b:g}"
+    # Plan 04.4-18: only arms of a cluster comparison name the DF mode; cluster needs RAG_DUP_CLUSTERS on to be effective (D-45).
+    if spec.df_mode == "raw":
+        env["RAG_LEXICAL_DF_MODE"] = "raw"
+    elif spec.df_mode == CLUSTER:
+        env["RAG_LEXICAL_DF_MODE"] = CLUSTER
+        env["RAG_DUP_CLUSTERS"] = "true"
     return env
 
 
@@ -313,7 +351,14 @@ def verify_rrf_traces(spec: ArmSpec, traces: Sequence[RagTrace]) -> None:
     """T-04.4-43: every trace of an RRF arm ran with the arm's scoring, k1, b and no reranker (absent variables read as the app defaults)."""
     if not traces:
         raise CompareError(f"arm {spec.label}: the run has no trace")
-    defaults = {"RAG_LEXICAL_SCORING": TS, "RAG_LEXICAL_BM25_K1": f"{DEFAULT_K1:g}", "RAG_LEXICAL_BM25_B": f"{DEFAULT_B:g}", "RAG_RERANKER": "none"}
+    defaults = {
+        "RAG_LEXICAL_SCORING": TS,
+        "RAG_LEXICAL_BM25_K1": f"{DEFAULT_K1:g}",
+        "RAG_LEXICAL_BM25_B": f"{DEFAULT_B:g}",
+        "RAG_RERANKER": "none",
+        "RAG_LEXICAL_DF_MODE": "raw",
+        "RAG_DUP_CLUSTERS": "false",
+    }
     for trace in traces:
         env = trace.effective_config.rag_env
         for name, wanted in _expected_env(spec).items():
@@ -334,6 +379,8 @@ def load_lexical_arm(spec: ArmSpec, directory: Path, eval_hash: str) -> LoadedAr
     if not manifest_path.is_file() or not (directory / LEGS_FILE).is_file():
         raise CompareError(f"arm {spec.label}: {repo_relative(directory)} holds no lexical-leg run ({LEGS_FILE}, {LEGS_MANIFEST})")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if spec.df_mode is not None and manifest.get("df_mode") != spec.df_mode:
+        raise CompareError(f"arm {spec.label}: {repo_relative(manifest_path)} is not a df_mode {spec.df_mode} lexical-leg run")
     if manifest.get("eval_set_sha256") != eval_hash:
         raise CompareError(f"arm {spec.label}: the lexical-leg run's eval-set hash differs from the eval set given with --golden")
     labels = {arm.get("label") for arm in manifest.get("arms") or []}
@@ -341,7 +388,10 @@ def load_lexical_arm(spec: ArmSpec, directory: Path, eval_hash: str) -> LoadedAr
         raise CompareError(f"arm {spec.label}: the lexical-leg run has no arm {spec.leg_label}")
     options = manifest.get("lexical_options") or {}
     switches = {key: json.dumps(value) for key, value in sorted(options.items())}
-    config_hash = _canonical_hash({"arm": spec.leg_label, "profile_id": manifest.get("profile_id"), "limit": manifest.get("limit"), "lexical_options": options})
+    hashed: dict[str, Any] = {"arm": spec.leg_label, "profile_id": manifest.get("profile_id"), "limit": manifest.get("limit"), "lexical_options": options}
+    if spec.df_mode is not None:
+        hashed["df_mode"] = spec.df_mode
+    config_hash = _canonical_hash(hashed)
     return LoadedArm(spec, _leg_lists(directory / LEGS_FILE, spec.leg_label or ""), config_hash, switches)
 
 
@@ -467,6 +517,11 @@ def assert_private_out(out: Path, *, allow_committed: bool, repo_root: Path = RE
 
 HarnessCallable = Callable[..., HarnessRun]
 
+CLUSTER_NOTE = (
+    "Cluster DF arms (plan 04.4-18): *_bm25_cluster score with document frequency counted once per duplicate cluster (RAG_LEXICAL_DF_MODE="
+    "cluster, RAG_DUP_CLUSTERS=true); they are paired with the ts_rank_cd arms and with the raw bm25 arms (cluster minus raw)."
+)
+
 
 def run_rrf_arm(spec: ArmSpec, *, golden: Path, out: Path, base_url: str, runner: HarnessCallable = run_harness) -> Path:
     """One RRF arm through the eval route against a deployment that carries the arm's settings; the traces are checked afterwards."""
@@ -491,11 +546,21 @@ def compare_from_reports(
     eval_hash = _sha256(golden_bytes)
     golden, dev_hash = _dev_answerable(load_golden(golden_path), Path(golden_path))
     legs = Path(lexical_leg_dir) if lexical_leg_dir is not None else Path(reports) / LEGS_DIR
+
+    def legs_dir(spec: ArmSpec) -> Path:
+        # A cluster comparison reads the per-mode directories lexical-leg-run.mts writes for --df-mode raw,cluster (ts_rank_cd from raw).
+        if not any(arm.df_mode is not None for arm in arms):
+            return legs
+        return legs / (spec.df_mode or "raw")
+
     loaded = [
-        load_lexical_arm(spec, legs, eval_hash) if spec.kind == "lexical" else load_rrf_arm(spec, Path(reports) / RRF_DIR / spec.label, dev_hash)
+        load_lexical_arm(spec, legs_dir(spec), eval_hash) if spec.kind == "lexical" else load_rrf_arm(spec, Path(reports) / RRF_DIR / spec.label, dev_hash)
         for spec in arms
     ]
-    return build_comparison(golden, loaded, eval_hash=eval_hash, dev_hash=dev_hash, seed=seed, resamples=resamples)
+    report = build_comparison(golden, loaded, eval_hash=eval_hash, dev_hash=dev_hash, seed=seed, resamples=resamples)
+    if any(arm.df_mode == CLUSTER for arm in arms):
+        report = report.model_copy(update={"notes": [*report.notes, CLUSTER_NOTE]})
+    return report
 
 
 def write_report(report: LexicalComparison, out: Path) -> None:
@@ -523,12 +588,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lexical-leg-dir", type=Path, help="output of eval/harness/lexical-leg-run.mts (default <from-reports>/lexical-legs)")
     parser.add_argument("--k1", type=_numbers, default=[DEFAULT_K1])
     parser.add_argument("--b", type=_numbers, default=[DEFAULT_B])
+    parser.add_argument("--df-mode", default="raw", help="raw (default) or raw,cluster: also the cluster-DF bm25 arms (plan 04.4-18)")
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--resamples", type=int, default=RESAMPLES)
     parser.add_argument("--allow-committed-out", action="store_true", help="write the report outside a git-ignored directory")
     args = parser.parse_args(argv)
     try:
-        arms = arm_grid(args.k1, args.b)
+        arms = arm_grid(args.k1, args.b, args.df_mode.split(","))
         out = resolve_cli_path(args.out)
         assert_private_out(out, allow_committed=args.allow_committed_out)
         golden = resolve_cli_path(args.golden)

@@ -25,6 +25,7 @@ from rag_eval.phase44_gate import (
     OverlapReport,
     Phase44GateSpec,
     cap_agreement_gate,
+    expected_df_mode,
     main,
     off_identity_gate,
     on_gate,
@@ -135,7 +136,7 @@ def write_fixture_runs(root: Path) -> None:
         manifest = _manifest().model_copy(update={"golden_path": GOLDEN_REL})
         (directory / "run.json").write_text(json.dumps(manifest.model_dump(mode="json"), sort_keys=True, indent=2) + "\n", encoding="utf-8")
         if not run.phase44_off:
-            (directory / OVERLAP_FILE).write_text(json.dumps(_overlap(1.0).model_dump(mode="json"), sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            (directory / OVERLAP_FILE).write_text(json.dumps(_overlap(1.0).model_dump(mode="json", exclude={"df_mode"}), sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
 def _data_spec(root: Path = DATA) -> Phase44GateSpec:
@@ -286,6 +287,31 @@ def test_cap_agreement_fails_at_0_94_and_passes_at_0_95():
     assert unmeasured.passed is False and "not measured" in unmeasured.offenders[0]
     other_k = cap_agreement_gate(gate, {**passing, "v2-lexical-bm25-on-prechunked": _overlap(1.0, k=5)})
     assert other_k.passed is False and "k=5" in other_k.offenders[0]
+
+
+def test_cap_agreement_checks_the_df_mode_the_overlap_was_measured_with():
+    """Plan 04.4-18: a cluster run's overlap must be measured on cluster statistics, a raw run's on raw ones (no df_mode key)."""
+    gate = _spec().gates.cap_agreement
+    raw = {name: _overlap(0.95) for name in gate.runs}
+    cluster = {name: raw[name].model_copy(update={"df_mode": "cluster"}) for name in gate.runs}
+    wanted = {name: "cluster" for name in gate.runs}
+    assert cap_agreement_gate(gate, cluster, wanted).passed is True
+    assert cap_agreement_gate(gate, raw).passed is True
+    assert cap_agreement_gate(gate, raw, {name: None for name in gate.runs}).passed is True
+    on_raw = cap_agreement_gate(gate, raw, wanted)
+    assert on_raw.passed is False
+    assert on_raw.offenders[0] == f"{gate.runs[0]}: overlap measured with df_mode raw, the run serves cluster"
+    assert cap_agreement_gate(gate, cluster).passed is False
+    assert "df_mode" not in raw[gate.runs[0]].model_dump(exclude_none=True)
+
+
+def test_expected_df_mode_is_cluster_only_when_the_run_config_makes_it_effective():
+    on = {"RAG_LEXICAL_SCORING": "bm25", "RAG_DUP_CLUSTERS": "true", "RAG_LEXICAL_DF_MODE": "cluster"}
+    assert expected_df_mode({"env": on}) == "cluster"
+    assert expected_df_mode({"env": {**on, "RAG_DUP_CLUSTERS": "false"}}) is None
+    assert expected_df_mode({"env": {**on, "RAG_LEXICAL_SCORING": "ts_rank_cd"}}) is None
+    assert expected_df_mode({"env": {**on, "RAG_LEXICAL_DF_MODE": "raw"}}) is None
+    assert expected_df_mode({"env": {}}) is None
 
 
 # ---------- end to end on the committed runs

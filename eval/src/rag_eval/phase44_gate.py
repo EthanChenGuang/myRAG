@@ -224,6 +224,8 @@ class OverlapRow(_Model):
 
 class OverlapReport(_Model):
     schema_version: Literal[1] = 1
+    #: plan 04.4-18: written only by a run whose effective DF mode is cluster; absent for raw runs.
+    df_mode: Literal["cluster"] | None = None
     tenant_hash: str
     k: int = Field(ge=1)
     capped_candidate_limit: int = Field(ge=0)
@@ -375,11 +377,30 @@ def on_gate(gate: OnGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig, 
     return _outcome("on", gate.decision, runs, numbers, offenders)
 
 
-def cap_agreement_gate(gate: CapAgreementGate, overlaps: Mapping[str, OverlapReport]) -> GateOutcome:
+def expected_df_mode(config: Mapping[str, Any]) -> Literal["cluster"] | None:
+    """The DF mode a run's overlap file must carry: cluster only when the run config makes it effective (bm25 and RAG_DUP_CLUSTERS, D-45)."""
+    env = config.get("env") or {}
+    if env.get("RAG_LEXICAL_DF_MODE", "raw").strip().lower() != "cluster":
+        return None
+    if env.get("RAG_LEXICAL_SCORING", OFF_ENV["RAG_LEXICAL_SCORING"]).strip().lower() != BM25:
+        return None
+    if env.get("RAG_DUP_CLUSTERS", "false").strip().lower() != "true":
+        return None
+    return "cluster"
+
+
+def cap_agreement_gate(
+    gate: CapAgreementGate,
+    overlaps: Mapping[str, OverlapReport],
+    expected_df_modes: Mapping[str, Literal["cluster"] | None] | None = None,
+) -> GateOutcome:
     offenders: list[str] = []
     numbers: dict[str, Number] = {}
     for name in gate.runs:
         report = overlaps[name]
+        wanted = (expected_df_modes or {}).get(name)
+        if report.df_mode != wanted:
+            offenders.append(f"{name}: overlap measured with df_mode {report.df_mode or 'raw'}, the run serves {wanted or 'raw'}")
         numbers[f"{name}.mean_overlap_at_k"] = report.mean_overlap_at_k
         numbers[f"{name}.min_overlap_at_k"] = report.min_overlap_at_k
         numbers[f"{name}.measured"] = report.measured
@@ -464,7 +485,7 @@ def run_phase44_gates(
         elif name == "on":
             gates.append(on_gate(g.on, outputs, noise, budgets, spec.budgets))
         elif name == "cap_agreement":
-            gates.append(cap_agreement_gate(g.cap_agreement, overlaps))
+            gates.append(cap_agreement_gate(g.cap_agreement, overlaps, {name: expected_df_mode(configs[name]) for name in g.cap_agreement.runs}))
     report_only = [report_only_pair(pair, outputs, noise) for pair in spec.report_only if pair.run in outputs and pair.reference in outputs]
     runs = [
         RunSummary(

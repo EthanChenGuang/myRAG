@@ -316,6 +316,119 @@ def test_run_rrf_arm_runs_through_the_runner_and_checks_the_deployment_settings(
         run_rrf_arm(lexical_arm, golden=DATA / "golden.jsonl", out=tmp_path, base_url="https://eval.example.invalid", runner=runner)
 
 
+# ---------- cluster DF mode (plan 04.4-18)
+
+#: sha256 of lexical-compare.json and .md for the committed arms, computed with the module as it was before plan 04.4-18.
+DEFAULT_REPORT_SHA256 = {
+    JSON_NAME: "f832da96f359982472106c97a15ca9eff363a474edf55b700bab2b6b45c75e68",
+    MARKDOWN_NAME: "19e5f416b6c16fb7b384224814a60c5fd42adcebcc14ae9300a8f1619d374d68",
+}
+CLUSTER_GOLD_RANK = {"en-general-001": 1, "en-general-002": 4, "en-general-004": 1, "it-general-001": 1, "it-general-003": 2, "zh-general-001": 1}
+
+
+def _cluster_layout(tmp_path: Path) -> Path:
+    """The committed arms rearranged as lexical-leg-run.mts --df-mode raw,cluster writes them, plus the two cluster arms."""
+    root = _copy(tmp_path)
+    legs = root / LEGS_DIR
+    raw_dir, cluster_dir = legs / "raw", legs / "cluster"
+    raw_dir.mkdir()
+    for name in (LEGS_FILE, LEGS_MANIFEST):
+        shutil.move(str(legs / name), str(raw_dir / name))
+    manifest = json.loads((raw_dir / LEGS_MANIFEST).read_text(encoding="utf-8"))
+    (raw_dir / LEGS_MANIFEST).write_text(json.dumps({**manifest, "df_mode": "raw"}), encoding="utf-8")
+    cluster_dir.mkdir()
+    (cluster_dir / LEGS_MANIFEST).write_text(json.dumps({**manifest, "df_mode": "cluster"}), encoding="utf-8")
+    GOLD_RANK["bm25_cluster"] = CLUSTER_GOLD_RANK
+    try:
+        rows = [
+            json.dumps({"item_id": item.id, "language": item.language, "token_count": 4, "arms": {"ts_rank_cd": _ranked(item, "ts_rank_cd"), "bm25": _ranked(item, "bm25_cluster")}})
+            for item in GOLDEN
+        ]
+        (cluster_dir / LEGS_FILE).write_text("\n".join(rows) + "\n", encoding="utf-8")
+        rrf = root / RRF_DIR / "rrf_bm25_cluster"
+        shutil.copytree(root / RRF_DIR / "rrf_bm25", rrf)
+        env = {**SCORING_ENV["bm25"], "RAG_LEXICAL_DF_MODE": "cluster", "RAG_DUP_CLUSTERS": "true"}
+        traces = []
+        for line in (rrf / "traces.jsonl").read_text(encoding="utf-8").splitlines():
+            raw = json.loads(line)
+            item = next(i for i in GOLDEN if i.id == raw["item_id"])
+            raw["effective_config"]["rag_env"] = env
+            raw["candidates"] = [{**row, "rank": index, "similarity": 0.5, "has_image": False} for index, row in enumerate(_ranked(item, "bm25_cluster"), start=1)]
+            traces.append(json.dumps(raw, sort_keys=True))
+        (rrf / "traces.jsonl").write_text("\n".join(traces) + "\n", encoding="utf-8")
+    finally:
+        del GOLD_RANK["bm25_cluster"]
+    return root
+
+
+def test_the_default_raw_report_is_byte_identical_to_the_report_before_the_df_mode(tmp_path):
+    write_report(_compare(), tmp_path)
+    for name, digest in DEFAULT_REPORT_SHA256.items():
+        assert _sha(tmp_path / name) == digest, name
+    assert [a.model_dump() for a in arm_grid()] == [a.model_dump() for a in arm_grid(df_modes=["raw"])]
+    assert all(a.df_mode is None for a in arm_grid())
+
+
+def test_df_mode_cluster_adds_two_arms_paired_against_ts_rank_cd_and_against_raw_bm25(tmp_path):
+    arms = arm_grid(df_modes=["raw", "cluster"])
+    assert [a.label for a in arms] == ["lexical_ts_rank_cd", "rrf_ts_rank_cd", "lexical_bm25", "rrf_bm25", "lexical_bm25_cluster", "rrf_bm25_cluster"]
+    root = _cluster_layout(tmp_path)
+    report = compare_from_reports(golden_path=root / "golden.jsonl", reports=root, lexical_leg_dir=None, arms=arms)
+    pairs = [(p.baseline, p.candidate) for p in report.pairs]
+    assert pairs == [
+        ("lexical_ts_rank_cd", "lexical_bm25"),
+        ("rrf_ts_rank_cd", "rrf_bm25"),
+        ("lexical_ts_rank_cd", "lexical_bm25_cluster"),
+        ("rrf_ts_rank_cd", "rrf_bm25_cluster"),
+        ("lexical_bm25", "lexical_bm25_cluster"),
+        ("rrf_bm25", "rrf_bm25_cluster"),
+    ]
+    by = {(p.baseline, p.candidate): p for p in report.pairs}
+    mrr = by[("lexical_bm25", "lexical_bm25_cluster")].overall["mrr"]
+    assert mrr.mean_d == pytest.approx(((1 / 4 - 1 / 30) + (1 - 1 / 2)) / 6)
+    assert mrr.ci_low is not None and mrr.ci_low <= mrr.mean_d <= mrr.ci_high
+    arm_by = {a.label: a for a in report.arms}
+    assert arm_by["lexical_bm25_cluster"].config_hash != arm_by["lexical_bm25"].config_hash
+    assert any("Cluster DF arms" in note for note in report.notes)
+    raw_only = _compare()
+    assert arm_by["rrf_bm25"].overall == {a.label: a for a in raw_only.arms}["rrf_bm25"].overall
+
+
+def test_df_mode_cluster_is_refused_alone_and_checks_the_arm_settings(tmp_path):
+    with pytest.raises(CompareError, match="list raw,cluster"):
+        arm_grid(df_modes=["cluster"])
+    with pytest.raises(CompareError, match="--df-mode takes"):
+        arm_grid(df_modes=["raw", "unit"])
+    root = _cluster_layout(tmp_path)
+    traces = root / RRF_DIR / "rrf_bm25_cluster" / "traces.jsonl"
+    traces.write_text(traces.read_text(encoding="utf-8").replace('"RAG_LEXICAL_DF_MODE": "cluster"', '"RAG_LEXICAL_DF_MODE": "raw"'), encoding="utf-8")
+    with pytest.raises(CompareError, match="RAG_LEXICAL_DF_MODE=raw, the arm needs cluster"):
+        compare_from_reports(golden_path=root / "golden.jsonl", reports=root, lexical_leg_dir=None, arms=arm_grid(df_modes=["raw", "cluster"]))
+    root = _cluster_layout(tmp_path / "second")
+    manifest = root / LEGS_DIR / "cluster" / LEGS_MANIFEST
+    manifest.write_text(manifest.read_text(encoding="utf-8").replace('"df_mode": "cluster"', '"df_mode": "raw"'), encoding="utf-8")
+    with pytest.raises(CompareError, match="is not a df_mode cluster lexical-leg run"):
+        compare_from_reports(golden_path=root / "golden.jsonl", reports=root, lexical_leg_dir=None, arms=arm_grid(df_modes=["raw", "cluster"]))
+
+
+def test_run_rrf_arm_sends_the_cluster_settings_for_a_cluster_arm(tmp_path):
+    from rag_eval.traces import load_traces
+
+    root = _cluster_layout(tmp_path)
+    calls: list[dict] = []
+    traces = load_traces(root / RRF_DIR / "rrf_bm25_cluster" / "traces.jsonl")
+
+    def runner(**kwargs):
+        calls.append(kwargs)
+        return HarnessRun(out_dir=kwargs["out"], golden_path=kwargs["golden"], run_config_path=kwargs["run_config"], argv=[], traces=traces)
+
+    arm = next(a for a in arm_grid(df_modes=["raw", "cluster"]) if a.label == "rrf_bm25_cluster")
+    run_rrf_arm(arm, golden=root / "golden.jsonl", out=tmp_path / "out", base_url="https://eval.example.invalid", runner=runner)
+    assert calls[0]["env_overlay"] == {**SCORING_ENV["bm25"], "RAG_LEXICAL_DF_MODE": "cluster", "RAG_DUP_CLUSTERS": "true"}
+    code = main(["--golden", str(DATA / "golden.jsonl"), "--out", str(tmp_path / "o"), "--from-reports", str(DATA), "--df-mode", "cluster"])
+    assert code == 2
+
+
 def test_committed_arms_match_the_generator(tmp_path):
     write_fixture_arms(tmp_path)
     committed = sorted(p.relative_to(DATA) for p in DATA.rglob("*") if p.is_file())
