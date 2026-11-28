@@ -171,13 +171,16 @@ describe('scope gate benchmark (D-26)', { concurrent: false }, () => {
 });
 
 describe('scope gate calibration (D-27, P-36)', () => {
-  test('the committed empty calibration validates and has no cells', () => {
+  test('the committed calibration (06.2-26) validates and holds fixture cells for the legacy profile only', () => {
     expect(ScopeGateCalibrationSchema.safeParse(rawCalibration).success).toBe(true);
-    expect(parseScopeGateCalibration(rawCalibration)?.cells).toEqual([]);
+    const parsed = parseScopeGateCalibration(rawCalibration);
+    expect(parsed?.source).toBe('fixture');
+    expect(new Set(parsed?.cells?.map((cell) => cell.embedding_profile_id))).toEqual(new Set(['openai-3-small-1536']));
+    expect(parsed?.cells?.map((cell) => cell.rag_mode).sort()).toEqual(['balanced', 'flexible', 'strict']);
   });
 
-  test('scopeGateCalibrationFor returns null for every profile and mode with the committed file', () => {
-    for (const profile of ['legacy-1536', 'bge-m3-1024', 'ft-a-1024']) {
+  test('outside eval scopeGateCalibrationFor returns null for every profile and mode with the committed file', () => {
+    for (const profile of ['openai-3-small-1536', 'legacy-1536', 'bge-m3-1024', 'ft-a-1024']) {
       for (const mode of ['strict', 'balanced', 'flexible', 'bypass'] as const) expect(scopeGateCalibrationFor(profile, mode)).toBeNull();
     }
   });
