@@ -2,6 +2,10 @@ import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { CacheQuery } from '@/lib/rag/cache/types';
 import type { SemanticCacheConfig } from '@/lib/rag/config';
+import type { AnswerGroundedness } from '@/lib/rag/generation/groundedness';
+
+/** Any groundedness and refusal flag, so tests can build answers the storable rules reject (W-2). */
+export type CachedAnswerFields = Omit<CachedAnswer, 'groundedness' | 'is_refusal'> & { groundedness: AnswerGroundedness; is_refusal: boolean };
 
 export const USER_A = '00000000-0000-4000-8000-0000000021a1';
 export const USER_B = '00000000-0000-4000-8000-0000000021b1';
@@ -37,8 +41,8 @@ export function cacheQuery(overrides: Partial<CacheQuery> = {}): CacheQuery {
   };
 }
 
-export function cachedAnswer(overrides: Partial<CachedAnswer> = {}): CachedAnswer {
-  return {
+export function cachedAnswer(overrides: Partial<CachedAnswerFields> = {}): CachedAnswer {
+  const answer: CachedAnswerFields = {
     answer_language: 'en',
     answer_text: 'A neutral placeholder answer.',
     created_at: '2026-11-25T00:00:00.000Z',
@@ -59,4 +63,5 @@ export function cachedAnswer(overrides: Partial<CachedAnswer> = {}): CachedAnswe
     trace_id: 'trace-placeholder',
     ...overrides,
   };
+  return answer as CachedAnswer;
 }

@@ -344,6 +344,78 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "groundedness": {
+              "properties": {
+                "label": {
+                  "const": "verified"
+                },
+                "status": {
+                  "const": "scored"
+                }
+              },
+              "required": [
+                "status",
+                "label"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "groundedness"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "groundedness": {
+              "properties": {
+                "status": {
+                  "const": "not_checked"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "groundedness"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "is_refusal": {
+              "const": false
+            }
+          },
+          "required": [
+            "is_refusal"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "citations": {
+              "maxItems": 0,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    }
+  ],
   "properties": {
     "answer_language": {
       "enum": [
