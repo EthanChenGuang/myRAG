@@ -193,6 +193,7 @@ Every switch defaults to the behaviour that shipped before it existed: with a sw
 | `RAG_LEXICAL_TRANSLATION` | Lexical query translation | bool | `false` | - | `RAG_PIPELINE=v2` |
 | `RAG_PARENT_CHILD` | Parent-child expansion | bool | `false` | - | `RAG_PIPELINE=v2` |
 | `RAG_PIPELINE` | Retrieval pipeline | enum | `legacy` | `legacy`, `v2` | - |
+| `RAG_RERANK_LOCAL_STATS` | Local reranker statistics | enum | `pool` | `pool`, `tenant` | `RAG_PIPELINE=v2` |
 | `RAG_RETRIEVAL_PARAMS_OVERRIDE` | Retrieval params override (emergency) | string | (empty) | - | - |
 | `RAG_SCOPE_TAGS` | Scope tags | bool | `false` | - | - |
 | `RAG_SOURCE_RECHECK` | Source recheck before rerank | bool | `false` | - | - |
