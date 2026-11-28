@@ -4,6 +4,7 @@ import llamaindexCondense from './llamaindex.condense.v1.json';
 import sharedGlossary from './shared.glossary.v1.json';
 import sharedSubqFilters from './shared.subq-filters.v2.json';
 import sharedSuffix from './shared.suffix.v1.json';
+import sharedTerminology from './shared.terminology.v1.json';
 import sharedTranslate from './shared.translate.v1.json';
 
 export const HISTORY_OPEN = '<conversation>';
@@ -15,6 +16,7 @@ export const HISTORY_TURN_MAX_CHARS = 1000;
 const SUFFIX_ID = 'shared.suffix';
 const SUBQ_FILTERS_ID = 'shared.subq-filters';
 const GLOSSARY_ID = 'shared.glossary';
+const TERMINOLOGY_ID = 'shared.terminology';
 const HISTORY_PLACEHOLDER = 'history';
 const PLACEHOLDER = /\{\{([a-z_][a-z0-9_]*)\}\}/gu;
 const DELIMITER = /<\s*\/?\s*conversation\b[^>]*>/giu;
@@ -38,6 +40,8 @@ export type RenderOptions = {
   maxItems: number;
   protectedTokens: readonly string[];
   history?: readonly HistoryTurn[];
+  /** QRY-01, QRY-03: dictionary matches for the terminology addendum; absent or empty leaves the prompt unchanged. */
+  terminology?: readonly TerminologyGlossaryEntry[];
 };
 
 /** Static imports keyed by id so the bundler keeps every prompt file. */
@@ -47,6 +51,7 @@ export const PROMPT_REGISTRY: Readonly<Record<string, unknown>> = Object.freeze(
   'shared.translate': sharedTranslate,
   [SUBQ_FILTERS_ID]: sharedSubqFilters,
   [GLOSSARY_ID]: sharedGlossary,
+  [TERMINOLOGY_ID]: sharedTerminology,
 });
 
 function templatePlaceholders(template: string): Set<string> {
@@ -125,7 +130,9 @@ export function renderPrompt(prompt: PromptFile, vars: Readonly<Record<string, s
   }
   const body = fill(prompt.template, values);
   const suffix = renderSuffix(options);
-  return body.length > 0 ? `${body}\n\n${suffix}` : suffix;
+  const terminology = options.terminology ? renderTerminologyAddendum(options.terminology) : '';
+  const tail = terminology === '' ? suffix : `${terminology}\n\n${suffix}`;
+  return body.length > 0 ? `${body}\n\n${tail}` : tail;
 }
 
 /**
@@ -210,4 +217,60 @@ export function renderGlossaryAddendum(pairs: readonly GlossaryPromptPair[]): st
   if (pairs.length === 0) return '';
   const lines = pairs.map((pair) => escapeGlossaryTags(JSON.stringify({ source: [...pair.sources], translation: pair.target })));
   return renderTemplate(loadPrompt(GLOSSARY_ID), { pairs: lines.join('\n') });
+}
+
+/** One dictionary match as the terminology addendum lists it (QRY-01, QRY-03): the matched term (normalized), its canonical form and kind. */
+export type TerminologyGlossaryEntry = { surface: string; canonical: string; kind: string };
+
+export const TERMINOLOGY_GLOSSARY_MAX_ENTRIES = 8;
+export const TERMINOLOGY_GLOSSARY_FIELD_MAX_CHARS = 64;
+/** The entry lines of the block together, line breaks included. */
+export const TERMINOLOGY_GLOSSARY_MAX_CHARS = 1200;
+
+const TERMINOLOGY_KIND = /^[a-z][a-z_]{0,31}$/u;
+const CONTROL_OR_BREAK = /[\p{Cc}\p{Zl}\p{Zp}\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]+/gu;
+
+function glossaryField(text: string): string {
+  return truncate(text.replace(CONTROL_OR_BREAK, ' ').replace(/\s+/gu, ' ').trim(), TERMINOLOGY_GLOSSARY_FIELD_MAX_CHARS).trim();
+}
+
+function glossaryLine(entry: TerminologyGlossaryEntry): string {
+  // Angle brackets as JSON escapes: no entry text can open or close a block tag, and the line stays valid JSON.
+  return JSON.stringify({ term: entry.surface, canonical: entry.canonical, kind: entry.kind }).replace(/</gu, '\\u003c').replace(/>/gu, '\\u003e');
+}
+
+/**
+ * QRY-01, QRY-03: the entries the terminology addendum lists, in match order. Control characters and line breaks become spaces,
+ * each field is cut at TERMINOLOGY_GLOSSARY_FIELD_MAX_CHARS, a kind that is not a plain code reads "term", duplicates and empty
+ * fields are left out, and the list stops at TERMINOLOGY_GLOSSARY_MAX_ENTRIES entries or TERMINOLOGY_GLOSSARY_MAX_CHARS of lines.
+ * The dictionary is admin-edited data, so nothing from it reaches a prompt unbounded.
+ */
+export function terminologyGlossaryEntries(entries: readonly TerminologyGlossaryEntry[]): TerminologyGlossaryEntry[] {
+  const out: TerminologyGlossaryEntry[] = [];
+  const seen = new Set<string>();
+  let chars = 0;
+  for (const raw of entries) {
+    if (out.length >= TERMINOLOGY_GLOSSARY_MAX_ENTRIES) break;
+    const entry = { surface: glossaryField(raw.surface), canonical: glossaryField(raw.canonical), kind: TERMINOLOGY_KIND.test(raw.kind) ? raw.kind : 'term' };
+    if (entry.surface === '' || entry.canonical === '') continue;
+    const line = glossaryLine(entry);
+    if (seen.has(line)) continue;
+    const next = chars + (out.length > 0 ? 1 : 0) + line.length;
+    if (next > TERMINOLOGY_GLOSSARY_MAX_CHARS) break;
+    seen.add(line);
+    chars = next;
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * QRY-01, QRY-03: the versioned addendum (shared.terminology.v1) that renderPrompt puts between a condense or HyDE template and
+ * the shared suffix when the text matched dictionary entries. One JSON line per entry inside the terminology block, bounded by
+ * terminologyGlossaryEntries. Empty string when no entry is left, so the prompt is then byte-identical to one without the option.
+ */
+export function renderTerminologyAddendum(entries: readonly TerminologyGlossaryEntry[]): string {
+  const kept = terminologyGlossaryEntries(entries);
+  if (kept.length === 0) return '';
+  return renderTemplate(loadPrompt(TERMINOLOGY_ID), { entries: kept.map(glossaryLine).join('\n') });
 }

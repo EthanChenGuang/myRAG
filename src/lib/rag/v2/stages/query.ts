@@ -49,6 +49,8 @@ export interface QueryStagesInput {
   onGlossary?: (stage: GlossaryHashStage) => void;
   /** Phase 6.2 D-21: lent to the query layer only while speculative retrieval can apply. */
   speculative?: SpeculativeSeam;
+  /** QRY-01, QRY-03: told when a condense or HyDE prompt carried the terminology glossary. */
+  onTerminologyPrompt?: () => void;
 }
 
 export interface QueryStagesOutput {
@@ -388,6 +390,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
             },
           }
         : {}),
+      ...(ctx.onTerminologyPrompt ? { onTerminologyPrompt: ctx.onTerminologyPrompt } : {}),
     });
   }
 
