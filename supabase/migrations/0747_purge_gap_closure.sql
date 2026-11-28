@@ -6,6 +6,9 @@
 -- G4 (T-06.3-26): the purge collects its chunks' metadata.image_url (and documents.metadata.image_url) before the delete, keeps only
 --   their SHA-256 in rag_purge_audit.image_url_sha256, and the chat scrub (mode files) drops source_images / images entries whose URL
 --   has one of those hashes as well as those under the lineage prefix. rag_purge_verify adds a source_images row.
+-- G6 (owner decision 12a): rag_purge_hook_review_items removes the purged versions' candidate and source ids from the tenant's
+--   review items (masked query kept; an item left without ids is tagged source_purged, and set to skipped while open); verify row
+--   review_items; the inventory marks rag_review_items purge_step.
 -- Bodies: rag_purge_store_inventory, rag_purge_foreign_stores and rag_purge_foreign_leftovers from 0728, rag_purge_lineage and
 --   rag_purge_verify from 0746 (their newest definitions); only the edits above. Security mode, volatility, empty search_path and grants
 --   (service_role only) are unchanged. New helpers are SECURITY INVOKER, empty search_path, service_role only.
@@ -164,6 +167,88 @@ AS $$
   END
 $$;
 
+-- G6 (owner decision 12a): the purged versions' ids leave the tenant's review items. candidates elements naming a purged document or
+-- chunk are dropped; snapshot.document_ids and snapshot.chunk_ids lose those ids; query_masked and every other field stay. An item
+-- that named a purged id and is left with no candidate and no source id is tagged source_purged, and an open one is set to skipped
+-- (it leaves the queue; an expert's label or export is kept). Returns the number of items changed. Runs before the chunk delete.
+CREATE OR REPLACE FUNCTION public.rag_purge_hook_review_items(p_tenant_key text, p_lineage_id uuid, p_document_ids uuid[])
+RETURNS bigint
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_docs text[];
+  v_chunks text[];
+  v_n bigint := 0;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+  IF pg_catalog.to_regclass('public.rag_review_items') IS NULL THEN
+    RETURN 0;
+  END IF;
+  v_docs := ARRAY(
+    SELECT DISTINCT d.id::text FROM public.documents d
+     WHERE d.tenant_key = p_tenant_key AND (d.lineage_id = p_lineage_id OR d.id = ANY (COALESCE(p_document_ids, '{}'::uuid[])))
+    UNION
+    SELECT x::text FROM pg_catalog.unnest(COALESCE(p_document_ids, '{}'::uuid[])) AS x WHERE x IS NOT NULL
+  );
+  IF pg_catalog.cardinality(v_docs) = 0 THEN
+    RETURN 0;
+  END IF;
+  v_chunks := ARRAY(SELECT c.id::text FROM public.document_chunks c WHERE c.document_id::text = ANY (v_docs));
+
+  WITH hit AS (
+    SELECT i.id,
+           COALESCE((
+             SELECT pg_catalog.jsonb_agg(c.v ORDER BY c.o)
+               FROM pg_catalog.jsonb_array_elements(i.candidates) WITH ORDINALITY AS c(v, o)
+              WHERE NOT (pg_catalog.jsonb_typeof(c.v) = 'object'
+                         AND ((c.v ->> 'document_id') = ANY (v_docs) OR (c.v ->> 'chunk_id') = ANY (v_chunks)))
+           ), '[]'::jsonb) AS candidates,
+           CASE WHEN pg_catalog.jsonb_typeof(i.snapshot) = 'object' THEN
+             i.snapshot
+             || CASE WHEN pg_catalog.jsonb_typeof(i.snapshot -> 'document_ids') = 'array' THEN pg_catalog.jsonb_build_object('document_ids', COALESCE((
+                  SELECT pg_catalog.jsonb_agg(e.v ORDER BY e.o) FROM pg_catalog.jsonb_array_elements(i.snapshot -> 'document_ids') WITH ORDINALITY AS e(v, o)
+                   WHERE pg_catalog.lower(e.v #>> '{}') <> ALL (v_docs)), '[]'::jsonb)) ELSE '{}'::jsonb END
+             || CASE WHEN pg_catalog.jsonb_typeof(i.snapshot -> 'chunk_ids') = 'array' THEN pg_catalog.jsonb_build_object('chunk_ids', COALESCE((
+                  SELECT pg_catalog.jsonb_agg(e.v ORDER BY e.o) FROM pg_catalog.jsonb_array_elements(i.snapshot -> 'chunk_ids') WITH ORDINALITY AS e(v, o)
+                   WHERE pg_catalog.lower(e.v #>> '{}') <> ALL (v_chunks)), '[]'::jsonb)) ELSE '{}'::jsonb END
+           ELSE i.snapshot END AS snapshot
+      FROM public.rag_review_items i
+     WHERE i.tenant_key = p_tenant_key
+       AND (
+         EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(i.candidates) AS c(v)
+                  WHERE pg_catalog.jsonb_typeof(c.v) = 'object'
+                    AND ((c.v ->> 'document_id') = ANY (v_docs) OR (c.v ->> 'chunk_id') = ANY (v_chunks)))
+         OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements_text(
+                      CASE WHEN pg_catalog.jsonb_typeof(i.snapshot -> 'document_ids') = 'array' THEN i.snapshot -> 'document_ids' ELSE '[]'::jsonb END) AS d(id)
+                     WHERE pg_catalog.lower(d.id) = ANY (v_docs))
+         OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements_text(
+                      CASE WHEN pg_catalog.jsonb_typeof(i.snapshot -> 'chunk_ids') = 'array' THEN i.snapshot -> 'chunk_ids' ELSE '[]'::jsonb END) AS d(id)
+                     WHERE pg_catalog.lower(d.id) = ANY (v_chunks))
+       )
+       FOR UPDATE OF i
+  ), emptied AS (
+    SELECT h.*,
+           pg_catalog.jsonb_array_length(h.candidates) = 0
+           AND COALESCE(pg_catalog.jsonb_array_length(CASE WHEN pg_catalog.jsonb_typeof(h.snapshot -> 'document_ids') = 'array' THEN h.snapshot -> 'document_ids' END), 0) = 0
+           AND COALESCE(pg_catalog.jsonb_array_length(CASE WHEN pg_catalog.jsonb_typeof(h.snapshot -> 'chunk_ids') = 'array' THEN h.snapshot -> 'chunk_ids' END), 0) = 0
+             AS empty
+      FROM hit h
+  )
+  UPDATE public.rag_review_items i
+     SET candidates = e.candidates,
+         snapshot = e.snapshot,
+         tags = CASE WHEN e.empty AND NOT ('source_purged' = ANY (i.tags)) THEN i.tags || ARRAY['source_purged'] ELSE i.tags END,
+         status = CASE WHEN e.empty AND i.status = 'open' THEN 'skipped' ELSE i.status END
+    FROM emptied e
+   WHERE i.id = e.id;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$$;
+
 -- G1: inventory rows for the Phase 3.3 and Phase 6.1 stores.
 CREATE OR REPLACE FUNCTION public.rag_purge_store_inventory()
 RETURNS TABLE (relation text, store_id text, handling text, reason text)
@@ -220,7 +305,7 @@ AS $$
       ('rag_recaption_runs', '', 'exempt', 'run cursor: one position id, no content; a resumed run skips missing rows (D-37)'),
       ('rag_rebuild_runs', '', 'exempt', 'run header: counts and settings, no document content; its items are purged (D-37)'),
       ('rag_retrieval_log', '', 'exempt', 'ids only, 30 and 90 day retention'),
-      ('rag_review_items', '', 'exempt', 'ids only, 30 and 90 day retention'),
+      ('rag_review_items', 'review_items', 'purge_step', 'the purged versions candidate and source ids are removed from candidates and snapshot by rag_purge_hook_review_items (0747); the masked query stays; an item left without ids is tagged source_purged (owner decision 12a)'),
       ('rag_upload_approval_exemptions', '', 'exempt', 'tenant and user configuration, not per-document data'),
       ('ingestion_batches', '', 'exempt', 'batch header and hold_publish flag, not per-document data'),
       ('rag_identifier_patterns', '', 'exempt', 'tenant settings, not per-document data'),
@@ -319,6 +404,11 @@ BEGIN
     EXECUTE 'SELECT (public.rag_purge_hook_doc_attributes($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
     v_counts := v_counts || pg_catalog.jsonb_build_object('doc_attributes', COALESCE(v_n, 0));
   END IF;
+  -- Owner decision 12a (G6): review items lose the purged documents' candidate and source ids (before the chunk delete).
+  IF pg_catalog.to_regprocedure('public.rag_purge_hook_review_items(text,uuid,uuid[])') IS NOT NULL THEN
+    EXECUTE 'SELECT (public.rag_purge_hook_review_items($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
+    v_counts := v_counts || pg_catalog.jsonb_build_object('review_items', COALESCE(v_n, 0));
+  END IF;
   -- Phase 6.1 hand-off (IW-1): every fine-tune version trained on the tenant is tainted; its weights may hold the purged text.
   IF pg_catalog.to_regprocedure('public.rag_purge_hook_finetune(text,uuid,uuid[])') IS NOT NULL THEN
     EXECUTE 'SELECT (public.rag_purge_hook_finetune($1, $2, $3))::bigint' INTO v_n USING p_tenant_key, p_lineage_id, v_ids;
@@ -413,6 +503,24 @@ BEGIN
          )
     $q$ INTO v_n USING p_tenant_key, p_lineage_id, v_ids, v_audit_source, v_audit_key;
     store := 'doc_attributes';
+    remaining := v_n;
+    RETURN NEXT;
+  END IF;
+
+  -- review_items (0747, G6): items of the tenant that still name a purged version in candidates or snapshot.document_ids.
+  IF pg_catalog.to_regclass('public.rag_review_items') IS NOT NULL THEN
+    EXECUTE $q$
+      SELECT pg_catalog.count(*) FROM public.rag_review_items i
+       WHERE i.tenant_key = $1
+         AND (
+           EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(i.candidates) AS c(v)
+                    WHERE pg_catalog.jsonb_typeof(c.v) = 'object' AND (c.v ->> 'document_id') = ANY ($2))
+           OR (pg_catalog.jsonb_typeof(pg_catalog.to_jsonb(i) -> 'snapshot' -> 'document_ids') = 'array'
+               AND EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements_text(pg_catalog.to_jsonb(i) -> 'snapshot' -> 'document_ids') AS d(id)
+                            WHERE pg_catalog.lower(d.id) = ANY ($2)))
+         )
+    $q$ INTO v_n USING p_tenant_key, ARRAY(SELECT x::text FROM pg_catalog.unnest(v_ids) AS x);
+    store := 'review_items';
     remaining := v_n;
     RETURN NEXT;
   END IF;
@@ -794,6 +902,8 @@ REVOKE ALL ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text, t
 GRANT EXECUTE ON FUNCTION public.rag_chat_messages_reference(jsonb, text[], text, text[]) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_chat_image_leftover_count(jsonb, text, text[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_chat_image_leftover_count(jsonb, text, text[]) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_purge_hook_review_items(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_hook_review_items(text, uuid, uuid[]) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_purge_store_inventory() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_purge_store_inventory() TO service_role;
 REVOKE ALL ON FUNCTION public.rag_purge_foreign_stores(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;

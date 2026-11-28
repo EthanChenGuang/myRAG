@@ -997,7 +997,7 @@ const results = await Promise.allSettled(
 
 ### Reconcile scheduling
 
-The reconcile compares each connection's complete listing with the stored documents and removes what the source no longer has (the deletion mode of the connection decides how). Run it with `npm run rag:source-reconcile`, or call `POST /api/internal/rag/source-reconcile` with the `x-sidecar-secret` header (the route refuses every call while `RAG_SIDECAR_SECRET` is unset). A connection without a completed reconcile for longer than `RAG_SOURCE_RECONCILE_MAX_AGE_DAYS` raises a source alert, and a removal above `RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE` (at least 5 files) pauses until an admin confirms it within 24 hours.
+The reconcile compares each connection's complete listing with the stored documents and removes what the source no longer has (the deletion mode of the connection decides how). Run it with `npm run rag:source-reconcile`, or call `POST /api/internal/rag/source-reconcile` with the `x-sidecar-secret` header (the route refuses every call while `RAG_SIDECAR_SECRET` is unset). A connection without a completed reconcile for longer than `RAG_SOURCE_RECONCILE_MAX_AGE_DAYS` raises a source alert, and a removal above `RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE` (at least 5 files) pauses until an admin confirms it within 24 hours. Before switching any connection to `purge` mode, set `RAG_SOURCE_PURGE_DAILY_CAP=200` (owner decision 13; the default stays 0, no cap): change-feed purges above the cap per tenant and UTC day wait in a paused run.
 
 Nothing calls the route on its own. Schedule it at least once per `RAG_SOURCE_RECONCILE_INTERVAL_DAYS` from one of:
 
@@ -1030,7 +1030,7 @@ NANGO_ONEDRIVE_INTEGRATION_KEY=               # Empty: the provider id one-drive
 RAG_SOURCE_RECONCILE_INTERVAL_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_AGE_DAYS=7
 RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE=0.3
-RAG_SOURCE_PURGE_DAILY_CAP=0                  # 0 is off: no cap
+RAG_SOURCE_PURGE_DAILY_CAP=0                  # 0 is off: no cap; set 200 before turning purge mode on (owner decision 13)
 
 # Nango Configuration
 NANGO_HOST=https://api.nango.dev               # Cloud endpoint

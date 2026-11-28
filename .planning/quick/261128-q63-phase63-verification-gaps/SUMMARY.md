@@ -5,12 +5,13 @@ branch: exec/quick-63-gaps
 base: origin/ci/merge-train-42 @ 7c4d2ed5
 source: origin/verify/06.3 @ 0c428e69 (06.3-AUDIT-REPORT.md, 06.3-VERIFICATION.md, 06.3-SECURITY.md)
 status: complete
-gaps_closed: [G1, G2, G3, G4, G5]
+gaps_closed: [G1, G2, G3, G4, G5, G6]
+owner_decisions: [12a (G6, relayed by the orchestrator 07:10Z), 13 (purge daily cap 200, documented)]
 threats_addressed: [T-06.3-49, T-06.3-26, T-06.3-64 (docs part)]
 requirements: [DATA-23, DATA-24, RET-14, EVAL-31]
 ---
 
-# Quick 261128-q63: Phase 6.3 verification gaps G1–G5
+# Quick 261128-q63: Phase 6.3 verification gaps G1–G6
 
 Closes the five code and documentation gaps of the Phase 6.3 verification. Every fix began with a test that failed on an
 assertion. Every switch defaults to off, and with it off the behaviour is the same as before (details below).
@@ -60,6 +61,17 @@ migration was edited.
 - 1012 widens the four provider CHECKs of 0920/0925 to accept `sharepoint-online` and `one-drive`.
 - It does the same for the three connector functions that check the provider: `rag_connector_apply_access`, `rag_connector_map_set` and `rag_connector_rule_set`. Each body is rewritten from its current `pg_get_functiondef`, so the newest body and its security attributes are kept.
 - `CONNECTOR_PROVIDERS` in `src/lib/rag/access/connector.ts` lists the two new providers.
+
+**G6 (owner decision 12a, added by the orchestrator mid-run): migration 0747.**
+- New `rag_purge_hook_review_items` (SECURITY INVOKER, empty search_path, service_role only), called by `rag_purge_foreign_stores` before the chunk delete and counted under `counts.review_items`. For the tenant's `rag_review_items` it:
+  - drops `candidates` elements that name a purged document or chunk;
+  - removes those ids from `snapshot.document_ids` and `snapshot.chunk_ids`;
+  - keeps `query_masked` and every other field.
+- An item that named a purged id and is left with no ids is tagged `source_purged`. If it was `open`, it is set to `skipped` so it leaves the queue; a `labelled` or `exported` item keeps its status and its label. I chose to mark these items rather than delete them so expert work and the item history survive.
+- `rag_purge_verify` gets a `review_items` row: items that still name a purged version.
+- The inventory now marks `rag_review_items` as purge_step (store review_items); `rag_retrieval_log` stays exempt.
+
+**Owner decision 13:** AGENTS.md and README say to set `RAG_SOURCE_PURGE_DAILY_CAP=200` before turning `purge` mode on. The default stays 0 in env.ts and init-env.js.
 
 **G2 (HIGH): migration 1013, contracts and code.**
 - Contract (`MonitorAlert`, `MonitorRule`):
@@ -114,7 +126,8 @@ migration was edited.
 | check-rag-boundary, check-config, check-language-literals, check-settings-classification, check-zod-isolation, check-migration-numbers | all 0 |
 | `npm run gen:schemas` then `git status` | no diff |
 | rag-db (node --test, both modes in each file): purge-foreign-stores, purge-store-coverage, purge-image-upload, access-connectors, purge-grants, purge-lineage, purge-citation-marker, search-path-empty, definer-search-path-pglite, finetune-purge-hook, phase33-purge, purge-seam, purge-library, source-deletions-purge, lexical-stats-purge-hook, purge-hook-golden-items, schema-equality, purge-cache, vector-sync-purge, vector-sync-purge-drain, purge-outbox, source-purge-cap, monitor-source-alerts, monitor-storage, retrieval-log-schema, monitor-daily, monitor-aggregate, hybrid-grants, lexical-stats-grants, search-rpc-grants-pglite | all pass (skips: 2 + 3, single-tenant / 0740-present cases as before) |
-| rag-e2e: deletion-canary, defaults-equal-phase53 | 23/23 pass |
+| rag-e2e: deletion-canary, defaults-equal-phase53 | 23/23 pass (canary re-run after G6: pass) |
+| G6 rag-db re-run: purge-foreign-stores, purge-store-coverage, review-items-rls, review-items-mining, purge-lineage, purge-grants, search-rpc-grants-pglite, schema-equality, purge-image-upload | all pass |
 | pytest rag-sidecar (full, shared contract modules changed) | 2955 passed, 12 skipped |
 | pytest eval: test_config_files, test_phase_compare | 148 passed |
 | `npm run test-rag` | not run: no retrieval, ingest, generation or golden-set code path changed (purge SQL, alert wiring, docs only) |
@@ -160,7 +173,6 @@ SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conname IN ('
 
 ## Deferred (follow-ups, not done here)
 
-- **G6 (owner):** retention decision for `rag_review_items` snapshots (masked query plus candidate ids of purged documents).
 - **G8 hardening W2–W8:**
   - `removeOrphans` defaults to `complete ?? true`
   - SQL owner-tenant check in the 0746/0747 source_sync arm

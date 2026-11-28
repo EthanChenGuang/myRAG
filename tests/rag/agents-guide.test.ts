@@ -408,6 +408,8 @@ describe('AGENTS.md reflects Phase 6.3 (source deletion sync and purge)', () => 
     'After re-running 0727, re-run 0746 and then 0747',
     'after re-running 0963, re-run 1013',
     '`rag_monitor_alerts`',
+    'set `RAG_SOURCE_PURGE_DAILY_CAP=200` (the shipped default stays 0)',
+    'tagged `source_purged`',
   ])('mentions %s', (fragment) => {
     expect(subsection).toContain(fragment);
   });
