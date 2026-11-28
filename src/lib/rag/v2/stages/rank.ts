@@ -36,6 +36,8 @@ import { guardNearMisses } from '../../retrieval/identifiers';
 import { extractChunkIdentifiers } from '../../identifiers/extract';
 import { EXACT_ID_LIMIT, mergeExactCandidates, type ExactIdRow } from '../../retrieval/exact-id';
 import type { ContextRerankInput } from './context';
+import { fetchAssemblyRows } from '../../context/fetch-rows';
+import type { ScopeAccessFilter } from '../../tenant/access';
 
 export interface RankStagesInput {
   input: RunRetrievalInput;
@@ -52,6 +54,8 @@ export interface RankStagesInput {
   dedupeCounts?: DedupeCounts;
   /** The query analysis of the query stage; the legacy_rule floor replays the legacy search with it (default context when absent). */
   queryContext?: TemporalQueryContext;
+  /** The request's access filter; the legacy_rule evidence read uses it (absent: off). */
+  access?: ScopeAccessFilter;
   /** Query layer only (D-06): rerank and refusal read the plan's standalone query and Candidate.standaloneSimilarity. */
   queryPlan?: QueryPlan | null;
   /** D-07: sub-question coverage over the final top-k (retrieval-params `sub_question_coverage`). */
@@ -126,6 +130,8 @@ interface RefusalOutcome {
   poolSize?: number;
   /** legacy_rule only: how many of them came from the exact_id list. */
   exactMembers?: number;
+  /** legacy_rule only: how many documents the evidence read returned; absent when no read happened. */
+  evidenceRead?: number;
 }
 
 function denseLegIndex(variants: QueryVariant[] | undefined): number {
@@ -263,11 +269,43 @@ function floorSimilarity(row: FusedHit, standalone: boolean): number | null {
   return standalone ? (row.standaloneSimilarity ?? 0) : row.hit.similarity;
 }
 
-function applyRefusal(
+interface RefusalOptions {
+  /** legacy_rule only: read the pool members' whole document text when nothing else kept a member (the stage path, never the skip path). */
+  evidence: boolean;
+  signal: AbortSignal;
+}
+
+/**
+ * legacy_rule evidence: the whole documents.content of the pool members' documents, read through the row fetch legacy assembles
+ * from (the ids come from the request's own scoped hits, under the request's access filter). Legacy's query-term rule reads this text.
+ */
+async function legacyEvidenceText(ctx: RankStagesInput, members: FusedHit[], signal: AbortSignal): Promise<Map<string, string>> {
+  const adminClient = getRagDeps().adminClient();
+  if (!adminClient) throw new Error('[RAG Refusal] admin client unavailable');
+  const rows = await fetchAssemblyRows(
+    members.map((row) => ({
+      chunk_id: row.hit.chunkId,
+      document_id: row.hit.documentId,
+      content: row.hit.content,
+      similarity: row.hit.similarity ?? 0,
+      metadata: row.hit.metadata,
+    })),
+    { adminClient, signal, access: ctx.access ?? { mode: 'off' } },
+  );
+  const wanted = new Set(members.map((row) => row.hit.documentId));
+  const out = new Map<string, string>();
+  for (const [id, doc] of rows.documents) {
+    if (wanted.has(id) && typeof doc.content === 'string') out.set(id, doc.content);
+  }
+  return out;
+}
+
+async function applyRefusal(
   ctx: RankStagesInput,
   fusedHits: FusedHit[],
   rerankGate: RerankGateState,
-): RefusalOutcome {
+  options: RefusalOptions,
+): Promise<RefusalOutcome> {
   const { config, profile, embedding, queryLanguage } = ctx;
   const standalone = Boolean(ctx.queryPlan);
   const query = ctx.queryPlan ? ctx.queryPlan.standalone : ctx.input.query;
@@ -290,21 +328,33 @@ function applyRefusal(
 
   if (config.v2.refusalFloor === 'legacy_rule') {
     const members = legacyPoolMembers(ctx, fusedHits);
-    const record =
-      members.length === 0 && fusedHits.length > 0
-        ? emptyLegacyPool(bestDenseSimilarity(fusedHits))
-        : legacyRuleFloor({
-            floors: LEGACY_KEEP_FLOORS,
-            terms: legacyQueryTerms(query),
-            candidates: members.map(({ row, exactSimilarity }) => ({
-              similarity: exactSimilarity ?? floorSimilarity(row, standalone),
-              hasImage: hitHasImage(row.hit),
-              filename: row.hit.document.filename,
-              text: `${row.hit.content} ${row.hit.document.contentPreview}`,
-            })),
-          });
+    if (members.length === 0 && fusedHits.length > 0) {
+      return { record: emptyLegacyPool(bestDenseSimilarity(fusedHits)), gate, poolSize: 0 };
+    }
     const exactMembers = members.filter((member) => member.exactSimilarity !== undefined).length;
-    return { record, gate, poolSize: members.length, ...(exactMembers > 0 ? { exactMembers } : {}) };
+    const pool = { poolSize: members.length, ...(exactMembers > 0 ? { exactMembers } : {}) };
+    const terms = legacyQueryTerms(query);
+    const judge = (textOf: (row: FusedHit) => string) =>
+      legacyRuleFloor({
+        floors: LEGACY_KEEP_FLOORS,
+        terms,
+        candidates: members.map(({ row, exactSimilarity }) => ({
+          similarity: exactSimilarity ?? floorSimilarity(row, standalone),
+          hasImage: hitHasImage(row.hit),
+          filename: row.hit.document.filename,
+          text: textOf(row),
+        })),
+      });
+    const record = judge((row) => `${row.hit.content} ${row.hit.document.contentPreview}`);
+    if (record.decision !== 'refuse' || !options.evidence || terms.length === 0) return { record, gate, ...pool };
+    // Nothing kept a member on similarity, image, filename, chunk text or preview: judge the whole document text, as legacy does.
+    const evidence = await legacyEvidenceText(
+      ctx,
+      members.map((member) => member.row),
+      options.signal,
+    );
+    const full = judge((row) => evidence.get(row.hit.documentId) ?? '');
+    return { record: full.decision === 'answer' ? full : record, gate, ...pool, evidenceRead: evidence.size };
   }
 
   const calibration =
@@ -523,8 +573,8 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     return { survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
   };
 
-  const decide = () => {
-    const refusal = applyRefusal(ctx, rankedHits, reranked.gate);
+  const decide = async (options: RefusalOptions) => {
+    const refusal = await applyRefusal(ctx, rankedHits, reranked.gate, options);
     if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
     if (diversityOn) return { ...refusal, survivors: rankedHits, reserved: 0 };
     return { ...refusal, ...reserve(rankedHits) };
@@ -533,12 +583,15 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
   const refused = await runStage(
     spec('refusal', 'skip'),
     signal,
-    async () => decide(),
+    async (stageSignal) => decide({ evidence: true, signal: stageSignal }),
     collector,
     {
       candidatesIn: rankedHits.length,
-      counts: ({ record, reserved }): Record<string, number> => {
-        const extra: Record<string, number> = coverageActive && !diversityOn ? { subq_reserved: reserved } : {};
+      counts: ({ record, reserved, evidenceRead }): Record<string, number> => {
+        const extra: Record<string, number> = {
+          ...(coverageActive && !diversityOn ? { subq_reserved: reserved } : {}),
+          ...(evidenceRead !== undefined ? { evidence_documents: evidenceRead } : {}),
+        };
         if (record.decision === 'refuse') return { refused: 1, ...extra };
         if (record.decision === 'answer') return { answered: 1, ...extra };
         return { not_applied: 1, ...extra };
@@ -556,7 +609,8 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     },
   );
 
-  const { record: decision, gate, survivors: refusalSurvivors } = refused.skipped ? decide() : refused.value;
+  // A skipped refusal stage (disabled, failed or timed out) decides without the evidence read, on the hits' own text.
+  const { record: decision, gate, survivors: refusalSurvivors } = refused.skipped ? await decide({ evidence: false, signal }) : refused.value;
 
   // D-31, D-51: rerank, refusal, identifier guard, diversify, reservation. The guard reads each candidate's identifiers in memory.
   let decided = refusalSurvivors;

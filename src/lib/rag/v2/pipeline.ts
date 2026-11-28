@@ -383,6 +383,7 @@ export async function runV2Pipeline(
         variants: query.variants,
         dedupeCounts: search.dedupeCounts,
         queryContext: query.queryContext,
+        access,
         finalTopK:
           profile === 'voice'
             ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
