@@ -282,6 +282,11 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['rag_purge_image_url_hashes'],
   },
   {
+    reason:
+      'Local reranker tenant statistics (0906, 04.4-21): tenant-checked with rag_assert_tenant_key, service_role only, called by the local_bm25 rerank stage under RAG_RERANK_LOCAL_STATS=tenant on candidate ids a filtered retrieval leg already returned; per chunk it returns the id, chunking profile, language code, the compacted chunk count and length and the df of the caller\'s own terms, never a lexeme list, chunk, title or document text.',
+    functions: ['rag_lexical_rerank_stats'],
+  },
+  {
     reason: 'Account setup (multi-tenant): creates an organization and returns its row; the word documents appears only in a comment of its body.',
     functions: ['create_organization_safe'],
   },
