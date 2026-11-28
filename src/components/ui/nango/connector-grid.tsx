@@ -27,6 +27,7 @@ import { useLanguage } from '@/components/providers/language-provider';
 import type { TranslationKeys } from '@/translations';
 import { accessGroupText } from '@/components/ui/access-group-labels';
 import { isMultiTenant } from '@/lib/deployment-mode';
+import { isSharePointEnabled } from '@/lib/nango/sharepoint/config';
 
 interface SyncResult {
   provider: SupportedProvider;
@@ -56,6 +57,11 @@ const ALL_PROVIDERS: SupportedProvider[] = [
   'dropbox',
   'notion',
 ];
+
+/** D-24, D-26: SharePoint Online and OneDrive for Business join the grid only while their switch is on; no picker in the app. */
+export function connectorGridProviders(): SupportedProvider[] {
+  return isSharePointEnabled() ? [...ALL_PROVIDERS, 'sharepoint-online', 'one-drive'] : ALL_PROVIDERS;
+}
 
 interface NangoConnectionWithValidity extends NangoConnectionRecord {
   is_valid: boolean;
@@ -405,7 +411,7 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
         })()}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {ALL_PROVIDERS.map((provider) => {
+          {connectorGridProviders().map((provider) => {
             // Check if provider is enabled in config
             const providerConfig = connectorConfig?.providers.find(p => p.provider === provider);
             if (!demoMode && (!providerConfig?.enabled || !providerConfig?.show_on_dashboard)) {
