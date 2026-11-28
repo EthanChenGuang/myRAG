@@ -1030,3 +1030,7 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 | session_01X342sjDE6GpXks7nnaGybb | exec 07-25 (incl. 04.2 W-5 hash handoff) | exec/06.3-14 | running |
 | session_01X342smj9UgHSCUxVHs1zYV | exec 07-44 | exec/06.3-14 | running |
 Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
+- 00:50Z 07-44 started on the wrong base (fa644e5e instead of 06.3-14 d0d6a445) and stopped. I sent it the correct sha, and sent all the new sessions a base check. Lesson added to the skill (225a0f07).
+- 01:00Z quick-min-gate-n DONE 46b165b2 and archived. Queued for train 42.
+  - 4.2 gate PASS (v2 rule). 4.4 gate FAIL on ingest scanned recall@10: 0.9286 < 0.98 (n=14). Routed to 04.4-16..19 (cluster DF); the 17..19 gate runs merge min-gate-n first.
+  - Orchestrator decision: old PASS reports stay as history. The v2 reports under */min-gate-n-v2/ are the current ones.
