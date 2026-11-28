@@ -430,6 +430,8 @@ function buildSourceSyncRowView(row, locale, limits, now) {
   const lastReconcile = sourceSyncTime(row.last_full_reconcile_at, loc, at);
   const connected = sourceSyncTime(row.connected_at, loc, at);
   const mode = sourceSyncModeValue(row.deletion_mode);
+  const sentRuns = Array.isArray(row.paused_runs) && row.paused_runs.length ? row.paused_runs : row.paused_run ? [row.paused_run] : [];
+  const pausedRuns = sentRuns.map((run) => buildPausedRunView(run, loc, at, limits)).filter(Boolean);
   return {
     id: str(row.id),
     connection: str(row.provider_name) || str(row.provider),
@@ -445,7 +447,8 @@ function buildSourceSyncRowView(row, locale, limits, now) {
     reasonLines,
     mode,
     modeHelp: sourceSyncModeHelp(mode, loc),
-    pausedRun: buildPausedRunView(row.paused_run, loc, at, limits),
+    pausedRun: pausedRuns[0] || null,
+    pausedRuns,
   };
 }
 
@@ -879,11 +882,11 @@ class SourceSyncPanel {
     tr.appendChild(this.renderModeCell(row, view));
     tbody.appendChild(tr);
 
-    if (view.pausedRun) {
+    for (const pausedRun of view.pausedRuns) {
       const runTr = document.createElement('tr');
       const td = document.createElement('td');
       td.setAttribute('colspan', '5');
-      td.appendChild(this.renderPausedBlock(row, view));
+      td.appendChild(this.renderPausedBlock(row, { ...view, pausedRun }));
       runTr.appendChild(td);
       tbody.appendChild(runTr);
     }
@@ -1037,6 +1040,7 @@ class SourceSyncPanel {
     const block = sourceSyncEl('div', expired ? 'alert items-start text-left text-sm' : 'alert alert-warning items-start text-left text-sm');
     block.setAttribute('role', 'group');
     block.setAttribute('aria-label', this.t('paused.groupLabel', { connection: view.connection }));
+    block.setAttribute('data-source-sync-run', run.id);
     block.appendChild(sourceSyncIcon(expired ? 'bi-clock' : 'bi-pause-circle'));
     const inner = sourceSyncEl('div', 'flex flex-col gap-2 min-w-0 w-full');
     if (expired) {
@@ -1153,21 +1157,27 @@ class SourceSyncPanel {
     }
     this.runErrors.set(run.id, mapped.message);
     this.render();
-    this.focusRunButton(view.connection, this.t('action.remove'));
+    this.focusRunButton(view.connection, this.t('action.remove'), run.id);
   }
 
-  focusRunButton(connection, label) {
+  focusRunButton(connection, label, runId) {
     const group = this.root
       .querySelectorAll('[role="group"]')
-      .find((g) => g.getAttribute('aria-label') === this.t('paused.groupLabel', { connection }));
+      .find(
+        (g) =>
+          g.getAttribute('aria-label') === this.t('paused.groupLabel', { connection }) &&
+          (!runId || g.getAttribute('data-source-sync-run') === runId),
+      );
     if (!group) return;
     const button = group.querySelectorAll('button').find((b) => b.textContent === label);
     if (button) button.focus();
   }
 
   focusDismiss(runId) {
-    const row = this.rows.find((r) => r.paused_run && r.paused_run.id === runId);
-    if (row) this.focusRunButton(buildSourceSyncRowView(row, this.locale, this.limits).connection, this.t('action.dismiss'));
+    const row = this.rows.find(
+      (r) => (r.paused_run && r.paused_run.id === runId) || (Array.isArray(r.paused_runs) && r.paused_runs.some((p) => p && p.id === runId)),
+    );
+    if (row) this.focusRunButton(buildSourceSyncRowView(row, this.locale, this.limits).connection, this.t('action.dismiss'), runId);
   }
 
   async dismissRun(view, button, sibling) {
@@ -1189,7 +1199,7 @@ class SourceSyncPanel {
     }
     this.runErrors.set(run.id, mapped.message + (mapped.code ? ' ' + mapped.code : ''));
     this.render();
-    this.focusRunButton(view.connection, this.t('action.dismiss'));
+    this.focusRunButton(view.connection, this.t('action.dismiss'), run.id);
   }
 }
 

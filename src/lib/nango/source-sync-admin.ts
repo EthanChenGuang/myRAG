@@ -7,6 +7,7 @@ import {
     applySourceDeletions,
     connectionTenantKey,
     parseMaxDeleteShare,
+    sourcePurgeDailyCap,
     type SourceConnectionRow,
 } from './source-deletions';
 import { connectionReconcileState, parseReconcileDays, type ReconcileRunSummary, type ReconcileState } from './reconcile';
@@ -243,6 +244,7 @@ function limits() {
     return {
         maxAgeDays: parseReconcileDays(env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS as string | undefined),
         maxDeleteShare: parseMaxDeleteShare(env.RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE as string | undefined),
+        purgeDailyCap: sourcePurgeDailyCap(),
     };
 }
 
@@ -297,7 +299,15 @@ export interface SourceSyncPausedRun {
     total_count: number | null;
     file_names: string[];
     names_not_sent: number;
+    /** share (the mass-delete guard, D-09) or purge_daily_cap (D-49). */
+    pause_reason: SourceSyncPauseReason;
+    /** The cap that held the files back; only on purge_daily_cap runs. */
+    daily_cap?: number;
+    /** Up to 20 candidate source file ids, sent only when no file name could be read. */
+    file_ids?: string[];
 }
+
+export type SourceSyncPauseReason = 'share' | 'purge_daily_cap';
 
 export interface SourceSyncConnectionItem {
     id: string;
@@ -314,13 +324,15 @@ export interface SourceSyncConnectionItem {
     days_without_reconcile: number | null;
     deletion_mode: DeletionModeValue;
     paused_run: SourceSyncPausedRun | null;
+    /** Every open paused run of the connection, newest first; paused_run is the first of them. */
+    paused_runs: SourceSyncPausedRun[];
 }
 
 export interface SourceSyncConnectionList {
     total: number;
     limit: number;
     offset: number;
-    limits: { max_age_days: number; max_delete_share: number };
+    limits: { max_age_days: number; max_delete_share: number; purge_daily_cap: number };
     items: SourceSyncConnectionItem[];
 }
 
@@ -348,16 +360,27 @@ async function ownerLabels(client: SupabaseAdmin, ids: readonly string[], signal
 }
 
 /** Up to 20 file names of the candidates that still have a sync record, from the run's candidate ids. */
-async function pausedFileNames(client: SupabaseAdmin, runId: string, connectionRowId: string, ownerUserId: string): Promise<string[]> {
+async function pausedFileNames(
+    client: SupabaseAdmin,
+    runId: string,
+    connectionRowId: string,
+    ownerUserId: string,
+    knownCandidates?: readonly unknown[]
+): Promise<string[]> {
     try {
-        const { data: runs, error: runError } = await client
-            .from('rag_source_reconcile_runs')
-            .select('candidate_file_ids')
-            .eq('id', runId)
-            .eq('connection_id', connectionRowId)
-            .limit(1);
-        if (runError) return [];
-        const candidates = (((runs ?? []) as Row[])[0]?.candidate_file_ids ?? []) as unknown[];
+        let candidates: readonly unknown[];
+        if (knownCandidates !== undefined) {
+            candidates = knownCandidates;
+        } else {
+            const { data: runs, error: runError } = await client
+                .from('rag_source_reconcile_runs')
+                .select('candidate_file_ids')
+                .eq('id', runId)
+                .eq('connection_id', connectionRowId)
+                .limit(1);
+            if (runError) return [];
+            candidates = (((runs ?? []) as Row[])[0]?.candidate_file_ids ?? []) as unknown[];
+        }
         const ids = candidates.filter((id): id is string => typeof id === 'string' && id !== '');
         if (ids.length === 0) return [];
         const { data: connections, error: connectionError } = await client
@@ -385,6 +408,86 @@ async function pausedFileNames(client: SupabaseAdmin, runId: string, connectionR
         logger.warn(SOURCE_SYNC, 'File names of a paused run not read', { runId, code: codeOf(error) });
         return [];
     }
+}
+
+interface OpenRunRow {
+    id: string;
+    connection_id: string;
+    tenant_key: string | null;
+    created_at: string | null;
+    expires_at: string | null;
+    candidate_count: unknown;
+    total_count: unknown;
+    candidate_file_ids: unknown;
+    pause_reason: string | null;
+    daily_cap: unknown;
+}
+
+/**
+ * Every open paused run (awaiting confirmation, not expired) of the listed connections, newest first, read in one select on
+ * the service-role client. Returns null when the read failed; the caller then shows the newest run the SQL list returned.
+ */
+async function readOpenPausedRuns(client: SupabaseAdmin, connectionIds: readonly string[], now: number): Promise<Map<string, OpenRunRow[]> | null> {
+    const open = new Map<string, OpenRunRow[]>();
+    if (connectionIds.length === 0) return open;
+    try {
+        const { data, error } = await client
+            .from('rag_source_reconcile_runs')
+            .select('id, connection_id, tenant_key, created_at, expires_at, candidate_count, total_count, candidate_file_ids, pause_reason, daily_cap')
+            .in('connection_id', [...connectionIds])
+            .eq('status', 'awaiting_confirmation')
+            .order('created_at', { ascending: false });
+        if (error) {
+            logger.warn(SOURCE_SYNC, 'Open paused runs not read', { code: codeOf(error) });
+            return null;
+        }
+        for (const run of (data ?? []) as OpenRunRow[]) {
+            if (typeof run.id !== 'string' || !(timeOf(run.expires_at) > now)) continue;
+            const id = String(run.connection_id);
+            const list = open.get(id) ?? [];
+            list.push(run);
+            open.set(id, list);
+        }
+        for (const list of open.values()) {
+            list.sort((a, b) => timeOf(b.created_at) - timeOf(a.created_at) || b.id.localeCompare(a.id));
+        }
+        return open;
+    } catch (error) {
+        logger.warn(SOURCE_SYNC, 'Open paused runs not read', { code: codeOf(error) });
+        return null;
+    }
+}
+
+function pauseReasonOf(value: unknown): SourceSyncPauseReason {
+    return value === 'purge_daily_cap' ? 'purge_daily_cap' : 'share';
+}
+
+async function pausedRunView(
+    client: SupabaseAdmin,
+    run: { id: string; found_at: string | null; expires_at: string | null; candidate_count: number; total_count: number | null; pause_reason: unknown; daily_cap: unknown },
+    connectionRowId: string,
+    ownerUserId: string,
+    candidates?: readonly unknown[]
+): Promise<SourceSyncPausedRun> {
+    const names = await pausedFileNames(client, run.id, connectionRowId, ownerUserId, candidates);
+    const reason = pauseReasonOf(run.pause_reason);
+    const cap = numberOf(run.daily_cap);
+    const view: SourceSyncPausedRun = {
+        id: run.id,
+        found_at: run.found_at,
+        expires_at: run.expires_at,
+        candidate_count: run.candidate_count,
+        total_count: run.total_count,
+        file_names: names,
+        names_not_sent: Math.max(0, run.candidate_count - names.length),
+        pause_reason: reason,
+    };
+    if (reason === 'purge_daily_cap' && cap !== null && cap > 0) view.daily_cap = cap;
+    if (names.length === 0 && candidates !== undefined) {
+        const ids = candidates.filter((id): id is string => typeof id === 'string' && id !== '').slice(0, PAUSED_FILE_NAMES);
+        if (ids.length > 0) view.file_ids = ids;
+    }
+    return view;
 }
 
 function groupOf(states: readonly ReconcileState[]): number {
@@ -431,6 +534,7 @@ export async function listSourceSyncConnections(input: {
 
     const facts = (await readRunFacts(client, valid.map((row) => row.connection_id as string))) ?? { newest: new Map(), scheduled: new Set<string>() };
     const labels = await ownerLabels(client, valid.map((row) => row.owner_user_id as string), input.signal);
+    const openRuns = await readOpenPausedRuns(client, valid.map((row) => row.connection_id as string), now);
 
     const items = await Promise.all(
         valid.map(async (row): Promise<SourceSyncConnectionItem> => {
@@ -452,20 +556,48 @@ export async function listSourceSyncConnections(input: {
                 now,
                 { maxAgeDays: configured.maxAgeDays }
             );
-            let pausedRun: SourceSyncPausedRun | null = null;
-            if (awaitingId !== null) {
-                const candidateCount = numberOf(row.awaiting_candidate_count) ?? 0;
-                const names = await pausedFileNames(client, awaitingId, id, owner);
-                pausedRun = {
-                    id: awaitingId,
-                    found_at: textOf(row.awaiting_created_at),
-                    expires_at: expiresAt,
-                    candidate_count: candidateCount,
-                    total_count: numberOf(row.awaiting_total_count),
-                    file_names: names,
-                    names_not_sent: Math.max(0, candidateCount - names.length),
-                };
+            const tenantKey = textOf(row.tenant_key);
+            const open = (openRuns?.get(id) ?? []).filter((run) => run.tenant_key === tenantKey);
+            let pausedRuns: SourceSyncPausedRun[] = [];
+            if (openRuns !== null && open.length > 0) {
+                pausedRuns = await Promise.all(
+                    open.map((run) =>
+                        pausedRunView(
+                            client,
+                            {
+                                id: run.id,
+                                found_at: textOf(run.created_at),
+                                expires_at: textOf(run.expires_at),
+                                candidate_count: numberOf(run.candidate_count) ?? 0,
+                                total_count: numberOf(run.total_count),
+                                pause_reason: run.pause_reason,
+                                daily_cap: run.daily_cap,
+                            },
+                            id,
+                            owner,
+                            Array.isArray(run.candidate_file_ids) ? run.candidate_file_ids : []
+                        )
+                    )
+                );
+            } else if (awaitingId !== null) {
+                pausedRuns = [
+                    await pausedRunView(
+                        client,
+                        {
+                            id: awaitingId,
+                            found_at: textOf(row.awaiting_created_at),
+                            expires_at: expiresAt,
+                            candidate_count: numberOf(row.awaiting_candidate_count) ?? 0,
+                            total_count: numberOf(row.awaiting_total_count),
+                            pause_reason: null,
+                            daily_cap: null,
+                        },
+                        id,
+                        owner
+                    ),
+                ];
             }
+            const pausedRun: SourceSyncPausedRun | null = pausedRuns[0] ?? null;
             const mode = row.deletion_mode === 'soft' || row.deletion_mode === 'purge' ? row.deletion_mode : null;
             const provider = String(row.provider ?? '');
             return {
@@ -483,6 +615,7 @@ export async function listSourceSyncConnections(input: {
                 days_without_reconcile: state.daysWithoutReconcile,
                 deletion_mode: mode,
                 paused_run: pausedRun,
+                paused_runs: pausedRuns,
             };
         })
     );
@@ -501,7 +634,7 @@ export async function listSourceSyncConnections(input: {
             total: rows.length > 0 ? numberOf(rows[0]?.total_rows) ?? rows.length : 0,
             limit: input.limit,
             offset: input.offset,
-            limits: { max_age_days: configured.maxAgeDays, max_delete_share: configured.maxDeleteShare },
+            limits: { max_age_days: configured.maxAgeDays, max_delete_share: configured.maxDeleteShare, purge_daily_cap: configured.purgeDailyCap },
             items,
         },
     };
