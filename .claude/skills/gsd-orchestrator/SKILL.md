@@ -188,6 +188,8 @@ Gates:
 - A test that rolls back inserts into an ANN index (HNSW) leaves dead entries, so every later insert slows down sharply. VACUUM after rollbacks in such tests.
 - A new cloud session's checkout can land on a different commit than `source_revision` (seen: an executor ran `git fetch` with two branches, so FETCH_HEAD was the ops branch, and it reported every dependency as missing; fetch one branch per command, or check out `origin/<base>` instead of FETCH_HEAD). Put the expected base sha in each execute prompt (`git fetch origin <base> && git checkout -B exec/<plan> FETCH_HEAD`, then check the sha), and check the sha first whenever a report says a dependency or SUMMARY is missing.
 - A READY detector that reads PLAN files from one worktree misses plans that exist only on exec or planning branches (for example plans split by a plan-check). When a planner adds or splits plans, check their `depends_on` by hand, or read PLAN files from every branch.
+- A grep sweep for tests broken by a new DB guard misses cases that are phrased differently. After a guard migration, run the full DB suite in the foreground before pushing the fix.
+- Some tools (for example Vercel deploys) ask the person to approve each call. While the owner is away, the prompt goes unanswered and the call does not run. Don't retry it in a loop. Queue it for the owner and say so.
 - Verification rounds surface many gaps at once. Throughput feels slow when every gap gets its own session and trunk stops moving. Batch the medium and low gaps, and unblock the merge pipeline first.
 
 ## 10. Keep this skill current (standing owner instruction)
