@@ -44,6 +44,16 @@ export function syncResultLines(stats: Pick<SyncStats, 'failClosed'> | null, mod
   return [accessGroupText('sync.failClosed', language, { count })];
 }
 
+export interface SyncCountPart {
+  key: 'processed' | 'deleted' | 'skipped' | 'withdrawn';
+  labelKey: TranslationKeys;
+  count: number;
+}
+
+export function syncCountParts(_stats: Partial<SyncStats> | null): SyncCountPart[] {
+  return [];
+}
+
 export function SyncFailClosedLine({ text }: { text: string }) {
   return (
     <p className="basis-full flex items-start gap-2 text-amber-700 dark:text-amber-300">
