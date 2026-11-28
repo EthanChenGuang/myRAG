@@ -23,6 +23,8 @@ export interface MemoryAdminOptions {
   rpc?: (name: string, args: Row) => { data: unknown; error: { code: string; message: string } | null };
   /** A delete on this table returns this error. */
   failDelete?: { table: string; error: { code: string; message: string } };
+  /** Inserts and upserts store rows (upserts merge on their onConflict columns); off by default, as before. */
+  storeWrites?: boolean;
 }
 
 export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: MemoryAdminOptions = {}) {
@@ -48,9 +50,11 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
         tables[table] = rows.filter((row) => !matched.includes(row));
       } else if (operation === 'update' && values) {
         for (const row of matched) Object.assign(row, values);
-      } else if (operation === 'upsert' && values) {
+      } else if ((operation === 'upsert' || (options.storeWrites && operation === 'insert')) && values) {
         const next = values;
-        const existing = conflict.length > 0 ? rows.find((row) => conflict.every((column) => row[column] === next[column])) : undefined;
+        const existing = operation === 'upsert' && conflict.length > 0
+          ? rows.find((row) => conflict.every((column) => row[column] === next[column]))
+          : undefined;
         if (existing) Object.assign(existing, next);
         else tables[table] = [...rows, { ...next }];
       }
@@ -94,6 +98,11 @@ export function createNangoMemoryAdmin(seed: Record<string, Row[]>, options: Mem
         const result = run();
         const found = Array.isArray(result.data) ? result.data[0] : undefined;
         return Promise.resolve({ data: found ?? null, error: found ? null : { message: 'not found' } });
+      },
+      maybeSingle() {
+        const result = run();
+        const found = Array.isArray(result.data) ? result.data[0] : undefined;
+        return Promise.resolve({ data: found ?? null, error: null });
       },
       then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) =>
         Promise.resolve(run()).then(onFulfilled, onRejected),
