@@ -105,9 +105,40 @@ export class NangoRecordsFeed implements SourceChangeFeed {
         this.now = options.now ?? Date.now;
     }
 
-    async read(_input: SourceChangeFeedReadInput): Promise<ChangePage> {
-        void this.client;
-        void this.now;
-        return { changes: [], nextCursor: null, complete: true, fullListing: false };
+    async read(input: SourceChangeFeedReadInput): Promise<ChangePage> {
+        const client = this.client ?? (getNango() as unknown as NangoRecordsClient);
+        const changes: SourceChange[] = [];
+        let cursor: string | null = input.cursor;
+        let lastCursor: string | null = null;
+        let complete = false;
+        for (let page = 0; page < NANGO_RECORDS_MAX_PAGES; page++) {
+            if (input.signal.aborted || this.now() >= input.deadline) break;
+            const response = await client.listRecords({
+                providerConfigKey: this.providerConfigKey,
+                connectionId: input.connectionId,
+                model: this.model,
+                filter: 'deleted',
+                cursor,
+                limit: NANGO_RECORDS_PAGE_SIZE,
+            });
+            for (const raw of response.records ?? []) {
+                const record = (raw ?? {}) as NangoRecordShape;
+                const id = typeof record.id === 'string' || typeof record.id === 'number' ? String(record.id) : '';
+                if (id === '') continue;
+                const metadata = record._nango_metadata ?? null;
+                const action = typeof metadata?.last_action === 'string' ? metadata.last_action.toUpperCase() : 'DELETED';
+                const recordCursor = typeof metadata?.cursor === 'string' && metadata.cursor !== '' ? metadata.cursor : undefined;
+                changes.push({ fileId: id, deleted: action === 'DELETED', kind: 'file', ...(recordCursor ? { cursor: recordCursor } : {}) });
+                if (recordCursor) lastCursor = recordCursor;
+            }
+            const next = typeof response.next_cursor === 'string' && response.next_cursor !== '' ? response.next_cursor : null;
+            if (next === null) {
+                complete = true;
+                break;
+            }
+            lastCursor = next;
+            cursor = next;
+        }
+        return { changes, nextCursor: lastCursor, complete, fullListing: false };
     }
 }

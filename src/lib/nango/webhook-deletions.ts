@@ -159,8 +159,81 @@ function deletedEntries(changes: ReadonlyArray<{ fileId: string; deleted: boolea
  * Applies the deletions a signed Nango `type: 'sync'` webhook reports (D-05). Never throws for a refusal: every
  * outcome is returned so the route can answer one body for all of them.
  */
-export async function handleSyncWebhook(_payload: NangoWebhookPayload, _options: SyncWebhookOptions): Promise<SyncWebhookOutcome> {
-    return outcome('ignored');
+export async function handleSyncWebhook(payload: NangoWebhookPayload, options: SyncWebhookOptions): Promise<SyncWebhookOutcome> {
+    const now = options.now ?? Date.now;
+    const deadline = now() + Math.max(0, options.deadlineMs);
+    const signal = options.signal ?? new AbortController().signal;
+
+    if (payload.type !== 'sync' || payload.success !== true) return outcome('ignored');
+    const connectionId = typeof payload.connectionId === 'string' ? payload.connectionId : '';
+    const model = typeof payload.model === 'string' ? payload.model : '';
+    const providerConfigKey = typeof payload.providerConfigKey === 'string' ? payload.providerConfigKey : '';
+    if (connectionId === '' || providerConfigKey === '' || model === '' || model.length > MAX_MODEL_LENGTH) return outcome('ignored');
+
+    const admin = options.admin ?? getSupabaseAdmin();
+    if (!admin) {
+        logger.error(TAG, 'Supabase admin not available');
+        return outcome('failed');
+    }
+
+    const ownerId = await readOwner(admin, connectionId);
+    const connection = ownerId === null ? null : await loadSourceConnection(admin, connectionId, ownerId, { admin });
+    if (!connection) return outcome('unknown_connection');
+    if (!integrationKeysOf(connection.provider).has(providerConfigKey)) {
+        logger.warn(TAG, 'Integration key does not match the connection', { connectionId: connection.id });
+        return outcome('ignored');
+    }
+
+    const stored = await readStoredCursor(admin, connection, model);
+    if (!stored.ok) return outcome('failed');
+
+    const feed = options.feedFor
+        ? options.feedFor({ providerConfigKey, model })
+        : new NangoRecordsFeed({ providerConfigKey, model });
+    const readDeadline = now() + Math.floor((deadline - now()) / 2);
+    let page;
+    try {
+        page = await feed.read({ connectionId: connection.connection_id, cursor: stored.cursor, deadline: readDeadline, signal });
+    } catch (error) {
+        logger.warn(TAG, 'Deleted records read failed', { connectionId: connection.id, code: errorCode(error) });
+        return outcome('failed');
+    }
+
+    const entries = deletedEntries(page.changes);
+    if (entries.length === 0) {
+        const advance = page.complete && page.nextCursor !== null && page.nextCursor !== stored.cursor;
+        const cursorStored = advance ? await storeCursor(admin, connection, model, page.nextCursor as string) : false;
+        return outcome('nothing_deleted', { cursorStored });
+    }
+
+    const result = outcome('applied');
+    for (let start = 0; start < entries.length; start += DELETION_BATCH_SIZE) {
+        if (signal.aborted || now() >= deadline) break;
+        const batch = entries.slice(start, start + DELETION_BATCH_SIZE);
+        const applied = await applySourceDeletions(connection, batch.map((entry) => entry.fileId), 'change_feed', { admin });
+        result.batches++;
+        result.removed += applied.removed;
+        result.failed += applied.failed;
+        if (applied.failed > 0 || applied.deferred > 0) {
+            result.status = 'failed';
+            break;
+        }
+        const isLast = start + DELETION_BATCH_SIZE >= entries.length;
+        const cursor = isLast && page.complete ? page.nextCursor ?? batch[batch.length - 1].cursor : batch[batch.length - 1].cursor;
+        if (cursor !== null && cursor !== stored.cursor) {
+            result.cursorStored = (await storeCursor(admin, connection, model, cursor)) || result.cursorStored;
+        }
+    }
+
+    logger.info(TAG, 'Sync deletions handled', {
+        connectionId: connection.id,
+        status: result.status,
+        candidates: entries.length,
+        removed: result.removed,
+        failed: result.failed,
+        batches: result.batches,
+    });
+    return result;
 }
 
 /** The auth operation word, for the log only. */
