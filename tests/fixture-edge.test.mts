@@ -722,12 +722,15 @@ describe('fake edge generic rag_* rpc routing', () => {
     assert.deepEqual(await none.json(), []);
   });
 
-  test('an argument the function does not have returns 400 and is recorded', async () => {
+  test('an argument the function does not have returns 404 PGRST202 and is recorded', async () => {
     const e = await getEdge();
     const before = e.errors.length;
     const res = await rpc('rag_get_ingest_document', { p_document_id: FIXTURE_USER_ID, p_tenant_key: 's:default', p_extra: 1 });
-    assert.equal(res.status, 400);
-    assert.match(((await res.json()) as { message: string }).message, /p_extra/);
+    // quick-term-rpc-hardening: overloads are chosen by argument names as PostgREST does; no overload has p_extra, so PGRST202 (404)
+    assert.equal(res.status, 404);
+    const body = (await res.json()) as { message: string; code?: string };
+    assert.equal(body.code, 'PGRST202');
+    assert.match(body.message, /p_extra/);
     assert.equal(e.errors.length - before, 1);
   });
 

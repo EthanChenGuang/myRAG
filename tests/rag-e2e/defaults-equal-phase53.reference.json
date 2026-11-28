@@ -1,5 +1,5 @@
 {
- "recorded_at_commit": "4c65d1519f51eb40e6434a72ed002d61a0a1837e",
+ "recorded_at_commit": "6fc5abc2fff3f4f6269dd79b55b3c29941a534d6",
  "note": "Recorded with every Phase 5.3 switch unset (prechunked, single-tenant, fake citation generator). Ids, scores and answer hashes only; see the 05.3-48 SUMMARY for why this commit and not the pre-phase commit.",
  "switches": {
   "RAG_MONITOR": "unset",
@@ -1012,6 +1012,44 @@
      "similarity": 0.6637141090034359
     }
    ]
+  },
+  {
+   "item_id": "en-glossary-001",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "fb84dd617b6ff451f1c6f4ac0c5c84ed4deae14910bb50c2aa054ba416fc0b55",
+   "candidates": [
+    {
+     "chunk_id": "d0612b23-8e23-4a09-ac9a-d99db1428650",
+     "final_score": 0.3746769912637191,
+     "similarity": 0.3746769912637191
+    },
+    {
+     "chunk_id": "d4d2b848-f031-4ef9-ac96-de5922899b37",
+     "final_score": 0.313884366386202,
+     "similarity": 0.313884366386202
+    }
+   ]
+  },
+  {
+   "item_id": "en-glossary-002",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "9a2f703da6961f2460da035d841d73661b3cc676b8cff10879cabb47dd269938",
+   "candidates": [
+    {
+     "chunk_id": "d0612b23-8e23-4a09-ac9a-d99db1428650",
+     "final_score": 0.28350254048399615,
+     "similarity": 0.28350254048399615
+    }
+   ]
+  },
+  {
+   "item_id": "en-glossary-003",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
   },
   {
    "item_id": "en-identifier-near-miss-001",
@@ -2093,6 +2131,34 @@
    ]
   },
   {
+   "item_id": "en-no-answer-018",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "en-no-answer-019",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "en-no-answer-020",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "en-no-answer-021",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "en-no_answer-term-001",
    "refused": false,
    "refusal_reason": null,
@@ -2249,6 +2315,90 @@
      "chunk_id": "9ef78ef6-3872-43a6-80ce-47aa6d4b98ed",
      "final_score": 0.2892995814115287,
      "similarity": 0.2892995814115287
+    }
+   ]
+  },
+  {
+   "item_id": "en-scoped-compound-001",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "df9e55444c65b3eb618a98eac37a7c906b559a4b514b49f90675eae1156cbca8",
+   "candidates": [
+    {
+     "chunk_id": "972e190d-23c5-474d-b2f5-69199ae3ecb3",
+     "final_score": 0.5127808146011353,
+     "similarity": 0.5127808146011353
+    },
+    {
+     "chunk_id": "a32c0965-16d0-4b5d-971f-2a90984dbeb5",
+     "final_score": 0.5064295801516364,
+     "similarity": 0.5064295801516364
+    },
+    {
+     "chunk_id": "86f32906-7243-4e17-8a75-af8b9cf5cf52",
+     "final_score": 0.2998601556074346,
+     "similarity": 0.2998601556074346
+    },
+    {
+     "chunk_id": "18d89929-4ca8-4d5a-9ad6-1e2f404c2d0a",
+     "final_score": 0.2891116321684545,
+     "similarity": 0.2891116321684545
+    }
+   ]
+  },
+  {
+   "item_id": "en-scoped-compound-002",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "4e5aac0d4bfc2dee0d63c14e0e92e7c6bdef3907c3b0cb439d3f6754be843e71",
+   "candidates": [
+    {
+     "chunk_id": "86f32906-7243-4e17-8a75-af8b9cf5cf52",
+     "final_score": 0.6314829713220274,
+     "similarity": 0.6314829713220274
+    },
+    {
+     "chunk_id": "18d89929-4ca8-4d5a-9ad6-1e2f404c2d0a",
+     "final_score": 0.6307879053751801,
+     "similarity": 0.6307879053751801
+    },
+    {
+     "chunk_id": "a32c0965-16d0-4b5d-971f-2a90984dbeb5",
+     "final_score": 0.2921605619144958,
+     "similarity": 0.2921605619144958
+    },
+    {
+     "chunk_id": "972e190d-23c5-474d-b2f5-69199ae3ecb3",
+     "final_score": 0.29042682631896777,
+     "similarity": 0.29042682631896777
+    }
+   ]
+  },
+  {
+   "item_id": "en-scoped-compound-003",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "9b40ea78d6bc177aa52f8cefea32a9e4f1f6c92806b27d8a86808accaf9963f2",
+   "candidates": [
+    {
+     "chunk_id": "a32c0965-16d0-4b5d-971f-2a90984dbeb5",
+     "final_score": 0.5168219516768786,
+     "similarity": 0.5168219516768786
+    },
+    {
+     "chunk_id": "972e190d-23c5-474d-b2f5-69199ae3ecb3",
+     "final_score": 0.5115210163979448,
+     "similarity": 0.5115210163979448
+    },
+    {
+     "chunk_id": "18d89929-4ca8-4d5a-9ad6-1e2f404c2d0a",
+     "final_score": 0.4595929530210461,
+     "similarity": 0.4595929530210461
+    },
+    {
+     "chunk_id": "86f32906-7243-4e17-8a75-af8b9cf5cf52",
+     "final_score": 0.45760931301401075,
+     "similarity": 0.45760931301401075
     }
    ]
   },
@@ -3677,6 +3827,27 @@
    ]
   },
   {
+   "item_id": "it-glossary-001",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "it-glossary-002",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "it-glossary-003",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "it-identifier-near-miss-001",
    "refused": false,
    "refusal_reason": null,
@@ -4947,6 +5118,46 @@
    ]
   },
   {
+   "item_id": "it-no-answer-019",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "c911af3447e465e5d43d2efa40c7b5f0af3ff65a8160f8d7ce6738e4dbe34978",
+   "candidates": [
+    {
+     "chunk_id": "000e2607-4774-402e-a245-7b3b67d264e1",
+     "final_score": 0.31412635017947776,
+     "similarity": 0.31412635017947776
+    }
+   ]
+  },
+  {
+   "item_id": "it-no-answer-020",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "it-no-answer-021",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "7ef643a713aae342318b54b657d41e70d0f625dd4610b3d5071f7c4099337da4",
+   "candidates": [
+    {
+     "chunk_id": "000e2607-4774-402e-a245-7b3b67d264e1",
+     "final_score": 0.29493618890452966,
+     "similarity": 0.29493618890452966
+    }
+   ]
+  },
+  {
+   "item_id": "it-no-answer-022",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "it-no_answer-term-001",
    "refused": false,
    "refusal_reason": null,
@@ -5087,6 +5298,174 @@
      "chunk_id": "96b82c4c-5d34-4e6c-8222-02a29b8f20a3",
      "final_score": 0.40277538945236613,
      "similarity": 0.40277538945236613
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-001",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "c81773d9a4e7f3c02c10f1c47a4aa3ecbc3a3722b00c3fe3780d8e6158a04bb7",
+   "candidates": [
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.6604337489863777,
+     "similarity": 0.6604337489863777
+    },
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.6599052739030636,
+     "similarity": 0.6599052739030636
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.3006092249621226,
+     "similarity": 0.3006092249621226
+    },
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.2934589560901627,
+     "similarity": 0.2934589560901627
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-002",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "4830acdaa70714529b42db69d65b47327891f007282a512de06a280bb4c7f77b",
+   "candidates": [
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.5997352838674115,
+     "similarity": 0.5997352838674115
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.5929521696681951,
+     "similarity": 0.5929521696681951
+    },
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.2964726686477682,
+     "similarity": 0.2964726686477682
+    },
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.2885001427829227,
+     "similarity": 0.2885001427829227
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-003",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "49ae769e390c80359dd4a8354a68d7c59507dc47ccd9aac75a7373e46496a6bd",
+   "candidates": [
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.44773034507504816,
+     "similarity": 0.44773034507504816
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.4463341758049064,
+     "similarity": 0.4463341758049064
+    },
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.43801547205171565,
+     "similarity": 0.43801547205171565
+    },
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.43328489463689457,
+     "similarity": 0.43328489463689457
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-004",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "e5d2dec04c76298c9e583291ff2503ec3728764cca4188f336d9cb1809b6d1b4",
+   "candidates": [
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.5691592271639309,
+     "similarity": 0.5691592271639309
+    },
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.5668705622112081,
+     "similarity": 0.5668705622112081
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.3370404826257982,
+     "similarity": 0.3370404826257982
+    },
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.32888108571510033,
+     "similarity": 0.32888108571510033
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-005",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "c9a4538942907f42ecd2491e45ef6e432d1118bb4c90bb0cd5add9b58a7c076d",
+   "candidates": [
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.5563745628671171,
+     "similarity": 0.5563745628671171
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.5522325385892246,
+     "similarity": 0.5522325385892246
+    },
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.2951184105590816,
+     "similarity": 0.2951184105590816
+    },
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.2894105048744371,
+     "similarity": 0.2894105048744371
+    }
+   ]
+  },
+  {
+   "item_id": "it-scoped-compound-006",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "49ae769e390c80359dd4a8354a68d7c59507dc47ccd9aac75a7373e46496a6bd",
+   "candidates": [
+    {
+     "chunk_id": "9a4a2645-9cc5-4183-87ff-713755d3091d",
+     "final_score": 0.5780209223646876,
+     "similarity": 0.5780209223646876
+    },
+    {
+     "chunk_id": "570f45ae-5046-451b-862d-1dfa28453ad4",
+     "final_score": 0.5569321679154885,
+     "similarity": 0.5569321679154885
+    },
+    {
+     "chunk_id": "2dd18949-b534-4ce9-85f9-815ba739372d",
+     "final_score": 0.4840118433240779,
+     "similarity": 0.4840118433240779
+    },
+    {
+     "chunk_id": "17dc1d89-a1ea-492e-97a0-8bedb8f8f872",
+     "final_score": 0.4542625167575163,
+     "similarity": 0.4542625167575163
     }
    ]
   },
@@ -6729,6 +7108,27 @@
    ]
   },
   {
+   "item_id": "zh-glossary-001",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "zh-glossary-002",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "zh-glossary-003",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "zh-identifier-near-miss-001",
    "refused": false,
    "refusal_reason": null,
@@ -7804,6 +8204,34 @@
    ]
   },
   {
+   "item_id": "zh-no-answer-018",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "zh-no-answer-019",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "zh-no-answer-020",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
+   "item_id": "zh-no-answer-021",
+   "refused": true,
+   "refusal_reason": "no_relevant_context",
+   "answer_sha256": null,
+   "candidates": []
+  },
+  {
    "item_id": "zh-no_answer-term-001",
    "refused": false,
    "refusal_reason": null,
@@ -7950,6 +8378,70 @@
      "chunk_id": "fdfb0895-2027-4fa8-bda9-3c66370242bf",
      "final_score": 0.383078078581116,
      "similarity": 0.383078078581116
+    }
+   ]
+  },
+  {
+   "item_id": "zh-scoped-compound-001",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "402406f22bd8ba6a9d4bcb524c5a69f86c572c4dd426dde9824c773067b911a4",
+   "candidates": [
+    {
+     "chunk_id": "edcb9199-aed5-4c23-b854-2a93819b69cf",
+     "final_score": 0.5888626330413265,
+     "similarity": 0.5888626330413265
+    },
+    {
+     "chunk_id": "b1c01a77-9a30-403c-b473-d0ddae1f23a8",
+     "final_score": 0.5691762823357909,
+     "similarity": 0.5691762823357909
+    }
+   ]
+  },
+  {
+   "item_id": "zh-scoped-compound-002",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "9d0c1ce172cbb29af3f560c34b22aaa20c53c662948214484fea4485018f7c4f",
+   "candidates": [
+    {
+     "chunk_id": "16fd6141-6f71-404d-bfd7-870200f36491",
+     "final_score": 0.5748177855989718,
+     "similarity": 0.5748177855989718
+    },
+    {
+     "chunk_id": "b28f504b-54b6-4805-a390-12b5cd2fb056",
+     "final_score": 0.5651637238068951,
+     "similarity": 0.5651637238068951
+    }
+   ]
+  },
+  {
+   "item_id": "zh-scoped-compound-003",
+   "refused": false,
+   "refusal_reason": null,
+   "answer_sha256": "6f1dedf77a94de82555611be13cedc50228386efe248c5001bfec79e70b624ff",
+   "candidates": [
+    {
+     "chunk_id": "16fd6141-6f71-404d-bfd7-870200f36491",
+     "final_score": 0.5196635436811258,
+     "similarity": 0.5196635436811258
+    },
+    {
+     "chunk_id": "b28f504b-54b6-4805-a390-12b5cd2fb056",
+     "final_score": 0.48630565649766,
+     "similarity": 0.48630565649766
+    },
+    {
+     "chunk_id": "edcb9199-aed5-4c23-b854-2a93819b69cf",
+     "final_score": 0.32211122117437996,
+     "similarity": 0.32211122117437996
+    },
+    {
+     "chunk_id": "b1c01a77-9a30-403c-b473-d0ddae1f23a8",
+     "final_score": 0.30212745007054986,
+     "similarity": 0.30212745007054986
     }
    ]
   },
