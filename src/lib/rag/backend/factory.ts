@@ -18,6 +18,8 @@ export interface ResolvedRetrievalBackend {
   choice: BackendId;
   /** What served the request so far; read once the search stage is done. */
   selection(): RetrievalBackendSelection;
+  /** RET-05: the ids the external re-validation dropped in this request, deduplicated; for the stale repair only, never traced. */
+  staleChunkIds(): string[];
 }
 
 export interface ResolveBackendOptions {
@@ -123,6 +125,9 @@ function createFallbackBackend(input: {
   let tenantValidationDropped = 0;
   let calls = 0;
   let externalServed = 0;
+  const recheckChecked = new Set<string>();
+  const recheckDropped = new Set<string>();
+  let everyServedRechecked = true;
 
   const note = (reason: BackendFallbackReason) => {
     // A degrading reason outranks filter_unsupported; the first degrading reason of the request is the one reported.
@@ -222,6 +227,13 @@ function createFallbackBackend(input: {
             pgController?.abort(new Error('[RAG Backend] external answered first'));
             externalServed += 1;
             tenantValidationDropped += legs.meta?.tenantValidationDropped ?? 0;
+            const ids = legs.meta?.sourceRecheckIds;
+            if (ids) {
+              for (const id of ids.checked) recheckChecked.add(id);
+              for (const id of ids.dropped) recheckDropped.add(id);
+            } else {
+              everyServedRechecked = false;
+            }
             resolve(legs);
           });
         },
@@ -259,13 +271,18 @@ function createFallbackBackend(input: {
     selection() {
       const reason = fallbackReason as BackendFallbackReason | null;
       const servedExternally = calls === 0 || externalServed === calls;
+      const backend = reason === null && servedExternally ? choice : 'pgvector';
+      // RET-05: the marker only when every call was served externally; a pgvector fallback follows RAG_SOURCE_RECHECK instead.
+      const marked = backend === choice && externalServed > 0 && everyServedRechecked;
       return {
-        backend: reason === null && servedExternally ? choice : 'pgvector',
+        backend,
         fallbackReason: reason,
         tenantValidationDropped,
         degraded: reason !== null && DEGRADED.has(reason),
+        ...(marked ? { sourceRecheck: { checked: recheckChecked.size, dropped: recheckDropped.size } } : {}),
       };
     },
+    staleChunkIds: () => [...recheckDropped],
   };
 }
 
@@ -286,6 +303,7 @@ export function resolveRetrievalBackend(
       backend: pgvector,
       choice,
       selection: () => ({ backend: pgvector.id, fallbackReason: null, tenantValidationDropped: 0, degraded: false }),
+      staleChunkIds: () => [],
     };
   }
   return createFallbackBackend({
