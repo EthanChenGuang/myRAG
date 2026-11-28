@@ -247,7 +247,7 @@ const SOURCE_SYNC_STACK = {
   label: 'lg:hidden text-xs font-semibold mb-1',
 };
 const SOURCE_SYNC_SOLID_BUTTON = 'btn bg-base-100 text-base-content border-base-300 hover:bg-base-200';
-const SOURCE_SYNC_SELECT_FOCUS = 'focus:[outline-color:var(--fallback-p,oklch(var(--p)/1))] focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
+const SOURCE_SYNC_SELECT_FOCUS = 'focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
 const SOURCE_SYNC_TOUCH = 'max-md:min-h-12';
 
 const SOURCE_SYNC_STATES = {

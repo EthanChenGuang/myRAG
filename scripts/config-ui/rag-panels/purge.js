@@ -469,7 +469,7 @@ const PURGE_STACK = {
   label: 'md:hidden text-xs font-semibold mb-1',
 };
 const PURGE_SOLID_BUTTON = 'btn bg-base-100 text-base-content border-base-300 hover:bg-base-200';
-const PURGE_SELECT_FOCUS = 'focus:[outline-color:var(--fallback-p,oklch(var(--p)/1))] focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
+const PURGE_SELECT_FOCUS = 'focus-visible:[outline-color:var(--fallback-p,oklch(var(--p)/1))]';
 const PURGE_TOUCH = 'max-md:min-h-12';
 
 const PURGE_KNOWN_CODES = new Set(['not_found', 'invalid_request', 'read_only', 'purge_unavailable']);

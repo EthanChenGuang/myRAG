@@ -871,7 +871,7 @@ describe('UI review 06.2 fixes', () => {
     const expected: Record<string, string> = {
       'en-US': 'The scope gate is not available on this deployment. Update the app, then reload.',
       'zh-CN': '此部署中没有范围闸门。请更新应用，然后重新加载。',
-      'it-IT': "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l'app, poi ricarica.",
+      'it-IT': "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l’app, poi ricarica.",
     };
     for (const locale of Object.keys(expected)) {
       const page = loadPage({ locale, replies: { status: { status: 404, body: { error: 'Not found' } } } });

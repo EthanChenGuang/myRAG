@@ -878,7 +878,7 @@ describe('UI review 06.3 fixes', () => {
   it('the deletion-mode select has a visible primary focus ring and a 48px target below 768px', async () => {
     const env = await mounted(() => ok(listBody([rowA()])));
     const select = env.root.querySelector(`[data-source-sync-mode="${CONN_A}"]`)!;
-    expect(select.className).toMatch(/focus:\[outline-color:[^\]]*--p/);
+    expect(select.className).toMatch(/focus-visible:\[outline-color:[^\]]*--p/);
     expect(select.className).toContain('max-md:h-12');
   });
 

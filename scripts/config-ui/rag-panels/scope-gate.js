@@ -279,7 +279,7 @@ const SCOPE_GATE_LABELS = {
     "status.loading": "Caricamento del filtro di ambito…",
     "status.loaded": "Stato caricato. Punti di riferimento: {points}. Esempi: {examples}.",
     "error.unavailable": "Lo stato del filtro di ambito non è disponibile in questo momento. Seleziona Ricarica pannello tra poco.",
-    "error.notAvailable": "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l'app, poi ricarica.",
+    "error.notAvailable": "Il filtro di ambito non è disponibile in questa distribuzione. Aggiorna l’app, poi ricarica.",
     "status.notLoaded": "Stato non caricato.",
     "cell.recorded": "Registrato: {time}",
     "effect.heading": "In vigore ora",
