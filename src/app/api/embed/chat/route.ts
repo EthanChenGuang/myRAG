@@ -6,7 +6,7 @@ import { createUIMessageStream, createUIMessageStreamResponse, streamText, type 
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
-import { AUTO_MODEL_ID, resolveStoredAutoModel } from '@/lib/chat/auto-model';
+import { AUTO_MODEL_ID } from '@/lib/chat/auto-model';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
@@ -82,6 +82,14 @@ import {
   promptTooLongText,
   type BudgetMessage,
   type PromptBudgetPlan,
+  countTokens,
+  currentModelRoutingConfig,
+  effectiveQueryParams,
+  initialModelRoute,
+  resolveRequestedModel,
+  routeModel,
+  type ModelRouteTrace,
+  type RequestedModelResolution,
 } from '@/lib/rag';
 
 // Use Node.js runtime instead of Edge
@@ -140,9 +148,20 @@ function allowedEmbedModels(): Set<string> {
 }
 
 function resolveEmbedModel(requested: string | undefined): string {
-  if (requested === AUTO_MODEL_ID) return resolveStoredAutoModel(requested, defaultEmbedModel(), 'embed') ?? defaultEmbedModel();
   if (requested && allowedEmbedModels().has(requested)) return requested;
   return defaultEmbedModel();
+}
+
+/**
+ * Phase 6.2 D-19: an Auto selection resolved once, against the server's routing ids; an id outside the embed allowlist falls
+ * back to the default embed model and is not routed (T-06.2-79). Null for every other request, which keeps resolveEmbedModel.
+ */
+function resolveEmbedAutoModel(requested: string | undefined): RequestedModelResolution | null {
+  if (requested !== AUTO_MODEL_ID) return null;
+  const resolution = resolveRequestedModel(requested, currentModelRoutingConfig());
+  return allowedEmbedModels().has(resolution.modelId)
+    ? resolution
+    : { modelId: defaultEmbedModel(), selection: 'auto', routable: false };
 }
 
 // Helper function to create a proper AI message for errors (same as main chat API)
@@ -482,7 +501,10 @@ export async function POST(request: NextRequest) {
 
     const parsed = embedChatSchema.parse(body);
     const messages = parsed.messages.filter(message => message.role !== 'system');
-    const model = resolveEmbedModel(parsed.model);
+    const modelSelection = resolveEmbedAutoModel(parsed.model);
+    const modelRouting = modelSelection ? currentModelRoutingConfig() : null;
+    let modelRoute: ModelRouteTrace | null = modelSelection && modelRouting ? initialModelRoute(modelSelection, modelRouting) : null;
+    let model = modelSelection?.modelId ?? resolveEmbedModel(parsed.model);
 
     const userMessages = messages.filter(m => m.role === 'user');
     const lastUserMessage = userMessages[userMessages.length - 1];
@@ -547,10 +569,12 @@ export async function POST(request: NextRequest) {
     if (queryText.trim().length > 0) {
       const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
       // D-09/D-16: one classification and a bounded history from the body, only while the query layer is on
+      const history = queryLayerOn ? buildHistoryWindow(messages) : undefined;
+      const classification = queryLayerOn ? classifyQuery(queryText) : undefined;
       const queryLayerInputs = queryLayerOn
         ? {
-            history: buildHistoryWindow(messages),
-            classification: classifyQuery(queryText),
+            history,
+            classification,
             ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
             ...queryTurnInputs({ messages, uiLanguage: parsed.language }),
           }
@@ -558,7 +582,11 @@ export async function POST(request: NextRequest) {
       // CACHE-01: passed only while the semantic cache can run; the pipeline derives the embed entry profile
       const cacheContext = isSemanticCacheActive()
         ? {
-            generatorModel: model || 'openai/gpt-4o-mini',
+            // F-8: a routable Auto turn's key part is the selection and both routing ids; the routed model is unknown at check time
+            generatorModel:
+              modelSelection?.routable && modelRouting
+                ? `auto|${modelRouting.fastModel}|${modelRouting.qualityModel}`
+                : model || 'openai/gpt-4o-mini',
             systemPromptHash: hashSystemPromptTemplate(embedTemplate()),
             webSearch: false,
             mcpTools: false,
@@ -649,6 +677,27 @@ export async function POST(request: NextRequest) {
       smallTalkTurn = isSmallTalkResult(result);
       context = smallTalkTurn ? '' : result.context;
       answerLanguage = smallTalkTurn ? undefined : answerLanguageOptions(result);
+      // Phase 6.2 D-20: a routable Auto turn is routed after retrieval and before generation; the router never calls retrieval
+      if (modelSelection?.routable && modelRouting) {
+        const decision = routeModel({
+          query: queryText,
+          classification,
+          plan: result.queryPlan,
+          contextTokens: countTokens(context),
+          params: effectiveQueryParams('embed'),
+          ids: modelRouting,
+        });
+        const allowed = allowedEmbedModels().has(decision.modelId);
+        if (allowed) model = decision.modelId;
+        modelRoute = allowed
+          ? { tier: decision.tier, rule: decision.rule, selection: 'auto' }
+          : { tier: 'quality', rule: 'invalid_routing_id', selection: 'auto' };
+        console.log('[Model Routing]', { tier: modelRoute.tier, rule: modelRoute.rule });
+      }
+      if (modelRoute) {
+        const routedAt = collector.now();
+        collector.record({ name: 'model_route', status: 'ok', startedAt: routedAt, endedAt: routedAt, attributes: { ...modelRoute } });
+      }
     } else {
       console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
