@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadCorpus } from './corpus.mts';
 import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import {
@@ -165,6 +166,26 @@ export function partitionIngestModeItems<T extends { category: string; tags?: re
  */
 export function ingestModeRetrievalEnv(): Record<string, string> {
   return { RAG_EXACT_ID_LOOKUP: 'true' };
+}
+
+const DEFAULT_REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** Repo-relative golden files in force for a fixture mode; that mode's fixture floor must have been fitted on them (04.1-18). */
+export function goldenInForcePaths(fixtureMode: 'prechunked' | 'ingest'): string[] {
+  return fixtureMode === 'ingest' ? ingestModeGoldenPaths() : ['eval/fixtures/golden.jsonl'];
+}
+
+/**
+ * sha256 of the golden set in force for a fixture mode, hashed as mergeGoldenFiles writes it (one file: its bytes as they are).
+ * A run that scores a subset still checks the floor against this set, so a stale floor stops a full run and a subset run alike.
+ */
+export function goldenInForceSha256(fixtureMode: 'prechunked' | 'ingest', root: string = DEFAULT_REPO_ROOT): string {
+  const paths = goldenInForcePaths(fixtureMode).map((file) => path.resolve(root, file));
+  const bytes =
+    paths.length === 1
+      ? fs.readFileSync(paths[0] as string)
+      : `${paths.flatMap((file) => fs.readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '')).join('\n')}\n`;
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 /** One golden file to score: a single path is returned as it is, several are concatenated in order into `outPath`. */

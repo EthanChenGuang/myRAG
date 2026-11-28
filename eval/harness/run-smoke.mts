@@ -1,10 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
+import { goldenInForceSha256, ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { dropTableSplitItems } from './table-split.mts';
 import { dropTemplatedItems } from './templated-fixtures.mts';
 import { MEASUREMENT_PATH, resolveGatesMode } from './gate-mode.mts';
@@ -272,9 +271,7 @@ async function main(): Promise<number> {
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
   const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
   // The fixture floor of this mode must have been fitted on the golden set in force for it, also when --golden names a subset of it.
-  const goldenInForce =
-    values.golden === undefined ? mergedGolden : mergeGoldenFiles(defaultGolden.map((file) => path.resolve(REPO_ROOT, file)), path.join(outDir, 'golden.in-force.jsonl'));
-  const fixtureFloorGolden = values['no-fixture-floor'] ? null : crypto.createHash('sha256').update(fs.readFileSync(goldenInForce)).digest('hex');
+  const fixtureFloorGolden = values['no-fixture-floor'] ? null : goldenInForceSha256(fixtureMode, REPO_ROOT);
   if (fixtureFloorGolden === null) console.log('[Eval Harness] fixture floor: off for this run (--no-fixture-floor)');
   // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
   // templated_collection items likewise run only in the inline ingest mode, which loads the templated collection for them.

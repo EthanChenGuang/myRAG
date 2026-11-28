@@ -12,7 +12,7 @@ import type { FakeLangChainTable } from '../../src/lib/rag/query/langchain/fake.
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, TerminologyImportRowSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
-import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
+import { goldenInForceSha256, ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem } from './templated-fixtures.mts';
 import { phase33BuildEnv, PHASE33_PROCESS_SWITCHES } from './templated-seed.mts';
@@ -143,7 +143,7 @@ export interface InProcessEval {
 
 export interface RunEvalOptions {
   goldenPath: string;
-  /** The fixture floor's golden check (prepareInProcessEval); defaults to the sha256 of goldenPath, null installs no floor. */
+  /** The fixture floor's golden check (prepareInProcessEval); defaults to the golden set in force for the fixture mode (04.1-18), null installs no floor. */
   fixtureFloorGolden?: string | null;
   corpusDir: string;
   outDir: string;
@@ -881,7 +881,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           corpusDir,
           deploymentMode,
           fixtureMode,
-          fixtureFloorGolden: options.fixtureFloorGolden === undefined ? sha256File(goldenPath) : options.fixtureFloorGolden,
+          fixtureFloorGolden:
+            options.fixtureFloorGolden === undefined ? goldenInForceSha256(fixtureMode === 'ingest' ? 'ingest' : 'prechunked') : options.fixtureFloorGolden,
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,
