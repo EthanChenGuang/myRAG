@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "plan_sha256": "51b2b6a04db17637d079b0ece75b3f5a9f67a99525e20358b75cf50b50a3a41d",
+  "primary_metric": "recall_at_10+correct_refusal_rate",
+  "decided_at": "2026-11-28T01:40:11Z",
+  "ranking": [
+    {
+      "config_name": "a.openai-3-small-1536.cohere-fake-quality-v1",
+      "score": 0.6288010967098704,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.bge-m3-1024.cohere-fake-quality-v1",
+      "score": 0.6245638085742772,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.openai-3-small-1536.none",
+      "score": 0.6018195413758725,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.openai-3-small-1536.auto",
+      "score": 0.5986415752741774,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.openai-3-small-1536.local_bm25",
+      "score": 0.5986415752741774,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.bge-m3-1024.none",
+      "score": 0.5936149883682287,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.bge-m3-1024.auto",
+      "score": 0.5893777002326355,
+      "eligible": true,
+      "reason": "eligible"
+    },
+    {
+      "config_name": "a.bge-m3-1024.local_bm25",
+      "score": 0.5893777002326355,
+      "eligible": true,
+      "reason": "eligible"
+    }
+  ],
+  "top": [
+    {
+      "name": "a.openai-3-small-1536.cohere-fake-quality-v1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "off",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "openai-3-small-1536",
+        "rerank_model": "fake-quality-v1"
+      }
+    },
+    {
+      "name": "a.bge-m3-1024.cohere-fake-quality-v1",
+      "env": {
+        "RAG_PIPELINE": "v2",
+        "RAG_LEXICAL_SEARCH": "true",
+        "RAG_RERANKER": "cohere",
+        "RAG_REFUSAL_THRESHOLD": "true",
+        "RAG_REFUSAL_FLOOR": "legacy_rule",
+        "RAG_CONTEXT_EDGE_ORDER": "false",
+        "RAG_CONTEXT_COMPRESSION": "false",
+        "RAG_PARENT_CHILD": "false",
+        "RAG_HNSW_ITERATIVE_SCAN": "off",
+        "RAG_LEXICAL_TRANSLATION": "false",
+        "RAG_QUERY_LAYER": "false",
+        "RAG_QUERY_FRAMEWORK": "llamaindex",
+        "RAG_QUERY_HYDE": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_CONTEXT_TAGGING": "true",
+        "RAG_INJECTION_CHECK": "drop",
+        "RAG_INGEST_PIPELINE": "legacy",
+        "RAG_EMBEDDING_PROFILES": "on",
+        "COHERE_API_KEY": "fixture"
+      },
+      "overrides": {
+        "backend": "pgvector",
+        "embedding_profile": "bge-m3-1024",
+        "rerank_model": "fake-quality-v1"
+      }
+    }
+  ]
+}
