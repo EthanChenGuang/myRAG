@@ -1108,3 +1108,6 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 02:29Z 06.2-28 DONE (exec/06.2-28 24e3d5dc: scope-gate Config UI panel; design gate PASS) and archived; added to train 42.
 - 02:31Z 04.4-18 DONE (exec/04.4-18 46c927ae: cluster-DF eval harness plus a derived spec, pre-registered under D-37) and archived. Added to t42 in place of 04.4-17. Dispatched 04.4-19 (gate run) session_01X342sjmxb25zX8B4v5sWaQ; no default flip, the owner decides.
 - 02:38Z t40 PR #140 opened (c6a990d7: 20 plans, main merged; train40-live.sql at ac86d6b0c). Subscribed. Asked the builder whether the 11 pre-existing failures are fixed. Merge when all green, then t41.
+- 02:42Z 06.3-23 DONE (exec/06.3-23 f824406d: 7-case deletion canary, tests only) and archived; added to t42.
+  - t42 step 2: artifacts regenerated. train42-live.sql is at ops/owner-actions db6f1493b: 0729, 0905, 0935, 0936, 0938, 0992, plus a 0932 re-run before 0936, plus the 0410 r24 delta. Rehearsed in both modes.
+  - The 11 inherited failures are t41's to fix: purge-store coverage, decomposed-answer-key, eval-gate-mode-default, rag-settings-hash. The t40 builder confirmed they are not on t40.
