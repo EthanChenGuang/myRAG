@@ -12,7 +12,6 @@
 
   <p align="center">
     <strong>Visual Config UI</strong> •
-    <strong>15-28x Faster Search</strong> •
     <strong>100+ AI Models</strong> •
     <strong>WhatsApp Ready</strong>
   </p>
@@ -218,8 +217,7 @@ Build unlimited chatbots for yourself or clients with full white-label support
 
 | Feature | Description |
 |:--------|:------------|
-| **Vector Search** | HNSW indexes with **15-28x speed improvement** |
-| **Query Time** | **<50ms** for semantic search |
+| **Vector Search** | HNSW indexes |
 | **Document Support** | PDF, DOCX, TXT, HTML, RTF, EPUB |
 | **Smart Processing** | Auto-chunking with configurable overlap |
 | **Embeddings** | 1536-dimensional vectors (OpenAI) |
@@ -475,7 +473,7 @@ Intelligent chunking with configurable overlap for optimal context
 
 **HNSW Search**
 
-15-28x faster with production-optimized indexes (m=64, ef=200)
+Production-tuned HNSW indexes (m=64, ef=200)
 
 </td>
 <td align="center">
@@ -565,15 +563,6 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 # WhatsApp provider (choose koyeb or flyio)
 WHATSAPP_PROVIDER=flyio
 ```
-
-## 📊 Performance Benchmarks
-
-| Metric | Traditional RAG | myRAG (HNSW) | Improvement |
-|:-------|:---------------:|:---------------:|:-----------:|
-| **Single Query** | 100-500ms | **<50ms** | 🚀 15-28x |
-| **10 Concurrent Users** | 800-2000ms | **<100ms** | 🚀 20x |
-| **100k Documents** | 1-3 seconds | **<200ms** | 🚀 15x |
-| **Accuracy** | 95% | **98%** | ✨ +3% |
 
 ## 🏗 Architecture
 
