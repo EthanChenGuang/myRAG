@@ -21,7 +21,16 @@ import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context
 import { documentBudgetOf } from '../context/pack';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
-import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
+import {
+  embedForRetrieval,
+  embedVariantTexts,
+  runSearchStages,
+  runSpeculativeSearch,
+  speculativeSearchApplies,
+  type QueryLexicalOptions,
+  type SearchIdentifiers,
+} from './stages/search';
+import { speculativeVariant, type SpeculativeHandle, type SpeculativeSeam } from '../query/speculative';
 import { lexicalOptionsOn, resolveLexicalOptions } from '../lexical/resolve-options';
 import {
   bindingHashFields,
@@ -72,6 +81,39 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
   return entry ? new Map([[entry.text, entry.embedding]]) : undefined;
 }
 
+/** D-21: the cache stage's standalone vector plus the speculative embedding of the original, which the embed batch then skips. */
+async function embedPrecomputed(
+  cached: { text: string; embedding: QueryEmbedding } | undefined,
+  speculative: SpeculativeHandle | null,
+): Promise<Map<string, QueryEmbedding> | undefined> {
+  const map = precomputedVectors(cached) ?? new Map<string, QueryEmbedding>();
+  if (speculative && !map.has(speculative.text)) {
+    const embedded = await speculative.embedding;
+    if (embedded) map.set(speculative.text, embedded);
+  }
+  return map.size > 0 ? map : undefined;
+}
+
+/** D-21: whatever path the request leaves by, the speculation stops and its trace lands on the result (absent while off). */
+export async function runV2Pipeline(
+  input: RunRetrievalInput,
+  collector: TraceCollector,
+  accessFilter?: ScopeAccessFilter,
+): Promise<RetrievalResult> {
+  const speculation: SpeculationHolder = { handle: null };
+  try {
+    const result = await runV2PipelineBody(input, collector, accessFilter, speculation);
+    if (speculation.handle) result.speculative = speculation.handle.trace(collector.startedAt);
+    return result;
+  } finally {
+    speculation.handle?.abort('request_end');
+  }
+}
+
+interface SpeculationHolder {
+  handle: SpeculativeHandle | null;
+}
+
 /** The query-layer part of the config hash (research A-7); loaded only while the layer is on, so run-layer stays unimported otherwise. */
 // Static imports: a cold dynamic import here stalled the first request after a transform timeout until the embed stage timed out.
 function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): RetrievalConfigHashQueryLayer {
@@ -81,10 +123,11 @@ function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof l
   });
 }
 
-export async function runV2Pipeline(
+async function runV2PipelineBody(
   input: RunRetrievalInput,
   collector: TraceCollector,
-  accessFilter?: ScopeAccessFilter,
+  accessFilter: ScopeAccessFilter | undefined,
+  speculation: SpeculationHolder,
 ): Promise<RetrievalResult> {
   const deps = getRagDeps();
   const scope = input.scope;
@@ -207,6 +250,37 @@ export async function runV2Pipeline(
       }),
   };
 
+  // D-21, P-29: the same embed call and original-variant request the embed and search stages make, lent to the query layer.
+  const speculativeSeam: SpeculativeSeam | undefined = speculativeSearchApplies(config, input)
+    ? {
+        deps: {
+          embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal))[0]!,
+          search: async (args) => {
+            // T-06.2-67: the speculation searches under the request's own scope only.
+            if (args.scope !== scope) throw new Error('speculative scope mismatch');
+            return runSpeculativeSearch({
+              input,
+              scope,
+              config,
+              params,
+              access,
+              ...(lexicalSwitchOn ? { lexical: await resolveQueryLexical() } : {}),
+              variant: speculativeVariant(args.text, detectQueryLanguage(input.query)),
+              embedding: args.embedding,
+              filters: args.filters,
+              signal: args.signal,
+            });
+          },
+          now: () => collector.now(),
+        },
+        onStart: (handle) => {
+          speculation.handle = handle;
+        },
+        embedTimeoutMs: spec('embed', 'throw').timeoutMs,
+        searchTimeoutMs: spec('search', 'throw').timeoutMs,
+      }
+    : undefined;
+
   try {
     const query = await runQueryStages({
       input,
@@ -227,6 +301,7 @@ export async function runV2Pipeline(
       onGlossary: (stage) => {
         glossaryStage = stage;
       },
+      ...(speculativeSeam ? { speculative: speculativeSeam } : {}),
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
@@ -280,8 +355,15 @@ export async function runV2Pipeline(
       await runStage(
         spec('embed', 'throw'),
         signal,
-        (stageSignal) =>
-          embedVariantTexts(input, variantDenseTexts(query.variants), stageSignal, precomputedVectors(query.queryLayer?.precomputed)),
+        async (stageSignal) =>
+          embedVariantTexts(
+            input,
+            variantDenseTexts(query.variants),
+            stageSignal,
+            speculation.handle
+              ? await embedPrecomputed(query.queryLayer?.precomputed, speculation.handle)
+              : precomputedVectors(query.queryLayer?.precomputed),
+          ),
         collector,
         { detail: (value) => value[0]?.profile?.id },
       ),
@@ -316,6 +398,8 @@ export async function runV2Pipeline(
           scopeGate = gate.value;
         }
         if (scopeGate.label === 'out_of_scope') {
+          // D-21: an out_of_scope turn searches nothing; the speculative results are discarded and counted as wasted.
+          speculation.handle?.discard();
           return buildOutOfScopeResult({ collector, queryContext, queryLanguage, queryPlan: queryPlan ?? null, scopeGate, ...(cacheTicket ? { cacheTicket } : {}) });
         }
       }
@@ -336,6 +420,7 @@ export async function runV2Pipeline(
       variants: query.variants,
       variantEmbeddings,
       ...(query.queryLayer ? { trackStandalone: true } : {}),
+      ...(speculation.handle ? { speculative: speculation.handle } : {}),
       ...(query.queryLayer?.searchDelegate ? { searchDelegate: query.queryLayer.searchDelegate } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },

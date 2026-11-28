@@ -54,6 +54,8 @@ import { collectRequiredTerms, type RequiredTerm } from './completeness';
 import { loadTenantDocTypes, loadTenantVocabulary } from './tenant-vocabulary';
 import type { SubqFilterContext } from './llamaindex/decompose';
 import { terminologyMatcherFor } from '../terminology/load';
+import type { RetrievalFilters } from '../backend/types';
+import { startSpeculativeRetrieval, type SpeculativeHandle, type SpeculativeSeam } from './speculative';
 import { terminologyParams } from '../terminology/expand';
 import type { RpcClient } from '../backend/supabase-rpc';
 
@@ -77,6 +79,8 @@ export interface QueryLayerOutcome {
   precomputed?: { text: string; embedding: QueryEmbedding };
   /** LangChain (D-17): fuses the variant lists through EnsembleRetriever over the scope-bound port; absent keeps native RRF. */
   searchDelegate?: SearchDelegate;
+  /** Phase 6.2 D-21: the original query's speculative embed and search, started after the gate; absent while the switch is off. */
+  speculative?: SpeculativeHandle;
 }
 
 /** What the pipeline lends the semantic_cache stage, so its key and vector equal what the retrieval stages use. */
@@ -104,6 +108,8 @@ export interface QueryLayerInput {
   afterTransforms?: (standalone: string) => Promise<void>;
   /** D-14: told the glossary state for the config hash, before semantic_cache builds its key; never called with the switch off. */
   onGlossary?: (stage: GlossaryHashStage) => void;
+  /** Phase 6.2 D-21: lent by the pipeline only while RAG_SPECULATIVE_RETRIEVAL can apply; filtersFor builds the request filters. */
+  speculative?: SpeculativeSeam & { filtersFor(range: RelativeDateRange | null): RetrievalFilters };
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -365,6 +371,8 @@ interface CacheStageInput {
   framework: CacheKeyParts['queryFramework'];
   spec: StageSpec;
   embedSpec: StageSpec;
+  /** D-21: when the standalone is the original, the cache key reuses the speculative embedding instead of embedding it again. */
+  speculative?: SpeculativeHandle | null;
 }
 
 interface CacheStageResult {
@@ -455,7 +463,9 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   let accessGroupSetHash: string;
   try {
     accessGroupSetHash = cacheAccessKeyPart(scope);
-    embedding = await ctx.cache.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
+    const embedFresh = () => ctx.cache!.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
+    const speculative = args.speculative && args.speculative.text === args.standalone ? await args.speculative.embedding : null;
+    embedding = speculative ?? (await embedFresh());
     retrievalConfigHash = await ctx.cache.retrievalConfigHash(embedding);
   } catch (error) {
     if (signal.aborted) throw new StageError('semantic_cache', 'aborted', error);
@@ -662,6 +672,27 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   }
   const routed = new Set(route.transforms);
 
+  // D-21: the original's embed and search start right after the gate and the deterministic R2 range, beside condense and the
+  // parallel group; the search stage adopts them only when its request equals the speculative one. Voice never speculates here.
+  let speculative: SpeculativeHandle | null = null;
+  const speculativeProfile = profile === 'chat' || profile === 'embed' || profile === 'eval';
+  if (ctx.speculative && ctx.scope && speculativeProfile && config.queryAdditions.effective.speculativeRetrieval) {
+    const earlyRange =
+      routed.has('normalize_dates') && transformSpec('normalize_dates').enabled
+        ? normalizeRelativeDates(input.query, { now: new Date(deps.now()), timeZone: input.timeZone }).range
+        : null;
+    speculative = startSpeculativeRetrieval({
+      text: input.query,
+      filters: ctx.speculative.filtersFor(earlyRange),
+      scope: ctx.scope,
+      signal,
+      deps: ctx.speculative.deps,
+      embedTimeoutMs: ctx.speculative.embedTimeoutMs,
+      searchTimeoutMs: ctx.speculative.searchTimeoutMs,
+    });
+    ctx.speculative.onStart(speculative);
+  }
+
   // D-14: one glossary read per request (4.1.1 per-tenant loader, whatever RAG_TERMINOLOGY says), shared by the rewrites that keep
   // glossary terms verbatim and by translate; started only when one of them runs. Its terms never enter gate.protectedTokens.
   const glossaryOn = config.queryAdditions.effective.translationGlossary;
@@ -862,6 +893,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
       : null,
   ];
   const settled = await Promise.allSettled(tasks.map((task) => task ?? Promise.resolve(null)));
+  speculative?.markTransformsEnded();
   const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (rejected) throw rejected.reason;
   const [dates, expand, hyde, decompose, translation] = settled.map((result) => (result as PromiseFulfilledResult<unknown>).value) as [
@@ -935,7 +967,10 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     framework: transformer.framework,
     spec: cacheSpec,
     embedSpec: spec('embed', 'throw'),
+    speculative,
   });
+  // D-21: a hit makes the speculative work pointless; the shared signal stops its embed and search.
+  if (cached.hit) speculative?.abort('cache_hit');
   return {
     plan,
     variants: planToVariants(plan),
@@ -946,5 +981,6 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ...(cached.ticket ? { cacheTicket: cached.ticket } : {}),
     ...(cached.precomputed ? { precomputed: cached.precomputed } : {}),
     ...(runtime.searchDelegate ? { searchDelegate: runtime.searchDelegate } : {}),
+    ...(speculative ? { speculative } : {}),
   };
 }
