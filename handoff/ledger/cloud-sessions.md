@@ -942,3 +942,12 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 00:14Z 06.3-08 DONE exec/06.3-08 a3ed25919 (Graph delta feed and scope; no migration; based on 06.3-04 + t40) -> train 41. Owner eval checks: A3 (410 via nango.proxy), A4 (content download), Nango provider ids. Archived. The PR #135 ts-tsx timeout was handed to the t38 builder: merge fix/ci-timeouts into t38.
 - 00:15Z WALKTHROUGH item 3 (04.2-26 Sources panel) PARTIAL. Versions and supersession PASS. BUG: an empty assistant reply when the answer comes from a duplicated passage (collapse + also_in + citations; 4/4 repro) -> fix/empty-reply-dup-collapse (/gsd-debug). Also question whether the 'Show sources' button hidden for doc-only answers is intended; included in the same task.
 - 00:16Z 5.2 audits DONE (verify/05.2-audits c367467a). nyquist false (G1/G2 are already fixed by quick-52; G3 is new: sentences-record reason null). UI 18/24 (Security events table at 360px is HIGH). UI-SPEC signed (checker APPROVED). Fixes -> quick-52-nyquist-ui (based on quick-52-fixes). Archived.
+- 00:17Z plan-44-cluster-df DONE (60c578cb): 04.4-16, wave 7, 9 tasks, about 420k tokens; 04.4-15 moved after it.
+  - Planner choices accepted on the owner's behalf: derived spec, 15 after 16, cluster requires RAG_DUP_CLUSTERS.
+  - Plan-check dispatched (may split the plan).
+  - Archived.
+- 00:17Z t38 merged fix/ci-timeouts -> 83fc09cd:
+  - ts-db at 40 min with 12 balanced shards;
+  - ts-tsx in 3 shards at 15 min;
+  - eval-corpus shares its fixture.
+  - PR #135 CI is running.
