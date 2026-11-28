@@ -241,3 +241,43 @@ describe('citation session final model (P-30)', () => {
     expect(routed.finalModel()).toBe(QUALITY);
   });
 });
+
+describe('mock generator delay table (D-20, D-35)', () => {
+  it('keys the two D-35 routing ids, fast shorter than quality', async () => {
+    const { loadGeneratorDelays, generatorDelayMs } = await import('../../eval/harness/generator-delays.mts');
+    const table = loadGeneratorDelays();
+    expect(Object.keys(table.models).sort()).toEqual([FAST, QUALITY].sort());
+    expect(generatorDelayMs(FAST, table)).toBeGreaterThan(0);
+    expect(generatorDelayMs(FAST, table)).toBeLessThan(generatorDelayMs(QUALITY, table));
+    expect(generatorDelayMs('stub/extractive-v1', table)).toBe(0);
+  });
+
+  it('waits the routed model delay before the fixture generator answers and keeps unlisted models unwrapped', async () => {
+    const { withGeneratorDelays } = await import('../../eval/harness/generator-delays.mts');
+    const { MockLanguageModelV3 } = await import('ai/test');
+    const { generateText } = await import('ai');
+    const waits: number[] = [];
+    const base = Object.assign(
+      () =>
+        new MockLanguageModelV3({
+          doGenerate: async () => ({
+            content: [{ type: 'text' as const, text: 'A neutral synthetic answer.' }],
+            finishReason: { unified: 'stop' as const, raw: 'stop' },
+            usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } },
+            warnings: [],
+          }),
+        }),
+      { canUseTools: () => false },
+    );
+    const factory = withGeneratorDelays(base, { default_ms: 0, models: { [FAST]: 40, [QUALITY]: 160 } }, async (ms) => {
+      waits.push(ms);
+    });
+    expect(factory.canUseTools?.('any')).toBe(false);
+    for (const id of [FAST, QUALITY, 'stub/extractive-v1']) {
+      const out = await generateText({ model: factory(id), prompt: 'Neutral question?' });
+      expect(out.text).toBe('A neutral synthetic answer.');
+    }
+    expect(waits).toEqual([40, 160]);
+    expect(factory('stub/extractive-v1')).toBeInstanceOf(MockLanguageModelV3);
+  });
+});
