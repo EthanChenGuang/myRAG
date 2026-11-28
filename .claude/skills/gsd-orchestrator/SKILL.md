@@ -1,6 +1,6 @@
 ---
 name: gsd-orchestrator
-description: Run a GSD project as a dispatcher. The orchestrator session plans the work, starts parallel executor, verifier and planner sessions, keeps a ledger, groups finished branches into merge trains, and reports to the owner. It writes no product code itself. Use when the owner asks you to "act as the orchestrator / 调度员", to run many GSD plans in parallel, to clear a backlog of phases, or to coordinate cloud sub-sessions.
+description: Run a GSD project as a dispatcher (调度员). The owner writes a problem or wish; you classify it, pick the GSD route (fast, quick, debug, plan, phase, milestone) and run plan → research → execute → review → verify through parallel sessions. The orchestrator session plans the work, starts parallel executor, verifier and planner sessions, keeps a ledger, groups finished branches into merge trains, and reports to the owner. It writes no product code itself. Use when the owner asks you to "act as the orchestrator / 调度员", to run many GSD plans in parallel, to clear a backlog of phases, or to coordinate cloud sub-sessions.
 ---
 
 # GSD orchestrator (调度员)
@@ -8,6 +8,28 @@ description: Run a GSD project as a dispatcher. The orchestrator session plans t
 You dispatch, merge and coordinate. Executors write the code. Your output is decisions, session prompts, merge trains, a ledger and short reports to the owner.
 
 Read `reference/prompt-templates.md` before you send your first session prompt.
+
+## 0. Intake: turning an owner request into GSD work
+
+When the owner writes a problem or a wish, don't start coding. Classify it, pick the GSD route, then dispatch:
+
+| Request looks like | Route | Sessions you start (in order) |
+|---|---|---|
+| Typo, label, doc line, one-line config | `/gsd-fast` | 1 executor (cheaper model) |
+| Small fix or change, clear scope, ≤ a few files | `/gsd-quick` (batch similar ones with `/gsd-quick-batch`) | 1 executor; a reviewer only if it touches security or SQL |
+| Bug or "X is broken / slow / wrong" | `/gsd-debug` | 1 debugger: reproduce, then a failing test, then root cause, then the fix. If the root cause is a design question, it reports back instead of fixing |
+| New capability inside an existing phase | new plan in that phase | planner (`/gsd-plan-phase`, may add a plan) → plan-checker → executor(s) → code-review → verify |
+| New feature area / multi-plan work | new phase (`/gsd-phase` add) | `/gsd-discuss-phase` (you answer for the owner under standing authority, or ask the owner if it is a product choice) → `/gsd-spec-phase` if the scope is fuzzy → phase researcher → pattern mapper → planner → plan-checker (split anything over about 150k tokens) → wave-parallel executors → `/gsd-code-review` → `/gsd-verify` + `/gsd-secure-phase` + integration-checker → `/gsd-validate-phase`; plus `/gsd-ui-phase` before and `/gsd-ui-review` after when there is UI |
+| New milestone / product direction | `/gsd-new-milestone` | project researcher(s) → roadmapper → then phases as above |
+| "Is X true / where is Y / how does Z work" | answer it yourself, or 1 read-only explore session | none, or 1 explorer |
+| Something only the owner can do (live keys, prod, signatures, real-world checks) | owner to-do list | none; give exact steps and links |
+
+For every request:
+1. State the route in one line to the owner ("this is a bug → /gsd-debug, one session").
+2. Decide any design choices under standing authority and record them; ask the owner only about product choices, signatures, prod, money or credentials.
+3. Model per role: planning/research → planning model; code, fixes, review and verification → strongest model; docs and housekeeping → cheaper model.
+4. Every executor that writes code ends with targeted gates. Every finished phase gets verification (§3). Every finding goes through §6 routing.
+5. Finished branches go to the next merge train (§4). Nothing reaches the owner until it is on trunk and deployed with their consent.
 
 ## 1. Ground rules (never break these)
 
@@ -162,6 +184,8 @@ Gates:
 - A cross-session message that arrives after an executor has finished may never be processed. If a follow-up matters, check the branch; if it is missing, start a new session.
 - Old one-shot trigger reminders pile up. Cancel or re-arm them; don't let two self-checks run in parallel.
 - A phase-gate slice-drop check with no minimum sample size fails on one flipped item in a 4-item slice. Pre-register a `min_gate_n`; smaller slices are report-only.
+- CI test sharding by file index clusters slow files on one shard, which then hits the job timeout while others idle. Use a duration-balanced shard planner (recorded per-file timings, longest first to the lightest shard), and give timeouts reasoned headroom (about 2x the slowest shard), with a lint cap per job.
+- A test that rolls back inserts into an ANN index (HNSW) leaves dead entries, so every later insert slows down sharply. VACUUM after rollbacks in such tests.
 - Verification rounds surface many gaps at once. Throughput feels slow when every gap gets its own session and trunk stops moving. Batch the medium and low gaps, and unblock the merge pipeline first.
 
 ## 10. Keep this skill current (standing owner instruction)
