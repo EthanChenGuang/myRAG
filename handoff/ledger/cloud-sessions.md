@@ -1111,3 +1111,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 02:42Z 06.3-23 DONE (exec/06.3-23 f824406d: 7-case deletion canary, tests only) and archived; added to t42.
   - t42 step 2: artifacts regenerated. train42-live.sql is at ops/owner-actions db6f1493b: 0729, 0905, 0935, 0936, 0938, 0992, plus a 0932 re-run before 0936, plus the 0410 r24 delta. Rehearsed in both modes.
   - The 11 inherited failures are t41's to fix: purge-store coverage, decomposed-answer-key, eval-gate-mode-default, rag-settings-hash. The t40 builder confirmed they are not on t40.
+- 03:05Z MERGED #140 (t40, 30/30 green) -> main eb85c07f. Archived the t40 builder. Told t41 to fix the 11 failures, merge main and open its PR. MORNING prod SQL order: train38-live, train39-live, 0989, 0991 (after #137), train40-live, train41-live, train42-live.
