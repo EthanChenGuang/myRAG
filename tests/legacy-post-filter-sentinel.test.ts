@@ -39,7 +39,7 @@ const ROUTE_LITERALS: Array<[string, string]> = [
   ['refusal requires no used documents', 'usedDocuments.length === 0 &&'],
   ['refusal context check', "context.trim().toLowerCase().startsWith('no relevant context found')"],
   ['maxResults expression', "maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),"],
-  ['isGPTModel', "const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');"],
+  ['isGPTModel', "let isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');"],
 ];
 
 interface PinnedRegion {
