@@ -48,7 +48,7 @@ const SECURITY_VARS = [
 
 function configuredModelId(): string {
   const models = JSON.parse(env.NEXT_PUBLIC_OPENROUTER_MODELS) as Array<{ id: string }>;
-  return models.map((model) => model.id).find((candidate) => !/gpt-4|o1|chatgpt/.test(candidate) && !candidate.includes('claude')) as string;
+  return models.map((model) => model.id).find((candidate) => !/gpt-4|o1|chatgpt/.test(candidate) && !candidate.includes('claude') && candidate !== 'auto') as string;
 }
 
 describe('Lakera through the chat route in multi-tenant mode (B4)', () => {

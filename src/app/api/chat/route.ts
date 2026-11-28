@@ -3,6 +3,7 @@ import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { getMaxTokensForModel } from '@/lib/chat/model-output-limit';
+import { defaultModelId, parseModelList, resolveStoredAutoModel } from '@/lib/chat/auto-model';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -2256,7 +2257,9 @@ IMPORTANT:
     ];
 
     // Extract model selection and web search setting
-    const model = data?.settings?.model || 'openai/gpt-4o-mini';
+    const model =
+      resolveStoredAutoModel(data?.settings?.model, defaultModelId(parseModelList(env.NEXT_PUBLIC_OPENROUTER_MODELS), 'openai/gpt-4o-mini'), 'chat') ||
+      'openai/gpt-4o-mini';
     const webSearchEnabled = data?.settings?.webSearch === true;
 
     // Detect if we're using a GPT model for model-specific instructions

@@ -257,6 +257,19 @@ export function currentLexicalVersion(): number {
   return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
 }
 
+/** 06.2 G3: effective RAG_MODEL_ROUTING with the two raw routing ids (empty when not set); read by the chat model list. */
+export function currentModelRouting(): { mode: 'off' | 'auto'; fastModel: string; qualityModel: string } {
+  const fastModel = (process.env.RAG_ROUTING_FAST_MODEL ?? env.RAG_ROUTING_FAST_MODEL ?? '').trim();
+  const qualityModel = (process.env.RAG_ROUTING_QUALITY_MODEL ?? env.RAG_ROUTING_QUALITY_MODEL ?? '').trim();
+  const { mode } = loadRagConfig({
+    ...getRagDeps().ragEnv(),
+    RAG_MODEL_ROUTING: process.env.RAG_MODEL_ROUTING ?? env.RAG_MODEL_ROUTING,
+    RAG_ROUTING_FAST_MODEL: fastModel,
+    RAG_ROUTING_QUALITY_MODEL: qualityModel,
+  }).modelRouting;
+  return { mode, fastModel, qualityModel };
+}
+
 /** D-29: the effective attribute filter mode ('off' unless RAG_ATTRIBUTE_FILTER, RAG_DOC_ATTRIBUTES and the v2 pipeline allow it). */
 export function currentAttributeFilterMode(): 'off' | 'hard' | 'soft' {
   return loadRagConfig(getRagDeps().ragEnv()).v2.attributeFilter;

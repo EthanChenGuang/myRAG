@@ -77,7 +77,7 @@ vi.mock('@/lib/rag/generation/groundedness-client', async (importOriginal) => {
 
 function nonGptModel(): string {
   const models = JSON.parse(env.NEXT_PUBLIC_OPENROUTER_MODELS) as Array<{ id: string }>;
-  const id = models.map((model) => model.id).find((candidate) => !GPT_PATTERN.test(candidate) && !candidate.includes('claude'));
+  const id = models.map((model) => model.id).find((candidate) => !GPT_PATTERN.test(candidate) && !candidate.includes('claude') && candidate !== 'auto');
   if (!id) throw new Error('no non-GPT fixture model configured');
   return id;
 }
