@@ -128,6 +128,11 @@ CACHE_PAIRS_STEP = "npm run test-rag -- --run-config eval/config/runs/query-laye
 CACHE_CHECK_STEP = "python -m rag_eval.calibrate cache --check"
 LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
+BGE_M3_JOB = "bge-m3-identity"
+BGE_M3_READY = "steps.bge_m3.outputs.ready == 'true'"
+BGE_M3_SKIP_NOTICE = "::notice::bge-m3 image not buildable, skipping"
+BGE_M3_HOSTED_FLAG = "HAS_DEEPINFRA_KEY"
+BGE_M3_HOSTED_SKIP_NOTICE = "::notice::DEEPINFRA_API_KEY secret not configured, skipping the live hosted BGE-M3 check"
 RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
 RAY_EQUALITY_TEST = "tests/rag-e2e/backfill-ray-equality.test.mts"
 TELEMETRY = {
@@ -881,6 +886,55 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
             errors.append(f"nightly: real-docling step '{step.get('name', step.get('uses', '?'))}' must be conditioned on {DOCLING_READY}")
 
 
+def check_bge_m3_identity(data: dict, errors: list[str]) -> None:
+    """D-26: nightly, report only; the real sidecar model against the recorded hosted vectors; the hosted key only as a secret in step env."""
+    name = f"nightly: {BGE_M3_JOB}"
+    job = (data.get("jobs") or {}).get(BGE_M3_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{BGE_M3_JOB}' missing")
+        return
+    steps = all_steps(job)
+    body = step_text(job)
+    for needle in (
+        "--target bge-m3",
+        "record_bge_m3.py --mode sidecar",
+        "--compare eval/fixtures/embeddings/bge-m3-hosted.json",
+        "--network none",
+        BGE_M3_SKIP_NOTICE,
+        BGE_M3_HOSTED_SKIP_NOTICE,
+    ):
+        if needle not in body:
+            errors.append(f"{name} is missing '{needle}'")
+    flag_expr = str((job.get("env") or {}).get(BGE_M3_HOSTED_FLAG, ""))
+    if "secrets.DEEPINFRA_API_KEY != ''" not in flag_expr:
+        errors.append(f"{name}: job env {BGE_M3_HOSTED_FLAG} must require secrets.DEEPINFRA_API_KEY")
+    build = next((step for step in steps if step.get("id") == "bge_m3"), None)
+    run = str((build or {}).get("run", ""))
+    if build is None or BGE_M3_SKIP_NOTICE not in run or "ready=true" not in run or "ready=false" not in run or "exit 1" in run:
+        errors.append(f"{name} must build the image in a step with id 'bge_m3' that skips with a notice instead of failing")
+    for step in steps:
+        run = str(step.get("run", ""))
+        env = step.get("env") or {}
+        label = step.get("name", step.get("uses", "?"))
+        if "secrets." in run:
+            errors.append(f"{name}: secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\$\{?DEEPINFRA_API_KEY", run):
+            errors.append(f"{name}: step '{label}' appears to echo the key")
+        for key, value in env.items():
+            if "secrets." in str(value) and (key != "DEEPINFRA_API_KEY" or str(value) != "${{ secrets.DEEPINFRA_API_KEY }}"):
+                errors.append(f"{name}: only DEEPINFRA_API_KEY may come from secrets, by name")
+        if "DEEPINFRA_API_KEY" in env and f"{BGE_M3_HOSTED_FLAG} == 'true'" not in str(step.get("if", "")):
+            errors.append(f"{name}: the hosted step must be conditioned on {BGE_M3_HOSTED_FLAG} == 'true'")
+        if "--mode hosted" in run and "DEEPINFRA_API_KEY" not in env:
+            errors.append(f"{name}: the hosted recording must receive DEEPINFRA_API_KEY through step env")
+        if "record_bge_m3.py" in run and BGE_M3_READY not in str(step.get("if", "")) and "--mode hosted" not in run:
+            errors.append(f"{name}: step '{label}' must be conditioned on {BGE_M3_READY}")
+        if "--compare" in run and "|| status=$?" not in run:
+            errors.append(f"{name}: step '{label}' must report a mismatch, not fail the job (report only)")
+        if _PUSH_OR_PR_RE.search(run) or "git commit" in run:
+            errors.append(f"{name}: must not commit, push or open a pull request")
+
+
 def check_weekly_report(data: dict, errors: list[str]) -> None:
     """D-25, T-0511-74/75: the weekly report runs only where private eval data exists, never uploads it, never inlines a secret."""
     name = "nightly: weekly-report"
@@ -1169,6 +1223,7 @@ def check_nightly(errors: list[str]) -> None:
         errors.append("nightly: CONFIDENT_API_KEY must never be set")
     check_online_judge(data, errors)
     check_real_docling(data, errors)
+    check_bge_m3_identity(data, errors)
     check_injection_sec(data, errors)
     check_answer_rules_nightly(data, errors)
     check_weekly_report(data, errors)
