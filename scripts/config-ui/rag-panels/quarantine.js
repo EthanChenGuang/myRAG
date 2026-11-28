@@ -605,7 +605,7 @@ function quarantineAllowlistRefused() {
  */
 function quarantineCreateGuard(inner) {
   const has = (obj) => obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, QUARANTINE_ALLOWLIST_ENV);
-  const guard = async (next, saved) => {
+  const guard = async (next, saved, options) => {
     let savedForInner = saved;
     if (has(next)) {
       const parsed = quarantineParseAllowlist(next[QUARANTINE_ALLOWLIST_ENV]);
@@ -619,7 +619,8 @@ function quarantineCreateGuard(inner) {
         if (!before.invalid.length) savedForInner = { ...saved, [QUARANTINE_ALLOWLIST_ENV]: before.value };
       }
     }
-    return typeof inner === 'function' ? inner(next, savedForInner) : true;
+    // The caller's dialog options (title, labels, note) pass through unchanged (plan 07-52).
+    return typeof inner === 'function' ? inner(next, savedForInner, options) : true;
   };
   guard.quarantineAllowlistGuard = true;
   return guard;
