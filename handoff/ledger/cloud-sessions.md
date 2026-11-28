@@ -965,3 +965,5 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
     - b2: an MMR cutoff.
   - DECISION on the owner's behalf: amend D-31 to a document-level identifier filter. plan-42-docid-filter (Fable) dispatched.
   - OWNER decision pending: a min_gate_n for phase-gate slice drops (D-37). Archived.
+- 00:27Z OWNER chose (a): min_gate_n for slice-drop checks -> quick-min-gate-n (pre-register commit first).
+- 00:27Z SKILL created: .claude/skills/gsd-orchestrator on claude/ecstatic-hamilton-86gtwv. OWNER STANDING RULE: keep it updated with every reusable lesson (skill §10).
