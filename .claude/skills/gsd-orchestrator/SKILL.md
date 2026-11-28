@@ -192,6 +192,7 @@ Gates:
 - Some tools (for example Vercel deploys) ask the person to approve each call. While the owner is away, the prompt goes unanswered and the call does not run. Don't retry it in a loop. Queue it for the owner and say so.
 - Eval run outputs that a later plan reads (for example stage-B runs) disappear with the executor's container when they sit in a gitignored directory. Rebuilding them can spend a held-out test-split budget again. Tell executors to commit, or copy into a tracked path, any run output that a downstream plan names.
 - A train builder that runs the full DB suite locally before opening its PR can spend hours on it: the PR-only CI does not run on the branch, and each file builds its own database. Have the builder run fast gates, merge the trunk, open the PR and let the sharded CI run the full suite.
+- A session that is busy in a long turn may not read a normal message until that turn ends. To change its course mid-turn, send the message with `priority: now`.
 - Verification rounds surface many gaps at once. Throughput feels slow when every gap gets its own session and trunk stops moving. Batch the medium and low gaps, and unblock the merge pipeline first.
 
 ## 10. Keep this skill current (standing owner instruction)
