@@ -586,8 +586,16 @@ jobs:
           docker logs --tail 50 qdrant || true
           docker logs --tail 50 weaviate || true
           exit 1
-      - name: Canary and conformance suites on pgvector, Weaviate and Qdrant
-        run: npx vitest run tests/rag/canary tests/rag/backend-conformance
+      # Two steps: the conformance suite drops and recreates collections, so it runs after the canary, never alongside it.
+      - name: Canary suite on pgvector, Weaviate and Qdrant
+        run: npx vitest run tests/rag/canary
+        env:
+          CI_BACKEND_CANARY: '1'
+          RAG_CANARY_BACKENDS: pgvector,weaviate,qdrant
+          QDRANT_URL: http://127.0.0.1:6333
+          WEAVIATE_URL: http://127.0.0.1:8080
+      - name: Conformance suite on pgvector, Weaviate and Qdrant
+        run: npx vitest run tests/rag/backend-conformance
         env:
           CI_BACKEND_CANARY: '1'
           RAG_CANARY_BACKENDS: pgvector,weaviate,qdrant
