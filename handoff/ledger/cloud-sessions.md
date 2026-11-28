@@ -1019,3 +1019,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - DEPLOY CAUTION for the owner: before any prod deploy that includes t41, set NANGO_WEBHOOK_SECRET (the signing key) and confirm Nango sends X-Nango-Hmac-Sha256. Legacy-header deliveries now get 401, and sync.success no longer starts a full sync.
   - Archived.
 - 01:13Z quick-32-batch DONE 62cfd2748 -> t41. Mig 0937 (UF-2 column guard). Covers UF-4 tag chars, UF-5 semaphore, XLG-06 legacy caption language. UF-3 was already done by 0933, so only a test was added. Archived. MIGRATION MAP +0937.
+- 01:14Z 06.3-12 DONE 4cf5dfdd8 (SharePoint sync with full-listing union and guarded removal; no migration) -> t41. Archived. All 4 dispatched 06.3 plans (09, 11, 12, 13) are done.
