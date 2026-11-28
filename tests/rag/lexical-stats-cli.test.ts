@@ -46,8 +46,21 @@ describe('parseLexstatsArgs', () => {
     [['check', '--all', '--repair', '--repair'], 'repair twice'],
     [['disable', '--all'], 'disable --all'],
     [['status', '--all', '--verbose'], 'unknown option'],
+    [['status', '--all', '--cluster'], 'cluster with status'],
+    [['compact', '--all', '--cluster'], 'cluster with compact'],
+    [['check', '--all', '--cluster', '--cluster'], 'cluster twice'],
+    [['disable', '--all', '--cluster'], 'disable --all --cluster'],
   ])('rejects %j (%s)', (argv) => {
     expect(parseLexstatsArgs(argv as string[]).ok).toBe(false);
+  });
+
+  it('accepts --cluster with enable, rebuild, check and disable (04.4-17)', () => {
+    for (const command of ['enable', 'rebuild', 'check', 'disable'] as const) {
+      expect(parseLexstatsArgs([command, '--tenant', TENANT_A, '--cluster'])).toMatchObject({ ok: true, command, cluster: true });
+    }
+    expect(parseLexstatsArgs(['check', '--all', '--cluster', '--repair'])).toMatchObject({ ok: true, cluster: true, repair: true });
+    expect(parseLexstatsArgs(['status', '--all'])).toMatchObject({ ok: true, cluster: false });
+    expect(USAGE).toContain('--cluster');
   });
 
   it('a usage error exits 2 and prints the usage', async () => {

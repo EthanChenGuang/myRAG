@@ -9,7 +9,7 @@ import { dryRunRelex, runRelex } from '@/lib/rag/ingest/relex/run';
 import { publishStage } from '@/lib/rag/ingest/stages/publish';
 import type { StageContext } from '@/lib/rag/ingest/types';
 import type { PublishResult } from '@/lib/rag/ingest/writer';
-import { LEXICAL_WRITE_TIMEOUT_MS, afterLexicalWrite, resetLexicalWriteLogForTests } from '@/lib/rag/lexical/stats-hooks';
+import { LEXICAL_WRITE_TIMEOUT_MS, afterDupClusterWrite, afterLexicalWrite, resetLexicalWriteLogForTests } from '@/lib/rag/lexical/stats-hooks';
 import { SCOPE_A } from './cache/fixtures';
 
 const KEY_A = 'u:00000000-0000-4000-8000-0000000000a1';
@@ -173,7 +173,42 @@ function publishContext(db: RpcClient, outcome: PublishResult = PUBLISHED): Stag
 
 const BM25_ENV = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25' };
 
+describe('afterDupClusterWrite (04.4-17, D-48, D-49)', () => {
+  const withDf = (mode: 'bm25' | 'ts_rank_cd', dfMode: 'raw' | 'cluster'): Pick<RagConfig, 'v2'> =>
+    ({ v2: { lexicalScoring: { mode, k1: 1.2, b: 0.75, dfMode } } }) as unknown as Pick<RagConfig, 'v2'>;
+
+  it.each([
+    ['ts_rank_cd', 'raw'],
+    ['bm25', 'raw'],
+  ] as const)('%s with DF mode %s: no call', async (mode, dfMode) => {
+    const { db, calls } = recordingDb(enableAnswer('ready'));
+    expect(await afterDupClusterWrite({ db: () => db, config: withDf(mode, dfMode) }, KEY_A)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('bm25 with DF mode cluster: enable and one compaction for the tenant, as after a publish', async () => {
+    const { db, calls } = recordingDb(enableAnswer('ready'));
+    expect(await afterDupClusterWrite({ db: () => db, config: withDf('bm25', 'cluster') }, KEY_A)).toBe(true);
+    expect(fns(calls)).toEqual(['rag_lexstats_enable', 'rag_lexstats_compact']);
+    expect(statsCalls(calls).every((call) => call.args.p_tenant_key === KEY_A)).toBe(true);
+  });
+
+  it('a failing compaction resolves and logs the rpc name and code once, never the key', async () => {
+    const { db } = recordingDb({ ...enableAnswer('ready'), rag_lexstats_compact: () => ({ data: null, error: { code: 'XX000', message: 'boom' } }) });
+    await expect(afterDupClusterWrite({ db: () => db, config: withDf('bm25', 'cluster') }, KEY_A)).resolves.toBe(true);
+    expect(lexicalLines()).toEqual([expect.stringContaining(`${hashOf(KEY_A)} rag_lexstats_compact failed (XX000)`)]);
+    expect(lexicalLines().join('\n')).not.toContain(KEY_A);
+  });
+});
+
 describe('publish stage and the lexical statistics', () => {
+  it('bm25 with DF mode cluster: publish needs no new call (compaction reconciles the cluster markers)', async () => {
+    const { db, calls } = recordingDb(enableAnswer('ready'));
+    setRagDepsForTests({ ragEnv: () => ({ ...BM25_ENV, RAG_DUP_CLUSTERS: 'true', RAG_LEXICAL_DF_MODE: 'cluster' }) });
+    await publishStage.run(publishContext(db));
+    expect(fns(calls)).toEqual(['rag_lexstats_enable', 'rag_lexstats_compact']);
+  });
+
   it('ts_rank_cd: publish makes no statistics call', async () => {
     const { db, calls } = recordingDb(enableAnswer('ready'));
     setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });

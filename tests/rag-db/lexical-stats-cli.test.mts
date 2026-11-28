@@ -69,15 +69,113 @@ for (const mode of MODES) {
     beforeEach(async () => {
       await db.exec(`
         RESET ROLE;
+        DELETE FROM public.rag_lexical_cluster_dirty;
+        DELETE FROM public.rag_lexical_cluster_units;
         DELETE FROM public.rag_lexical_stats_pending;
         DELETE FROM public.rag_lexical_stats_state;
         DELETE FROM public.rag_lexical_df;
         DELETE FROM public.rag_lexical_corpus;
+        UPDATE public.document_chunks SET dup_cluster_id = NULL WHERE dup_cluster_id IS NOT NULL;
+        DELETE FROM public.rag_dup_clusters;
         DELETE FROM public.document_chunks;
         DELETE FROM public.documents;
       `);
       await seed(db, FIXTURE_USER_ID, 1, 6);
       if (mode === 'multi-tenant') await seed(db, SECOND_USER_ID, 2, 4);
+    });
+
+    /** Three copies of one chunk in three documents of tenant A, in one duplicate cluster (04.4-17, D-46). */
+    const clusterCopies = async (): Promise<void> => {
+      const cluster = (
+        await db.query<{ id: string }>("INSERT INTO public.rag_dup_clusters (tenant_key, embedding_profile_id) VALUES ($1, 'openai-3-small-1536') RETURNING id", [
+          tenantA,
+        ])
+      ).rows[0]!.id;
+      for (let i = 0; i < 3; i++) {
+        const docId = crypto.randomUUID();
+        await db.query("INSERT INTO public.documents (id, filename, content, metadata, user_id) VALUES ($1, $2, 'neutral sample', '{}'::jsonb, $3::uuid)", [
+          docId,
+          `lexstats-cli-copy-${docId}.txt`,
+          FIXTURE_USER_ID,
+        ]);
+        await db.query(
+          `INSERT INTO public.document_chunks (id, document_id, content, metadata, chunk_index, lexical_text, language, status, is_current,
+             chunking_profile_id, dup_cluster_id)
+           VALUES ($1, $2, 'neutral sample', '{}'::jsonb, 0, 'w91 w92 w93 w94', 'en', 'ready', true, 'legacy', $3::uuid)`,
+          [crypto.randomUUID(), docId, cluster],
+        );
+      }
+    };
+
+    test('enable --cluster: raw enable, cluster enable, rebuild and a clean check with the cluster fields; counts only', async () => {
+      await clusterCopies();
+      const enabled = await run(['enable', '--tenant', tenantA, '--cluster']);
+      assert.equal(enabled.code, 0, enabled.err.join('\n'));
+      const line = enabled.out.at(-1)!;
+      assert.match(line, /^[0-9a-f]{12} ready chunks=9 /);
+      for (const field of ['cluster_status=ready', 'cluster_dirty=0', 'cluster_df_diff=0', 'cluster_chunk_count_diff=0', 'cluster_ledger_diff=0', 'clean=true']) {
+        assert.ok(line.includes(field), `${field} in ${line}`);
+      }
+      assert.ok(!/\bw9[1-4]\b/.test(line), 'no lexeme');
+      const corpus = await db.query<{ corpus: string; n: number }>(
+        'SELECT corpus, sum(chunk_count)::int AS n FROM public.rag_lexical_corpus WHERE tenant_key = $1 GROUP BY 1 ORDER BY 1',
+        [tenantA],
+      );
+      assert.deepEqual(corpus.rows, [
+        { corpus: 'chunks', n: 9 },
+        { corpus: 'chunks_cluster', n: 7 },
+      ]);
+      const json = await run(['status', '--tenant', tenantA, '--json']);
+      assert.equal(JSON.parse(json.out[0]!).cluster_status, 'ready', 'status prints the cluster fields');
+      const again = await run(['enable', '--tenant', tenantA, '--cluster']);
+      assert.equal(again.code, 0, 'a second run is clean too');
+    });
+
+    test('check --cluster: a tampered cluster counter exits 1; --repair rebuilds and exits 0; check without the flag also reports it', async () => {
+      await clusterCopies();
+      assert.equal((await run(['enable', '--tenant', tenantA, '--cluster'])).code, 0);
+      await db.query("UPDATE public.rag_lexical_df SET df = df + 3 WHERE tenant_key = $1 AND corpus = 'chunks_cluster'", [tenantA]);
+      const drift = await run(['check', '--tenant', tenantA, '--cluster']);
+      assert.equal(drift.code, 1);
+      assert.match(drift.out[0]!, /cluster_df_diff=[1-9]/);
+      assert.equal((await run(['check', '--tenant', tenantA])).code, 1, 'the plain check counts the cluster difference');
+      const repaired = await run(['check', '--tenant', tenantA, '--cluster', '--repair']);
+      assert.equal(repaired.code, 0, repaired.err.join('\n'));
+      assert.match(repaired.out[0]!, /repaired=true/);
+      assert.equal((await run(['check', '--tenant', tenantA, '--cluster'])).code, 0);
+    });
+
+    test('disable --cluster removes only the cluster statistics; rebuild and check --cluster then refuse with exit 1', async () => {
+      await clusterCopies();
+      assert.equal((await run(['enable', '--tenant', tenantA, '--cluster'])).code, 0);
+      const raw = (await db.query("SELECT lexeme, df FROM public.rag_lexical_df WHERE tenant_key = $1 AND corpus = 'chunks' ORDER BY 1", [tenantA])).rows;
+      const disabled = await run(['disable', '--tenant', tenantA, '--cluster']);
+      assert.equal(disabled.code, 0, disabled.err.join('\n'));
+      assert.match(disabled.out[0]!, /cluster_removed=true/);
+      assert.doesNotMatch(disabled.out[0]!, /cluster_status=/);
+      const left = await db.query<{ n: number }>(
+        `SELECT (SELECT count(*) FROM public.rag_lexical_df WHERE tenant_key = $1 AND corpus = 'chunks_cluster')
+              + (SELECT count(*) FROM public.rag_lexical_cluster_units WHERE tenant_key = $1)
+              + (SELECT count(*) FROM public.rag_lexical_cluster_dirty WHERE tenant_key = $1) AS n`,
+        [tenantA],
+      );
+      assert.equal(Number(left.rows[0]!.n), 0);
+      assert.deepEqual((await db.query("SELECT lexeme, df FROM public.rag_lexical_df WHERE tenant_key = $1 AND corpus = 'chunks' ORDER BY 1", [tenantA])).rows, raw);
+      assert.equal((await run(['check', '--tenant', tenantA])).code, 0, 'raw statistics stay clean');
+      assert.equal((await run(['rebuild', '--tenant', tenantA, '--cluster'])).code, 1);
+      const refused = await run(['check', '--tenant', tenantA, '--cluster']);
+      assert.equal(refused.code, 1);
+      assert.ok(refused.err.some((l) => l.includes('enable --cluster')));
+    });
+
+    test('RAG_LEXICAL_DF_MODE=cluster: enable without --cluster prints one hint and enables raw statistics only', async () => {
+      const c = capture();
+      const code = await runLexstatsCli(['enable', '--tenant', tenantA], c.io, { ...deps, scoringMode: 'bm25', dfMode: 'cluster' });
+      assert.equal(code, 0, c.err.join('\n'));
+      assert.equal(c.err.filter((l) => l.includes('add --cluster')).length, 1);
+      assert.ok(!c.err.join('\n').includes(tenantA), 'hashed tenant only');
+      const state = await db.query<{ cluster_status: string | null }>('SELECT cluster_status FROM public.rag_lexical_stats_state WHERE tenant_key = $1', [tenantA]);
+      assert.equal(state.rows[0]?.cluster_status, null);
     });
 
     test('enable --tenant leaves the tenant ready with a clean check', async () => {
