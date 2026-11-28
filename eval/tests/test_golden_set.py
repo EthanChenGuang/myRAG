@@ -392,7 +392,8 @@ def test_committed_manifests_start_at_version_one_all_active():
     # manifest (plan 03.3-20) added the templated collection items and five no-answer items in its vocabulary; its version 7
     # (train 38) added the 57 items of plan 05.2.1-12 and two more no-answer items in the templated vocabulary (en-06, it-06),
     # which keep the gate's no-answer share at its minimum for en and it once both plans are in. Version 8 (train 39) added
-    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Every item is still active.
+    # only the two no-answer items 05.2.1-17 had made for the same purpose (en-08, it-07). Fixture version 7 and ingest
+    # version 9 (owner decision 2026-11-28) changed only en-off-topic-context-002's score band. Every item is still active.
     golden = load_golden(FIXTURE_GOLDEN)
     phase42 = sorted(item.id for item in golden if "phase42" in item.tags)
     phase53 = sorted(item.id for item in golden if "phase53_fixture" in item.tags)
@@ -416,9 +417,10 @@ def test_committed_manifests_start_at_version_one_all_active():
     assert len(templated) == 83
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        expected = 8 if path == INGEST_MANIFEST else 6
+        expected = 9 if path == INGEST_MANIFEST else 7
         assert manifest.version == expected
         assert [entry.version for entry in manifest.changelog] == list(range(1, expected + 1))
+        assert manifest.changelog[-1].changed == ["en-off-topic-context-002"] and not manifest.changelog[-1].added
         if path == INGEST_MANIFEST:
             assert sorted(manifest.changelog[5].added) == templated and not manifest.changelog[5].changed
             assert sorted(manifest.changelog[6].added) == sorted(phase521 + train38_no_answer) and not manifest.changelog[6].changed

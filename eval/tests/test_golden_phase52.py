@@ -195,6 +195,11 @@ def test_stale_items_take_current_from_v2_and_stale_from_v1_with_one_historical_
     assert all(historical[language] >= 1 for language in LANGUAGES), historical
 
 
+# Owner decision 2026-11-28 (D-37 record in the Phase 4.1 CONTEXT): after the 04.1-18 prechunked floor refit (0.1761) this item
+# scores 0.1742, so its band moved from above_threshold to below_threshold; the even split counts it at its planned band.
+OWNER_MOVED_BANDS = {"en-off-topic-context-002": "above_threshold"}
+
+
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_off_topic_items_are_unanswerable_and_split_evenly_between_the_score_bands(language, golden):
     items = [item for item in golden if item.language == language and item.category == "off_topic_context"]
@@ -202,8 +207,9 @@ def test_off_topic_items_are_unanswerable_and_split_evenly_between_the_score_ban
     for item in items:
         assert not item.answerable and not item.gold_evidence and item.expected_answer is None, item.id
         assert all(span.document == f"p52-answers.{language}.md" for span in item.off_topic.adjacent_quotes), item.id
-    bands = collections.Counter(item.off_topic.score_band for item in items)
+    bands = collections.Counter(OWNER_MOVED_BANDS.get(item.id, item.off_topic.score_band) for item in items)
     assert bands["below_threshold"] == bands["above_threshold"], bands
+    assert {item.off_topic.score_band for item in items} == {"below_threshold", "above_threshold"}, language
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
