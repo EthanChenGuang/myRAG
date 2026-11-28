@@ -1654,3 +1654,52 @@ test('vendor inventory: every managed url and secret provider of the real reposi
     cleanup(root);
   }
 });
+
+// Plan 07-45: the two revision-4 switches (LANG-11 rollouts, OBS-03 language confidence).
+const REVISION4 = {
+  RAG_ROLLOUTS: { type: 'bool', default: 'false', options: undefined },
+  RAG_LANG_CONFIDENCE: { type: 'enum', default: 'mapped', options: ['mapped', 'calibrated'] },
+};
+
+test('revision 4: both switches are managed with D-14 metadata and today-preserving defaults', () => {
+  const vars = new Map(JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8')).vars.map((v) => [v.name, v]));
+  for (const [name, want] of Object.entries(REVISION4)) {
+    const entry = vars.get(name);
+    assert.ok(entry, `${name} in the manifest`);
+    assert.equal(entry.status, 'managed', name);
+    assert.deepEqual(entry.knownGaps, [], name);
+    assert.equal(entry.group, 'data', name);
+    assert.ok(entry.label, name);
+    assert.equal(entry.type, want.type, name);
+    assert.equal(entry.default, want.default, name);
+    assert.deepEqual(entry.options, want.options, name);
+    assert.deepEqual(entry.requires, [], name);
+  }
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  for (const name of Object.keys(REVISION4)) {
+    assert.ok(server.split(name).length - 1 >= 3, `${name} in the three config-server templates`);
+    for (const relative of ['scripts/init-env.js', 'src/lib/env.ts']) {
+      assert.ok(fs.readFileSync(path.join(REPO, relative), 'utf8').includes(name), `${name} in ${relative}`);
+    }
+  }
+  const initEnv = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  assert.match(initEnv, /^RAG_ROLLOUTS=false$/m);
+  assert.match(initEnv, /^RAG_LANG_CONFIDENCE=mapped$/m);
+});
+
+test('revision 4: dropping the options of RAG_LANG_CONFIDENCE reports exactly that entry', () => {
+  const root = copyRealTree();
+  try {
+    editManifest(root, (manifest) => {
+      delete manifest.vars.find((v) => v.name === 'RAG_LANG_CONFIDENCE').options;
+    });
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    const violations = out.split('\n').filter((line) => /^[A-Z_]+ \[/.test(line) || /^- \[/.test(line));
+    assert.ok(violations.length > 0, out);
+    for (const line of violations) assert.match(line, /^RAG_LANG_CONFIDENCE \[/, out);
+    assert.ok(violations.some((line) => line.startsWith('RAG_LANG_CONFIDENCE [manifest] enum metadata needs options')), out);
+  } finally {
+    cleanup(root);
+  }
+});
