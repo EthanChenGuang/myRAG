@@ -152,6 +152,8 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
       'rag_rebuild_candidates',
       'rag_rebuild_rollback',
       'rag_rebuild_start',
+      'rag_rollout_rebuild_publish_tenant',
+      'rag_rollout_rebuild_restore_tenant',
       'rag_recaption_candidates',
       'rag_recaption_rollback_run',
       'rag_recaption_start_run',
