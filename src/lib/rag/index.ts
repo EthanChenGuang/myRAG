@@ -853,6 +853,8 @@ export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
 export { setAlertStatus } from './monitor/alerts-store';
 export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
 export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
+export { evaluateLanguageDrop, LANGUAGE_DROP_RULE_ID, languageQualityForAdmin, MAX_LANGUAGE_QUALITY_DAYS } from './monitor/language-drop';
+export type { LanguageQualityReport } from './monitor/language-drop';
 export {
   addPilotUser,
   decodePilotCursor,

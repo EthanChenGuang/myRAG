@@ -51,7 +51,6 @@ BEGIN
     END LOOP;
   END IF;
 
-  RETURN;
   RETURN QUERY
   SELECT
     l.tenant_key,

@@ -127,7 +127,7 @@ function sampleIds(samples: EvaluateLanguageDropInput['samples'], language: stri
 export function evaluateLanguageDrop(input: EvaluateLanguageDropInput): LanguageDropAlert[] {
   const { rule } = input;
   const window = windowOf(input.current);
-  if (!window || rule) return [];
+  if (!window) return [];
   const metrics = rule.metrics.filter((metric): metric is LanguageCountMetric =>
     (LANGUAGE_COUNT_METRICS as readonly string[]).includes(metric),
   );
@@ -506,4 +506,40 @@ export async function evaluateLanguageDropRule(monitorRule: MonitorRule, ctx: Ru
     }
   }
   return candidates;
+}
+
+/** At most this many days per admin language-quality read (T-07-154). */
+export const MAX_LANGUAGE_QUALITY_DAYS = 90;
+
+export type LanguageQualityReport =
+  | {
+      ok: true;
+      cells: LanguageQualityCell[];
+      /** Judge score means per language from the job's daily cells; null when no answer of the window was judged. */
+      judge: Record<string, { n: number; mean: number | null }> | null;
+    }
+  | { ok: false; reason: 'forbidden' | 'unavailable' };
+
+/**
+ * LANG-10 admin read: the cells of the tenants the admin administers (resolved in SQL by rag_admin_tenant_keys), optionally a
+ * subset of them, pooled per language or per (tenant, language), plus the judge means per language. Counts and codes only.
+ */
+export async function languageQualityForAdmin(
+  admin: SupabaseClient,
+  input: { actorUserId: string; window: Window; tenants: readonly string[] | null; byTenant: boolean },
+): Promise<LanguageQualityReport> {
+  const { data, error } = await admin.rpc('rag_admin_tenant_keys', { p_actor: input.actorUserId.toLowerCase() });
+  if (error || !Array.isArray(data)) return { ok: false, reason: 'unavailable' };
+  const administered = new Set(data.filter((key): key is string => typeof key === 'string'));
+  if (input.tenants && input.tenants.some((key) => !administered.has(key))) return { ok: false, reason: 'forbidden' };
+  const keys = [...(input.tenants ?? administered)].sort();
+  if (keys.length === 0) return { ok: true, cells: [], judge: null };
+  try {
+    const cells = await readLanguageQualityCells(admin, { window: input.window, tenantKeys: keys, pooled: !input.byTenant });
+    const judgeCells = await readLanguageJudgeCells(admin, { window: input.window, tenantKeys: keys });
+    const judged = judgeCells.some((cell) => cell.judged > 0);
+    return { ok: true, cells, judge: judged ? judgeMeansByLanguage(judgeCells) : null };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
 }
