@@ -1014,3 +1014,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - Q4: the doc-only 'Show sources' entry point is a GAP. Deferred to a batched UI task (needs a UI-SPEC addendum).
   - Archived.
 - 01:10Z 06.3-13 DONE (SharePoint picker routes; switch gate; no migration) -> t41. Owner eval check: plan 06.3-25 A4 live. Archived. t41 progress 1/4: 40 branches merged (a89cb9ae).
+- 01:11Z 06.3-11 DONE d77cfe4b -> t41: scheduled source reconcile (CLI and internal route, no migration). OWNER decision: pick a scheduler (no Vercel cron, D-06). Archived.
