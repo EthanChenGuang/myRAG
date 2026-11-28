@@ -306,6 +306,11 @@ def phase52_offenders(report: EvalReport) -> list[GateOffender]:
     return []
 
 
+def phase521_offenders(report: EvalReport) -> list[GateOffender]:
+    """D-78, D-88: the Phase 5.2.1 gate the run-config name selects; none for any other run."""
+    return []
+
+
 def _observed(metrics: SliceMetrics | None, metric: str) -> float | None:
     cell = getattr(metrics, metric, None) if metrics is not None else None
     return cell.value if cell is not None else None
