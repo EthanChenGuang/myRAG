@@ -379,12 +379,15 @@ def _verdict_reason(entry: JudgeCacheEntry, config: FilterConfig) -> str | None:
 def build_report(candidates: Sequence[_Candidate], *, judge_skipped: bool) -> FilterReport:
     dropped = Counter({reason: 0 for reason in DROP_REASONS})
     languages: dict[str, Counter] = {}
+    reasons_by_language: dict[str, Counter] = {}
     for candidate in candidates:
         counts = languages.setdefault(candidate.row.language, Counter())
+        by_reason = reasons_by_language.setdefault(candidate.row.language, Counter())
         if candidate.reason is None:
             counts["kept"] += 1
         else:
             dropped[candidate.reason] += 1
+            by_reason[candidate.reason] += 1
             counts["dropped"] += 1
     return FilterReport(
         kept=sum(1 for c in candidates if c.reason is None),
@@ -392,6 +395,10 @@ def build_report(candidates: Sequence[_Candidate], *, judge_skipped: bool) -> Fi
         by_language={
             language: LanguageFilterCounts(kept=counts["kept"], dropped=counts["dropped"])
             for language, counts in sorted(languages.items())
+        },
+        dropped_by_language={
+            language: {reason: by_reason[reason] for reason in DROP_REASONS}
+            for language, by_reason in sorted(reasons_by_language.items())
         },
         round_trip="not_applied",
         judge_skipped=judge_skipped,
@@ -408,6 +415,12 @@ def _summary(report: FilterReport) -> str:
         + " ".join(f"dropped_{reason}={count}" for reason, count in report.dropped.items())
         + " "
         + " ".join(f"{language}_kept={c.kept} {language}_dropped={c.dropped}" for language, c in report.by_language.items())
+        + "".join(
+            f" {language}_dropped_{reason}={count}"
+            for language, reasons in report.dropped_by_language.items()
+            for reason, count in reasons.items()
+            if count
+        )
     )
 
 

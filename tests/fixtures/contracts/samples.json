@@ -5681,6 +5681,12 @@
         "near_duplicate": 1,
         "verbatim_copy": 2
       },
+      "dropped_by_language": {
+        "en": {
+          "near_duplicate": 1,
+          "verbatim_copy": 2
+        }
+      },
       "judge_skipped": false,
       "kept": 24,
       "round_trip": "not_applied"

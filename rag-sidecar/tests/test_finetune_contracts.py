@@ -376,17 +376,28 @@ def test_filter_report():
             "kept": 5,
             "dropped": {"verbatim_copy": 2, "not_answerable": 1},
             "by_language": {"en": {"kept": 5, "dropped": 3}},
+            "dropped_by_language": {"en": {"verbatim_copy": 2, "not_answerable": 1}},
             "round_trip": "not_applied",
             "judge_skipped": False,
         }
     )
     assert report.dropped["verbatim_copy"] == 2
+    assert report.dropped_by_language["en"]["not_answerable"] == 1
+    base = report.model_dump(mode="json")
+    for bad in (
+        {"en": {"verbatim_copy": 1, "not_answerable": 1}},
+        {"en": {"verbatim_copy": 2, "not_answerable": 1}, "zh": {"shape": 0}},
+        {"en": {"verbatim_copy": 3}},
+    ):
+        with pytest.raises(ValidationError):
+            ft.FilterReport.model_validate({**base, "dropped_by_language": bad})
     with pytest.raises(ValidationError):
         ft.FilterReport.model_validate(
             {
                 "kept": 0,
                 "dropped": {"made_up_reason": 1},
                 "by_language": {},
+                "dropped_by_language": {},
                 "round_trip": "not_applied",
                 "judge_skipped": True,
             }

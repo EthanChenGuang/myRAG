@@ -3399,6 +3399,7 @@ def _finetune_models() -> dict[str, Any]:
             kept=24,
             dropped={"verbatim_copy": 2, "near_duplicate": 1},
             by_language={"en": ft.LanguageFilterCounts(kept=24, dropped=3)},
+            dropped_by_language={"en": {"verbatim_copy": 2, "near_duplicate": 1}},
             round_trip="not_applied",
             judge_skipped=False,
         ),
