@@ -1168,3 +1168,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 - 06:16Z verify 4.4 DONE (verify/04.4-t42) and archived. gaps_found. Gap 3 (t41 merge) was already done in t42. Gap 2 (gate re-run) is under way in t42. Gap 4 (AGENTS.md re-run rules) goes in the docs batch. Owner items are in MORNING.
 - 06:20Z verify 6.3 DONE (verify/06.3 0c428e69) and archived. gaps_found. Dispatched quick-63-gaps for G1-G5 plus the AGENTS 4.4 re-run rule (base t42 7c4d2ed5).
 - 06:24Z MERGED #141 (t41, all green at ccdb82821) -> main e6afe8a2. Archived the t41 builder. Told t42 to merge main and open its PR.
+- 06:25Z Dispatched the train 43 builder on t42: 07-31 (c536c9e5), 07-49 (d4af52b6) and quick-63-gaps when it is done.
