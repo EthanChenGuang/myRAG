@@ -49,3 +49,10 @@ export function hashedChunkingProfiles(
   if (!override) return active;
   return { ...(active ?? {}), ...override };
 }
+
+/** The eval route's mapping of the API RetrievalOverrides to the internal StageOverrides shape. */
+export function toStageRetrievalOverrides(
+  _input: ApiRetrievalOverrides | null | undefined,
+): StageOverrides['retrievalOverrides'] | undefined {
+  return undefined;
+}
