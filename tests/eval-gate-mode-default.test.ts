@@ -152,3 +152,37 @@ describe('local test-rag gate mode follows the measured tier (O-1, H-10)', () =>
     expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false }, noMode).mode).toBeUndefined();
   });
 });
+
+describe('a voice entry run does not take a text tier mode (06.2 voice gate decision, 2026-11-28)', () => {
+  test('a voice prechunked in-process run resolves to report with no measured tier', () => {
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false, entryProfile: 'voice' })).toEqual({
+      mode: 'report',
+      source: 'voice_entry',
+      tier: null,
+      reportOnly: [],
+    });
+    expect(resolveGatesMode(undefined, { fixtureMode: 'ingest', live: false, entryProfile: 'voice' }).mode).toBe('report');
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: true, entryProfile: 'voice' }).mode).toBe('report');
+  });
+
+  test('the text smoke tier still enforces with false_refusal_rate report-only', () => {
+    for (const entryProfile of [undefined, 'chat']) {
+      expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false, entryProfile })).toEqual({
+        mode: 'enforce',
+        source: 'measured_tier',
+        tier: 'smoke',
+        reportOnly: ['false_refusal_rate'],
+      });
+    }
+  });
+
+  test('explicit flags still win on a voice run', () => {
+    expect(resolveGatesMode('enforce', { fixtureMode: 'prechunked', live: false, entryProfile: 'voice' }).mode).toBe('enforce');
+    expect(resolveGatesMode(undefined, { fixtureMode: 'prechunked', live: false, entryProfile: 'voice' }, undefined, ['false_refusal_rate'])).toEqual({
+      mode: 'enforce',
+      source: 'flag',
+      tier: null,
+      reportOnly: ['false_refusal_rate'],
+    });
+  });
+});
