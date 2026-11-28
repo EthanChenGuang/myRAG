@@ -1,14 +1,15 @@
 -- Train 41 live SQL (ci/merge-train-41). Apply after train 40 is live (its SQL, including 0723, 0724, 0726, 0727, 0740, 0741, 0986,
 -- 0988 and 1010, plus its 0410 delta). Multi-tenant production: this file carries the multi-tenant variant of 0721; a single-tenant
 -- deployment runs supabase/migrations/0721_source_reconcile_runs.single-tenant.sql in its place.
--- Order: 0720, 0721 (common), 0721 (multi-tenant), 0722, 0728, 0987, 0990, 1011, then the 0410 r23 delta (grants only).
+-- Order: 0720, 0721 (common), 0721 (multi-tenant), 0722, 0728, 0937, 0987, 0990, 1011, then the 0410 r23 delta (grants only).
 -- Migration numbers (check-migration-numbers passes on the train): 07xx = Phase 6.3; 0986 doc-types, 0987 scope-access,
--- 0988 review-writers, 0990 rih, 1011 q33. 0989 (NF-1, fix/nf1-shared-chats-rls) and 0991 (UF-1, fix/uf1-direct-insert) are
+-- 0988 review-writers, 0990 rih, 1011 q33; 0937 is quick-32-batch (Phase 3.2 column guard; 0936 stays reserved for 04.2-40). 0989 (NF-1, fix/nf1-shared-chats-rls) and 0991 (UF-1, fix/uf1-direct-insert) are
 -- reserved but not in this train.
 -- Dependencies: 0720 alters nango_connections and documents (nullable columns, no default, no backfill). 0721 needs 0720
 -- (deletion_mode, last_full_reconcile_at) and rag_assert_tenant_key; its common functions call rag_nango_owner_tenant_key, which
 -- the mode file defines (plpgsql, bound at call time). 0722 needs nango_connections. 0728 lists the stores of every earlier
--- phase (the 06.3 purge of 0726/0727 calls it). 0987 rebases rag_scope_centroids_rebuild and the update triggers on 0983 and reads
+-- phase (the 06.3 purge of 0726/0727 calls it). 0937 attaches the 0320 guard function (rag_guard_ingest_state) to the
+-- Phase 3.2 columns of 0801 on documents and document_chunks; no new function. 0987 rebases rag_scope_centroids_rebuild and the update triggers on 0983 and reads
 -- rag_access_enforced (0922) and rag_access_group_settings (0920). 0990 needs 0534, 0934, 0984 and 0986 (train 40). 1011 needs
 -- 1001, 1005 and 1006.
 -- Re-run rules: after re-running 0934, 0984 or 0986, re-run 0990 and then 0410. After re-running 0983, re-run 0987.
@@ -16,6 +17,9 @@
 -- Changes to older migration files in this train need no live run: 0425, 0440 and 0863 changed only in comments; 0944, 0950, 0967
 -- and 0974 only add guards that matter when those files are re-run on top of 0984 (they drop the 4-argument
 -- rag_enqueue_review_item again, which 0984 already replaced live).
+-- DEPLOY CAUTION (06.3-09, app side, not SQL): the Nango webhook now requires the X-Nango-Hmac-Sha256 header and NANGO_WEBHOOK_SECRET;
+-- a delivery that carries only the legacy signature header gets 401. A legacy sync.success event no longer starts a full sync. Set
+-- NANGO_WEBHOOK_SECRET (and the matching secret in Nango) in the production env before deploying the train-41 app.
 -- App compatibility: every change is additive for the app on main. New columns are nullable; the new functions are only called by
 -- the train-41 app; 0987 and 0990 keep the signatures of the functions they redefine. Apply this SQL before deploying the train-41 app.
 -- DROP sections (each followed by a re-create in the same transaction):
@@ -25,11 +29,14 @@
 --         DROP POLICY IF EXISTS rag_review_items_access_sets ON public.rag_review_items (the 0934 restrictive policy, re-created
 --         right after with NULL access_sets failing closed while access is enforced).
 --   1011: DROP TRIGGER IF EXISTS rag_chunk_attribute_header_stamp_x_insert_guard ON public.document_chunks (new trigger, re-created).
+--   0937: DROP TRIGGER IF EXISTS rag_guard_phase32_columns ON public.documents and ON public.document_chunks (new triggers, re-created).
 --   0720, 0721, 0722, 0728 drop nothing.
 -- Operational notes:
 --   0990 backfills user_id and chat_id of existing rag_review_items from their retrieval log rows (same tenant only).
 --   0987: with access groups enforced, a rebuild counts only {all}-labelled chunks; flipping the enforced flag clears every
 --   tenant's centroids (they start empty while the scope gate is off).
+--   0937: after the apply, a client role (owner or member through the table UPDATE policies) that changes a Phase 3.2 column
+--   (language, fingerprint, hidden-text, scope, effective-date or approval columns) gets 42501; service-role writers are unchanged.
 --   Everything else writes no existing row.
 
 -- ==== supabase/migrations/0720_source_sync_columns.sql
@@ -749,6 +756,50 @@ NOTIFY pgrst, 'reload schema';
 
 COMMIT;
 
+-- ==== supabase/migrations/0937_phase32_column_guard.sql
+-- 0937: client roles cannot change the Phase 3.2 columns through the tables (Phase 3.2 verification UF-2, SEC-09).
+-- 0801 added language, fingerprint, hidden-text, scope, effective-date and approval columns to documents and document_chunks, but the 0320
+-- guard lists only the Phase 3 ingest-state columns. With the table UPDATE policies a signed-in owner (single-tenant) or organization member
+-- (multi-tenant) could PATCH scopes past the vocabulary check, set admin-only effective dates, forge the approval audit, or hide a document from
+-- a rescan or rebuild by rewriting hidden_text_check or ingest_fingerprint. This file attaches the 0320 guard function to those columns under
+-- its own trigger name, as 1001 does for the Phase 3.3 columns: a role other than service_role, postgres or supabase_admin that changes one of
+-- them gets 42501. The writers, approval and admin paths run as service_role or as the owner of a SECURITY DEFINER function and pass.
+-- No new function, so 0410 is unchanged. Idempotent (DROP TRIGGER IF EXISTS, then CREATE TRIGGER); both deployment modes; not folded into the
+-- setup files.
+
+BEGIN;
+
+DO $phase32_guard_precheck$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_guard_ingest_state()') IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_catalog.pg_attribute a
+       WHERE a.attrelid = 'public.documents'::regclass AND a.attname = 'ingest_fingerprint' AND NOT a.attisdropped
+     ) THEN
+    RAISE EXCEPTION '0937: apply 0320 and 0801 first' USING ERRCODE = '55000';
+  END IF;
+END
+$phase32_guard_precheck$;
+
+DROP TRIGGER IF EXISTS rag_guard_phase32_columns ON public.documents;
+CREATE TRIGGER rag_guard_phase32_columns
+  BEFORE UPDATE ON public.documents
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_ingest_state(
+    'languages', 'ingest_fingerprint', 'hidden_text_check', 'scopes', 'effective_from', 'effective_to',
+    'effective_dates_origin', 'effective_dates_confidence', 'approved_by', 'approved_at'
+  );
+
+DROP TRIGGER IF EXISTS rag_guard_phase32_columns ON public.document_chunks;
+CREATE TRIGGER rag_guard_phase32_columns
+  BEFORE UPDATE ON public.document_chunks
+  FOR EACH ROW EXECUTE FUNCTION public.rag_guard_ingest_state(
+    'language_confidence', 'scopes', 'effective_from', 'effective_to', 'approved_by'
+  );
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
 -- ==== supabase/migrations/0987_scope_centroids_access.sql
 -- 0987: scope centroids honour access groups (Phase 6.2 verification R-4, QRY-14, SEC-12). While access groups are enforced
 -- (rag_access_enforced()), rag_scope_centroids_rebuild counts a chunk only when both it and its document carry access_groups = {all}. A
@@ -1267,12 +1318,12 @@ SELECT public.rag_nango_owner_tenant_key('00000000-0000-0000-0000-000000000001':
 --    tests/rag-db/purge-store-coverage.test.mts on the train; here, expect rows for purge_step, cascade and exempt.
 SELECT handling, count(*) AS stores FROM public.rag_purge_store_inventory() GROUP BY 1 ORDER BY 1;
 
--- 6. Triggers added by 0987, 0990 and 1011 (expect 5 rows, all enabled 'O').
+-- 6. Triggers added by 0937, 0987, 0990 and 1011 (expect 7 rows, all enabled 'O').
 SELECT tgrelid::regclass AS on_table, tgname, tgenabled
 FROM pg_catalog.pg_trigger
 WHERE tgname IN ('rag_scope_centroids_access_settings_update', 'rag_scope_centroids_access_settings_insert',
                  'rag_scope_centroids_access_settings_delete', 'rag_review_items_fill_owner',
-                 'rag_chunk_attribute_header_stamp_x_insert_guard')
+                 'rag_chunk_attribute_header_stamp_x_insert_guard', 'rag_guard_phase32_columns')
 ORDER BY 2;
 
 -- 7. The rebuilt review-items policy (expect one RESTRICTIVE policy whose qual mentions rag_access_enforced).
