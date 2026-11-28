@@ -94,6 +94,7 @@ describe('qdrant collection setup', () => {
       'chunking_profile_id',
       'parent_id',
       'doc_date',
+      'access_groups',
       'lexical_text',
     ]);
     expect(Object.fromEntries(indexes)).toMatchObject({

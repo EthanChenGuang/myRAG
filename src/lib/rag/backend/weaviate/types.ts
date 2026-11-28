@@ -93,6 +93,8 @@ export interface WeaviateTenantInfo {
 /** Collection admin only: tenants and the tenant handle. No data path is reachable without withTenant. */
 export interface WeaviateCollectionHandle {
   withTenant(name: string): WeaviateTenantCollection;
+  /** Schema changes on an existing collection (SEC-12: the access_groups property); no data path. */
+  config: { addProperty(property: Record<string, unknown>): Promise<unknown> };
   tenants: {
     create(tenants: { name: string }[]): Promise<unknown>;
     getByName(name: string): Promise<WeaviateTenantInfo | null>;
@@ -106,7 +108,7 @@ export interface WeaviateClientLike {
     listAll(): Promise<Array<{ name: string }>>;
     exists(name: string): Promise<boolean>;
     create(config: Record<string, unknown>): Promise<unknown>;
-    export(name: string): Promise<{ description?: string | null }>;
+    export(name: string): Promise<{ description?: string | null; properties?: Array<{ name: string }> | null }>;
     delete(name: string): Promise<void>;
   };
   isReady(): Promise<boolean>;

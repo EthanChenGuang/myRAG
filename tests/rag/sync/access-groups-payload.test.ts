@@ -14,7 +14,8 @@ const DOC = '00000000-0000-4000-8000-0000000000d1';
 const GA = 'g:0a000000-0000-4000-8000-00000000a701';
 const UA = 'u:0a000000-0000-4000-8000-00000000a702';
 
-function point(n: number, accessGroups: string[] | undefined = [GA, UA]): VectorPoint {
+/** `null` builds a point whose payload has no access_groups at all. */
+function point(n: number, accessGroups: string[] | null = [GA, UA]): VectorPoint {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
     vector: [1, 0, 0],
@@ -30,7 +31,7 @@ function point(n: number, accessGroups: string[] | undefined = [GA, UA]): Vector
       lexical_text: 'neutral sample words',
       content_hash: 'h',
       lexical_version: 1,
-      access_groups: accessGroups as string[],
+      access_groups: (accessGroups ?? undefined) as string[],
     },
   };
 }
@@ -81,7 +82,7 @@ describe('qdrant: access_groups filter index and payload (SEC-12, RET-10)', () =
     const client = createFakeQdrantClient();
     const store = createQdrantStore({ writeClient: client });
     await store.ensureCollection({ profileId: PROFILE, dims: 3 });
-    await expect(store.upsert(PROFILE, KEY_A, [point(1, undefined)])).rejects.toThrow(/access_groups/);
+    await expect(store.upsert(PROFILE, KEY_A, [point(1, null)])).rejects.toThrow(/access_groups/);
     await expect(store.upsert(PROFILE, KEY_A, [point(1, [])])).rejects.toThrow(/access_groups/);
     expect(client.requests.some((r) => r.method === 'upsert')).toBe(false);
   });
@@ -135,7 +136,7 @@ describe('weaviate: access_groups filterable property and properties (SEC-12, RE
     const fake = createFakeWeaviate();
     const store = createWeaviateStore({ client: fake });
     await store.ensureCollection({ profileId: PROFILE, dims: 3 });
-    await expect(store.upsert(PROFILE, KEY_A, [point(1, undefined)])).rejects.toThrow(/access_groups/);
+    await expect(store.upsert(PROFILE, KEY_A, [point(1, null)])).rejects.toThrow(/access_groups/);
     await expect(store.upsert(PROFILE, KEY_A, [point(1, [])])).rejects.toThrow(/access_groups/);
     expect(fake.calls.some((c) => c.op === 'insertMany')).toBe(false);
   });

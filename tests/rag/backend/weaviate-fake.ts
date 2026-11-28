@@ -246,6 +246,17 @@ export function createFakeWeaviate(options: FakeWeaviateOptions = {}): FakeWeavi
         calls.push({ op: 'withTenant', collection: name, tenant });
         return tenantHandle(name, tenant);
       },
+      config: {
+        async addProperty(property: Record<string, unknown>) {
+          calls.push({ op: 'config.addProperty', collection: name, tenant: null, args: property });
+          if (options.readOnly) throw new Error('forbidden: user does not have permission (403)');
+          const col = requireCollection(name);
+          const properties = (col.config.properties as Array<Record<string, unknown>> | undefined) ?? [];
+          if (properties.some((p) => p.name === property.name)) throw new Error(`property ${String(property.name)} already exists`);
+          col.config = { ...col.config, properties: [...properties, property] };
+          return {};
+        },
+      },
       tenants: {
         async create(list: { name: string }[]) {
           if (options.readOnly) throw new Error('forbidden: user does not have permission (403)');
@@ -287,7 +298,9 @@ export function createFakeWeaviate(options: FakeWeaviateOptions = {}): FakeWeavi
         return {};
       },
       async export(name: string) {
-        return { description: String(requireCollection(name).config.description ?? '') };
+        const config = requireCollection(name).config;
+        const properties = Array.isArray(config.properties) ? (config.properties as Array<{ name: string }>).map((p) => ({ name: String(p.name) })) : [];
+        return { description: String(config.description ?? ''), properties };
       },
       async delete(name: string) {
         calls.push({ op: 'collections.delete', collection: name, tenant: null });

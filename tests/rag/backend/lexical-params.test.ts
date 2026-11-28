@@ -265,6 +265,13 @@ describe('default requests are deep-equal to the base snapshot', () => {
           "tokenization": "field",
         },
         {
+          "dataType": "text[]",
+          "indexFilterable": true,
+          "indexSearchable": false,
+          "name": "access_groups",
+          "tokenization": "field",
+        },
+        {
           "dataType": "date",
           "indexFilterable": true,
           "indexRangeFilters": true,
@@ -352,6 +359,12 @@ describe('default requests are deep-equal to the base snapshot', () => {
           "field": "doc_date",
           "schema": {
             "type": "datetime",
+          },
+        },
+        {
+          "field": "access_groups",
+          "schema": {
+            "type": "keyword",
           },
         },
         {
