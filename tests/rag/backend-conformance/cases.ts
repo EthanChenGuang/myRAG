@@ -20,7 +20,7 @@ export interface ConformanceContext {
    * Seeds, in tenant A, one lineage whose earlier version is superseded (no vector, different content) and whose current version carries
    * `identifier` in identifiers_norm. Required when the backend declares versionScope or identifierFilter.
    */
-  seedVersionHistory?: () => Promise<{ token: string; identifier: string; supersededChunkId: string; currentChunkId: string }>;
+  seedVersionHistory?: () => Promise<{ token: string; identifier: string; supersededChunkId: string; currentChunkId: string; siblingChunkId?: string }>;
   close: () => Promise<void>;
 }
 
@@ -233,7 +233,8 @@ export function runConformance(name: string, factory: ConformanceFactory): void 
         }
         if (caps.identifierFilter) {
           const only = await run({ identifiersNorm: [seeded.identifier] });
-          expect(new Set([...only.dense, ...only.lexical])).toEqual(new Set([seeded.currentChunkId]));
+          // D-59: every chunk of a current document carrying the identifier qualifies, also one without it (the sibling).
+          expect(new Set([...only.dense, ...only.lexical])).toEqual(new Set([seeded.currentChunkId, ...(seeded.siblingChunkId ? [seeded.siblingChunkId] : [])]));
           const none = await run({ identifiersNorm: [`${seeded.identifier}-absent`] });
           expect(none.dense.length + none.lexical.length).toBe(0);
         }

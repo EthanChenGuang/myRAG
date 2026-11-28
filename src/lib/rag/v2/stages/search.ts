@@ -253,7 +253,7 @@ export interface SearchIdentifiers {
   asked: string[];
   found: string[];
   missing: string[];
-  /** True when the legs were filtered to chunks carrying a found identifier. */
+  /** True when the legs were filtered to documents carrying a found identifier (D-59; the near-miss guard stays per chunk). */
   filtered: boolean;
   /** True when the filtered search found nothing and the unfiltered search ran instead. */
   fallback: boolean;
@@ -577,7 +577,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   // D-11, D-24: one backend per request; every variant, binding, translation, term and soft call goes through it.
   const resolved = resolveRetrievalBackend(profile, config, stageOverrides?.retrievalOverrides);
 
-  // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
+  // D-31: with found identifiers every leg is first filtered to documents carrying one (D-59); an empty filtered search reruns once without it.
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
     const identifierArg = identifiersNorm ? { identifiersNorm } : {};
     const route =
