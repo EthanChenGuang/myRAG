@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isNangoEnabled, verifyWebhookSignature } from '@/lib/nango/client';
-import { syncDocumentsForConnection } from '@/lib/nango/sync-manager';
-import { handleSyncWebhook } from '@/lib/nango/webhook-deletions';
+import { authOperationOf, handleSyncWebhook } from '@/lib/nango/webhook-deletions';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import type { NangoWebhookPayload } from '@/lib/nango/types';
 
@@ -65,17 +64,13 @@ export async function POST(request: NextRequest) {
         }
         break;
 
-      case 'sync.success':
-        // Sync completed successfully - process new/updated files
-        console.log('[Nango Webhook] Sync success:', payload.responseResults);
+      case 'auth':
+        console.log('[Nango Webhook] Auth event:', { operation: authOperationOf(payload), success: payload.success === true });
+        break;
 
-        // Process documents in the background
-        syncDocumentsForConnection(
-          payload.connectionId,
-          payload.providerConfigKey
-        ).catch(error => {
-          console.error('[Nango Webhook] Background sync failed:', error);
-        });
+      case 'sync.success':
+        // Legacy payload type that Nango no longer sends. It does not start a sync (D-32, Pitfall 2).
+        console.log('[Nango Webhook] Sync success:', payload.responseResults);
 
         // Update last sync time
         await supabaseAdmin

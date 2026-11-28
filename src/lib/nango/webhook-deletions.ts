@@ -187,6 +187,9 @@ export async function handleSyncWebhook(payload: NangoWebhookPayload, options: S
     const stored = await readStoredCursor(admin, connection, model);
     if (!stored.ok) return outcome('failed');
 
+    const checkpointsFrom = payload.checkpoints ? payload.checkpoints.from : undefined;
+    const fullListing = checkpointsFrom === null || (checkpointsFrom === undefined && stored.cursor === null);
+
     const feed = options.feedFor
         ? options.feedFor({ providerConfigKey, model })
         : new NangoRecordsFeed({ providerConfigKey, model });
@@ -204,6 +207,24 @@ export async function handleSyncWebhook(payload: NangoWebhookPayload, options: S
         const advance = page.complete && page.nextCursor !== null && page.nextCursor !== stored.cursor;
         const cursorStored = advance ? await storeCursor(admin, connection, model, page.nextCursor as string) : false;
         return outcome('nothing_deleted', { cursorStored });
+    }
+
+    if (fullListing) {
+        if (!page.complete) {
+            logger.warn(TAG, 'Full-sync deletions not applied: the read was cut', { connectionId: connection.id, candidates: entries.length });
+            return outcome('incomplete_listing');
+        }
+        const total = await countSyncRecords(admin, connection);
+        if (total === null) return outcome('failed');
+        const guard = await guardListingRemoval({
+            connection,
+            orphanFileIds: entries.map((entry) => entry.fileId),
+            totalRecords: total,
+            origin: 'sync',
+            complete: true,
+            admin,
+        });
+        if (guard.paused) return outcome('paused');
     }
 
     const result = outcome('applied');
