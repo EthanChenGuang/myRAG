@@ -1201,3 +1201,4 @@ Signatures were NOT covered by this; they are asked for separately.
   - 07 T-07-103..110, 170, 171 and the 07-01 package approval ratified;
   - 5.1.1 O-5 (D-16) and O-4 (SameSite=Lax confirmed).
 - S14 (T-04.4-09, rag_lexstats_compact_tenant unguarded) NOT accepted. A guard fix is to be dispatched.
+- 07:17Z Owner said 'run prod SQL first'. Handed the owner desk session_01X342smENMnyrGEa4FK53eB the sequence: t38, t39, 0989, 0991, t40, t41 (t42/t43 not merged yet). EVAL rehearsal first (EVAL is at t37), then an owner backup, the connector switch to the prod org, and prod with owner confirmation at each step.
