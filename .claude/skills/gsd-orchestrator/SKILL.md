@@ -190,6 +190,7 @@ Gates:
 - A READY detector that reads PLAN files from one worktree misses plans that exist only on exec or planning branches (for example plans split by a plan-check). When a planner adds or splits plans, check their `depends_on` by hand, or read PLAN files from every branch.
 - A grep sweep for tests broken by a new DB guard misses cases that are phrased differently. After a guard migration, run the full DB suite in the foreground before pushing the fix.
 - Some tools (for example Vercel deploys) ask the person to approve each call. While the owner is away, the prompt goes unanswered and the call does not run. Don't retry it in a loop. Queue it for the owner and say so.
+- Eval run outputs that a later plan reads (for example stage-B runs) disappear with the executor's container when they sit in a gitignored directory. Rebuilding them can spend a held-out test-split budget again. Tell executors to commit, or copy into a tracked path, any run output that a downstream plan names.
 - Verification rounds surface many gaps at once. Throughput feels slow when every gap gets its own session and trunk stops moving. Batch the medium and low gaps, and unblock the merge pipeline first.
 
 ## 10. Keep this skill current (standing owner instruction)
