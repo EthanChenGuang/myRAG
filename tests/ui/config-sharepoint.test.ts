@@ -54,6 +54,8 @@ function loadContext(fetchFn?: unknown, extra: Record<string, unknown> = {}): Lo
   context.window = context;
   vm.createContext(context);
   new vm.Script(fs.readFileSync(path.join(configUiDir, 'utils/modal.js'), 'utf8')).runInContext(context);
+  // html-fake-dom has no :not() selector; the base class's first-focus query is not under test here.
+  new vm.Script('Modal.prototype.focusFirstElement = function () {};').runInContext(context);
   new vm.Script(
     `${fs.readFileSync(pickerPath, 'utf8')}\nglobalThis.SharePointScopePickerModal = SharePointScopePickerModal; globalThis.buildSharePointScopeSummary = buildSharePointScopeSummary;`,
     { filename: 'sharepoint-scope-picker.js' },
@@ -134,6 +136,9 @@ function standardFetch(overrides: (url: string, method: string, body: unknown) =
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.doUnmock('@/lib/admin-route-auth');
+  vi.doUnmock('@supabase/supabase-js');
+  vi.doUnmock('@/lib/env');
   vi.resetModules();
 });
 
@@ -252,7 +257,7 @@ describe('Connectors tab provider cards (UI-SPEC 6.7)', () => {
     Object.assign(managerOn, { renderConfiguration() {}, showLoading() {}, showError() {} });
     await managerOn.loadConfiguration();
     expect(on.calls.map((c) => c.url)).toEqual(['/api/config/connectors', '/api/nango/connections']);
-    const conn = (managerOn.config as { providers: Array<{ user_connection: Record<string, unknown> }> }).providers[0]!.user_connection;
+    const conn = (managerOn.config as unknown as { providers: Array<{ user_connection: Record<string, unknown> }> }).providers[0]!.user_connection;
     expect(conn).toMatchObject({ connected: true, connection_id: 'c9', deletion_mode: 'purge' });
     expect(conn.source_scope).toEqual({ sites: [], drives: [{ id: 'd', name: 'L' }], folders: [] });
   });

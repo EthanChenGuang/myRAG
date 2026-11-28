@@ -65,6 +65,7 @@ class ConnectorsConfigManager {
       }
 
       this.config = await response.json();
+      await this.attachSharePointConnections();
       this.renderConfiguration();
       this.showLoading(false);
     } catch (error) {
@@ -102,6 +103,7 @@ class ConnectorsConfigManager {
     container.innerHTML = this.config.providers
       .map(provider => this.createProviderElement(provider))
       .join('');
+    this.renderSharePointScopeButtons(container);
     this.applyAccessNotices(container);
 
     // Add event listeners to toggles
@@ -157,6 +159,11 @@ class ConnectorsConfigManager {
     const connectionStatus = isConnected ? 'Connected' : 'Not Connected';
     const statusIcon = isConnected ? ' ✓' : '○';
     const statusColor = isConnected ? 'text-success' : 'text-base-content/50';
+    const isSharePoint = this.isSharePointScopeProvider(provider.provider);
+    const needsSelection = isConnected && (isSharePoint
+      ? !this.sharePointScopeHasSelection(provider)
+      : !provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length);
+    const selectFirstHint = isSharePoint ? ' (choose what to sync first)' : ' (select folder or files first)';
 
     // Build connection info display
     let connectionInfo = '';
@@ -223,8 +230,8 @@ class ConnectorsConfigManager {
                   class="btn btn-sm btn-primary"
                   onclick="connectorsConfig.handleSync('${key}')"
                   title="Sync documents from ${esc(provider.button_label)}"
-                  aria-label="Sync documents from ${esc(provider.button_label)}${!provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length ? ' (select folder or files first)' : ''}"
-                  ${!provider.user_connection.sync_folder_id && !provider.user_connection.sync_file_ids?.length ? 'disabled' : ''}
+                  aria-label="Sync documents from ${esc(provider.button_label)}${needsSelection ? selectFirstHint : ''}"
+                  ${needsSelection ? 'disabled' : ''}
                 >
                   Sync
                 </button>
@@ -279,6 +286,9 @@ class ConnectorsConfigManager {
               </button>
             </div>
           ` : ''}
+
+          <!-- SharePoint / OneDrive scope selection: the button is built with DOM calls by renderSharePointScopeButtons -->
+          ${isConnected && isSharePoint ? `<div class="mt-3 space-y-2" data-sharepoint-scope-host="${key}"></div>` : ''}
 
           <!-- Notion Page Selection (for connected Notion) -->
           ${isConnected && provider.provider === 'notion' ? `
@@ -776,6 +786,103 @@ class ConnectorsConfigManager {
       // Focus confirm button for accessibility
       buttons[1].focus();
     });
+  }
+
+  isSharePointScopeProvider(provider) {
+    return provider === 'sharepoint-online' || provider === 'one-drive';
+  }
+
+  sharePointScopeHasSelection(provider) {
+    const scope = provider && provider.user_connection ? provider.user_connection.source_scope : null;
+    if (!scope || typeof scope !== 'object') return false;
+    return ['sites', 'drives', 'folders'].some(kind => Array.isArray(scope[kind]) && scope[kind].length > 0);
+  }
+
+  sharePointScopeModeLabel(mode) {
+    if (mode === 'soft') return 'Soft delete';
+    if (mode === 'purge') return 'Purge';
+    return 'Default (current behaviour)';
+  }
+
+  /**
+   * D-24: the server lists SharePoint Online and OneDrive only while the switch is on. Their card needs the
+   * operator's own connection (selection and deletion mode), read from the session-scoped connections route.
+   */
+  async attachSharePointConnections() {
+    const providers = this.config && Array.isArray(this.config.providers) ? this.config.providers : [];
+    const scoped = providers.filter(provider => this.isSharePointScopeProvider(provider.provider));
+    if (scoped.length === 0) return;
+    let rows = [];
+    try {
+      const response = await fetch('/api/nango/connections', { credentials: 'same-origin' });
+      if (response.ok) {
+        const data = await response.json();
+        rows = Array.isArray(data && data.connections) ? data.connections : [];
+      }
+    } catch {
+      rows = [];
+    }
+    for (const provider of scoped) {
+      const row = rows.find(candidate => candidate && candidate.provider === provider.provider);
+      provider.user_connection = row
+        ? {
+          connected: row.status === 'connected',
+          connection_id: row.connection_id,
+          last_sync_at: row.last_sync_at || null,
+          source_scope: row.metadata && typeof row.metadata === 'object' ? row.metadata.source_scope || null : null,
+          deletion_mode: row.deletion_mode || null,
+        }
+        : null;
+    }
+  }
+
+  renderSharePointScopeButtons(container) {
+    const hosts = container.querySelectorAll('[data-sharepoint-scope-host]');
+    hosts.forEach(host => {
+      const key = host.getAttribute('data-sharepoint-scope-host');
+      const provider = this.config.providers.find(p => this.safeProviderKey(p.provider) === key);
+      if (!provider || !this.isSharePointScopeProvider(provider.provider)) return;
+      const scope = provider.user_connection ? provider.user_connection.source_scope : null;
+      const summary = typeof buildSharePointScopeSummary === 'function'
+        ? buildSharePointScopeSummary(scope, provider.provider)
+        : { hasSelection: false, label: provider.provider === 'one-drive' ? 'Choose libraries and folders' : 'Choose sites, libraries and folders' };
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `w-full flex items-center gap-2 p-2 rounded-md text-left text-sm transition-colors border border-dashed ${summary.hasSelection ? 'border-success/30 bg-success/5 hover:bg-success/10' : 'border-base-300 hover:bg-base-200'}`;
+      button.setAttribute('aria-haspopup', 'dialog');
+      const icon = document.createElement('i');
+      icon.className = `bi bi-diagram-3 ${summary.hasSelection ? 'text-success' : 'text-base-content/50'}`;
+      icon.setAttribute('aria-hidden', 'true');
+      const text = document.createElement('span');
+      text.className = `min-w-0 break-words ${summary.hasSelection ? 'text-success font-medium' : 'text-base-content/70'}`;
+      text.textContent = summary.label;
+      button.append(icon, text);
+      button.addEventListener('click', () => this.openSharePointScopePicker(provider.provider));
+      host.replaceChildren(button);
+    });
+  }
+
+  async openSharePointScopePicker(providerKey) {
+    try {
+      const providerData = this.config.providers.find(p => p.provider === providerKey);
+      if (!providerData || !providerData.user_connection) {
+        throw new Error('No connection found for this provider');
+      }
+      const conn = providerData.user_connection;
+      const picker = new SharePointScopePickerModal(providerKey, {
+        savedScope: conn.source_scope,
+        modeLabel: this.sharePointScopeModeLabel(conn.deletion_mode),
+        save: (scope) => nangoClient.updateConnection(providerKey, { sourceScope: scope }),
+        onSaved: (message) => {
+          this.showNotification(message, 'success');
+          this.loadConfiguration();
+        },
+      });
+      await picker.openPicker();
+    } catch (error) {
+      console.error('[Connectors] Failed to open the SharePoint scope picker');
+      this.showNotification(`Failed to open the picker: ${error.message}`, 'error');
+    }
   }
 
   /**
