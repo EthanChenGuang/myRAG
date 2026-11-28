@@ -377,6 +377,7 @@ for (const mode of MODES) {
         { name: 'version scope range, open end', args: { p_version_scope: { mode: 'range', from: '2024-07-01' } }, min: 1 },
         { name: 'version scope all with doc type', args: { p_version_scope: { mode: 'all' }, p_doc_types: ['product_technical'] }, min: 4 },
         { name: 'identifiers', args: { p_identifiers_norm: ['id-a'] }, min: 2 },
+        { name: 'identifier filter, sibling chunk without the identifier', args: { p_identifiers_norm: ['id-a'], p_doc_types: ['general'] }, min: 6 },
         { name: 'empty identifier list', args: { p_identifiers_norm: [] }, exact: 0 },
         { name: 'access keys, everyone only', args: { p_access_keys: ['all'] }, min: 30 },
         { name: 'access keys, the group', args: { p_access_keys: [GROUP] }, exact: 2 },
@@ -428,7 +429,7 @@ for (const mode of MODES) {
       }
     });
 
-    test('the cases exercise the fallback, image, version and language clauses', async () => {
+    test('the cases exercise the fallback, image, version, language and identifier-document clauses', async () => {
       const unfiltered = new Set(await bm25Ids(db, tenant.key, {}));
       const has = (key: string, i = 0): boolean => unfiltered.has((ids[key] as string[])[i] as string);
       assert.ok(has('techLegacyOnly', 0) && has('techLegacyOnly', 1), 'a document missing from the active profile is served from legacy');
@@ -442,6 +443,10 @@ for (const mode of MODES) {
       const lexB = new Set(await bm25Ids(db, tenant.key, { p_lexical_languages: [LANG_B] }));
       assert.ok(lexB.has((ids['lang-b-0'] as string[])[1] as string), 'an und chunk of a second-language document matches that language');
       assert.ok(!lexB.has((ids.undA as string[])[0] as string), 'an und chunk of a first-language document does not');
+      // identifier filter, sibling chunk without the identifier (04.2-40, D-59): the document carries id-a in its third chunk.
+      const byId = new Set(await bm25Ids(db, tenant.key, { p_identifiers_norm: ['id-a'] }));
+      assert.ok(byId.has((ids['general-0'] as string[])[0] as string), 'a sibling chunk of a document carrying the identifier qualifies');
+      assert.ok(!byId.has((ids['general-2'] as string[])[0] as string), 'a chunk of a document carrying another identifier does not');
     });
 
     test('the BM25 leg leaves out a chunk whose access group the caller lacks, and returns it with access off', async () => {

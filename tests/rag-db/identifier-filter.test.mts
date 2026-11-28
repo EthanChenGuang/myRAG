@@ -68,6 +68,13 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
     longNear: `Vorpel register entry ${TWO_EDIT_LONG} lists quandry settings of the east wing.`,
     unreachable: 'Hidden page with entry HY-77120 and nothing else.',
   };
+  // 04.2-40 (D-59): one document whose anchor chunk carries X, whose evidence chunk does not, and one chunk with only a near-miss of X.
+  const IN_DOC_NEAR = 'KT-58212';
+  const MULTI = {
+    anchor: `Wenbar ledger entry ${X} opens the record.`,
+    evidence: 'Wenbar ledger page two: the trelvo total stands at ninety units.',
+    nearInDoc: `Wenbar ledger appendix cites entry ${IN_DOC_NEAR} for the quandry settings.`,
+  };
   let prepared: Awaited<ReturnType<typeof import('../../eval/harness/run-eval.mts').prepareInProcessEval>>;
   let db: PGlite;
   let configModule: typeof import('../../src/lib/rag/config.ts');
@@ -147,6 +154,16 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
       const signal = new AbortController().signal;
       await indexDocumentForLookup({ writer: createIngestWriter({ db: serviceRpc(db), scope, signal }), scope, documentId, tables: false, identifiers: true, signal, loadPatterns: NO_PATTERNS });
     }
+    const multiDoc = crypto.randomUUID();
+    const multiBody = Object.values(MULTI).join('\n');
+    await db.query(
+      `INSERT INTO documents (id, filename, content, lineage_id, is_current, status, content_hash) VALUES ($1, 'wenbar-ledger.md', $2, $1, true, 'ready', $3)`,
+      [multiDoc, multiBody, crypto.createHash('sha256').update(multiBody).digest('hex')],
+    );
+    for (const [index, [name, content]] of Object.entries(MULTI).entries()) chunkOf[name] = await insertChunk(multiDoc, content, index);
+    chunkOf.multiDoc = multiDoc;
+    const signal = new AbortController().signal;
+    await indexDocumentForLookup({ writer: createIngestWriter({ db: serviceRpc(db), scope, signal }), scope, documentId: multiDoc, tables: false, identifiers: true, signal, loadPatterns: NO_PATTERNS });
   });
 
   after(async () => {
@@ -160,18 +177,38 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
     assert.equal(off.identifierSuggestions, undefined);
   });
 
-  test('filter on: every candidate carries the asked identifier in another spelling; the detail carries counts only', async () => {
+  test('filter on: every candidate belongs to a document that carries the asked identifier in another spelling; the detail carries counts only', async () => {
     for (const spelling of ['kt_58213', 'Kt.58213']) {
       const on = await run(`What does entry ${spelling} say about the quandry settings?`, { ...FILTER_ON, RAG_EXACT_ID_LOOKUP: 'true' });
       const stage = on.stages.find((entry) => entry.name === 'identifier_resolve');
       assert.equal(stage?.status, 'ok', JSON.stringify(stage));
       assert.equal(stage?.detail, 'asked=1 found=1 filtered=true');
-      const lacking = on.candidates.filter((candidate) => !/KT-58213/u.test(candidate.content)).map((candidate) => candidate.chunk_id);
-      assert.deepEqual(lacking, [], `candidates lacking ${X}: ${lacking.join(',')}`);
+      const carrying = new Set([chunkOf.x, chunkOf.xTwo, chunkOf.anchor, chunkOf.evidence, chunkOf.nearInDoc]);
+      const lacking = on.candidates.filter((candidate) => !carrying.has(candidate.chunk_id)).map((candidate) => candidate.chunk_id);
+      assert.deepEqual(lacking, [], `candidates outside documents carrying ${X}: ${lacking.join(',')}`);
       assert.ok(on.candidates.some((candidate) => candidate.chunk_id === chunkOf.x));
       assert.ok(on.candidates.some((candidate) => candidate.chunk_id === chunkOf.xTwo));
       for (const record of on.stages) assert.ok(!/kt|58213/iu.test(record.detail ?? ''), `no identifier in ${record.name} detail`);
     }
+  });
+
+  test('filter on: the evidence chunk of a document carrying the identifier is a candidate although it lacks the identifier (04.2-40)', async () => {
+    const on = await run(`What does entry ${X} give as the trelvo total?`, FILTER_ON);
+    const stage = on.stages.find((entry) => entry.name === 'identifier_resolve');
+    assert.equal(stage?.detail, 'asked=1 found=1 filtered=true', JSON.stringify(stage));
+    assert.ok(!on.stages.some((entry) => entry.name === 'identifier_filter_fallback' || /identifier_filter_fallback/u.test(entry.detail ?? '')), 'no fallback');
+    assert.ok(
+      on.candidates.some((candidate) => candidate.chunk_id === chunkOf.evidence),
+      `evidence chunk missing from candidates ${on.candidates.map((candidate) => candidate.chunk_id).join(',')}`,
+    );
+    assert.ok(!on.candidates.some((candidate) => candidate.chunk_id === chunkOf.plain), 'a document without the identifier stays out');
+  });
+
+  test('guard per chunk: a chunk with only a near-miss of X is dropped although its document carries X (D-51, 04.2-40)', async () => {
+    const on = await run(`What does entry ${X} say about the quandry settings?`, FILTER_ON);
+    assert.ok(on.candidates.some((candidate) => candidate.chunk_id === chunkOf.nearInDoc), 'the near-miss chunk of the carrying document is a candidate');
+    assert.ok(!on.kept.some((chunk) => chunk.chunk_id === chunkOf.nearInDoc), 'the guard drops it');
+    assert.ok(on.kept.some((chunk) => chunk.chunk_id === chunkOf.x), 'a chunk carrying X is kept');
   });
 
   test('filter on: a question without identifiers equals the switch-off candidates and order', async () => {
