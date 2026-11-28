@@ -327,3 +327,15 @@ export async function deleteNangoLineages(
         return false;
     }
 }
+
+export function parseMaxDeleteShare(_raw: string | undefined): number {
+    return Number.NaN;
+}
+
+export function shouldPauseListingRemoval(_orphans: number, _total: number, _share: number): boolean {
+    return false;
+}
+
+export async function guardListingRemoval(_input: Record<string, unknown>): Promise<{ paused: boolean }> {
+    return { paused: false };
+}
