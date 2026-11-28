@@ -183,14 +183,14 @@ describe('POST /api/rag/review/items/{id}/label', () => {
     expect((await stored(itemA)).status).toBe('open');
   });
 
-  it('rejects quarantined, superseded and mismatched-document evidence with its own reason', async () => {
+  it('answers one reason, chunk_not_servable, for every chunk the caller cannot see (no existence or content oracle)', async () => {
     const { POST } = await loadRoute();
     const cases: Array<[Record<string, unknown>, string]> = [
       [span({ chunk_id: CHUNK_A_QUARANTINED, document_id: DOC_A_QUARANTINED, quote: 'quarantined sentence' }), 'chunk_not_servable'],
       [span({ chunk_id: CHUNK_A_SUPERSEDED, quote: 'superseded sentence' }), 'chunk_not_servable'],
       [span({ document_id: DOC_A_QUARANTINED }), 'document_mismatch'],
-      [span({ chunk_id: '00000000-0000-4000-8000-00000000ffff' }), 'chunk_not_in_tenant'],
-      [span({ chunk_id: 'not-a-uuid' }), 'chunk_not_in_tenant'],
+      [span({ chunk_id: '00000000-0000-4000-8000-00000000ffff' }), 'chunk_not_servable'],
+      [span({ chunk_id: 'not-a-uuid' }), 'chunk_not_servable'],
       [span({ quote: '...' }), 'quote_empty'],
     ];
     for (const [evidence, reason] of cases) {

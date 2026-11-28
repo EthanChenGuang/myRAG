@@ -441,7 +441,7 @@ for (const mode of MODES) {
         await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_policies WHERE tablename = 'rag_review_items' AND policyname <> 'rag_review_items_access_sets'")
       ).rows[0]?.n;
       assert.equal(policies, 2);
-      const triggers = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = 'public.rag_review_items'::regclass AND NOT tgisinternal")).rows[0]?.n;
+      const triggers = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid = 'public.rag_review_items'::regclass AND NOT tgisinternal AND tgname <> 'rag_review_items_fill_owner'")).rows[0]?.n;
       assert.equal(triggers, 1);
       const id = await insertItem(db, { tenant_key: tenant });
       await asRole(db, 'authenticated', expert, () => db.query("UPDATE rag_review_items SET status = 'skipped' WHERE id = $1", [id]));

@@ -11,6 +11,7 @@
 -- retrieval_log_id that is not a log row of that tenant, inserts with ON CONFLICT DO NOTHING on (tenant_key, query_fingerprint,
 -- mining_window) and writes one strata row per inserted item. Returns the number inserted.
 -- No-op without the Phase 5.1.1 review queue (to_regclass guard). Idempotent; not folded into the setup files.
+-- Re-run order: re-running this file after 0986 restores the body without access_sets; re-run 0986, 0990 and 0410 after it.
 
 BEGIN;
 
