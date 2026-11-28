@@ -182,3 +182,13 @@
   - anon sees 0 shared rows (probe rolled back).
   - Prod has 0 shared chats with a share_id, so no share link exists to open in the browser.
 - No data rows were written.
+
+## 2026-11-28 ~09:50 UTC: PROD (ppvywaxrycaxrtrrditl) UF-1 0991 APPLIED and verified (owner said "跑")
+- Applied the BEGIN..COMMIT block of .planning/quick/261128-uf1-block-direct-document-insert/prod-apply.sql as uf1_0991_block_direct_document_insert. md5 a698fefd82fc7a40c76dc2ee349c54ea matches the file block.
+- Before: INSERT policies "Users can create documents" and "Users can create chunks".
+- After:
+  - Two guard triggers, both enabled (O).
+  - Guard function is INVOKER with search_path="" and no anon/authenticated EXECUTE.
+  - 0 INSERT/ALL policies on documents and document_chunks. RLS on for both.
+  - An authenticated insert into documents is refused with 42501 (probe rolled back).
+- No data rows were written.
