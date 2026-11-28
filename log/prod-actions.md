@@ -206,3 +206,20 @@
   - train40_0410_r23_delta d75f31dfc9ee909f49e3bf7db4d040a5
 - Verify: one rag_tenant_doc_types(text,text[],boolean); rag_access_readiness ready=true, no reasons; 42 functions checked, none executable by anon/authenticated, all by service_role; rag_purge_audit RLS on, 0 policies.
 - DROPs: only the one the file describes (0986 drops the old rag_tenant_doc_types overloads; 0723 drops rag_source_recheck before recreating). No data deleted.
+
+## 2026-11-28 PROD train 41 (owner said "跑")
+- Project: ppvywaxrycaxrtrrditl. Applied in order, one section per call, verbatim from ops/sql/train41-live.sql.
+- md5(statements[1]) matches the file section for all 10:
+  - train41_0720_source_sync_columns 3dd0f61a1e94c8adb8a8c970a4cd5078
+  - train41_0721_source_reconcile_runs 04ccf9ba7c81d03aeb0a129877c5ffcd
+  - train41_0721_source_reconcile_runs_multi_tenant fd81d41edfa8bc9ad8507cec97eaa865
+  - train41_0722_source_delta_tokens a1a19ea006c4ef9b89398cf5a3b139da
+  - train41_0728_purge_foreign_stores 0947fc609201ed629bde4a4db1f05d3b
+  - train41_0937_phase32_column_guard 37ed5d1fc59dc32552469418accb9bb2
+  - train41_0987_scope_centroids_access a19be930e3cc08a61314751886d24bbb
+  - train41_0990_review_items_hardening 0d1889dfd103d1b25ebb9a1ec08a09e9
+  - train41_1011_attribute_header_stamp_insert_guard a61172000bb71184febc6fc265187bb3
+  - train41_0410_r23_delta 25772610543eabbccad4d180955cada6
+- Verify: 6 new columns nullable, no default; rag_source_reconcile_runs and rag_source_delta_tokens RLS on, 0 policies; 24 functions, none executable by anon/authenticated, all by service_role, search_path=""; rag_nango_owner_tenant_key -> u:<uuid>; inventory cascade=8 exempt=16 purge_step=20; 7 triggers enabled (O); rag_review_items_access_sets RESTRICTIVE and mentions rag_access_enforced; readiness ready=true; unowned_with_log=0.
+- DROPs: only those the file describes (DROP TRIGGER IF EXISTS before re-create in 0937/0987/0990/1011; DROP POLICY IF EXISTS before re-create in 0990). No data deleted.
+- PROD order from handoff e6afe8a2 is complete: train38, train39, 0989, 0991, train40, train41. Trains 42 and 43 not run.
