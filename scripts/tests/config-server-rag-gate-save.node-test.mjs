@@ -406,9 +406,10 @@ describe('POST /api/config/create', () => {
 
 describe('POST /api/config/languages', () => {
   test('a language change answers 409 in enforce without ragGate and writes nothing', async () => {
-    fs.writeFileSync(envPath(), `${baseEnv('enforce')}RAG_SUPPORTED_LANGUAGES=en\nRAG_PRIMARY_LANGUAGE=en\n`);
+    // A removal (plan 07-52): an addition without a baseline is refused with 400 before the gate is asked.
+    fs.writeFileSync(envPath(), `${baseEnv('enforce')}RAG_SUPPORTED_LANGUAGES=en,it\nRAG_PRIMARY_LANGUAGE=en\n`);
     const beforeText = readEnv();
-    const res = await call('POST', '/api/config/languages', { languages: ['en', 'it'], primary: 'en' });
+    const res = await call('POST', '/api/config/languages', { languages: ['en'], primary: 'en' });
     assert.equal(res.status, 409);
     assert.equal(res.json.error, 'rag_gate_required');
     assert.equal(readEnv(), beforeText);

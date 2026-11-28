@@ -539,18 +539,30 @@ def check_backend_canary(job: dict | None, errors: list[str], compose_path: Path
 
     job_env = job.get("env") or {}
     runs = [step for step in steps if "npx vitest run" in str(step.get("run", ""))]
-    if len(runs) != 1:
-        errors.append("pr-smoke: job backend-canary must have exactly one npx vitest run step")
-        return
-    command = str(runs[0].get("run", ""))
+    # The conformance suite drops and recreates collections, so it runs as its own step after the canary (Phase 7 verification).
+    if len(runs) != len(CANARY_SUITES):
+        errors.append(
+            f"pr-smoke: job backend-canary must run {' and '.join(CANARY_SUITES)} in {len(CANARY_SUITES)} separate npx vitest run steps, got {len(runs)}"
+        )
+    positions: dict[str, int] = {}
+    for index, step in enumerate(runs):
+        words = str(step.get("run", "")).split()
+        named = [suite for suite in CANARY_SUITES if suite in words]
+        if len(named) > 1:
+            errors.append(f"pr-smoke: job backend-canary must run {' and '.join(named)} in separate steps")
+        for suite in named:
+            positions.setdefault(suite, index)
+        env = {**job_env, **(step.get("env") or {})}
+        if str(env.get("RAG_CANARY_BACKENDS", "")) != CANARY_BACKENDS:
+            errors.append(f"pr-smoke: job backend-canary must set RAG_CANARY_BACKENDS: {CANARY_BACKENDS}, got {env.get('RAG_CANARY_BACKENDS')!r}")
+        if str(env.get("CI_BACKEND_CANARY", "")) != "1":
+            errors.append(f"pr-smoke: job backend-canary must set CI_BACKEND_CANARY: '1', got {env.get('CI_BACKEND_CANARY')!r}")
     for suite in CANARY_SUITES:
-        if suite not in command.split():
+        if suite not in positions:
             errors.append(f"pr-smoke: job backend-canary vitest step must run {suite}")
-    env = {**job_env, **(runs[0].get("env") or {})}
-    if str(env.get("RAG_CANARY_BACKENDS", "")) != CANARY_BACKENDS:
-        errors.append(f"pr-smoke: job backend-canary must set RAG_CANARY_BACKENDS: {CANARY_BACKENDS}, got {env.get('RAG_CANARY_BACKENDS')!r}")
-    if str(env.get("CI_BACKEND_CANARY", "")) != "1":
-        errors.append(f"pr-smoke: job backend-canary must set CI_BACKEND_CANARY: '1', got {env.get('CI_BACKEND_CANARY')!r}")
+    canary, conformance = CANARY_SUITES
+    if canary in positions and conformance in positions and positions[conformance] <= positions[canary]:
+        errors.append(f"pr-smoke: job backend-canary must run {conformance} after the canary ({canary})")
 
 
 def sidecar_config_copies() -> list[str]:

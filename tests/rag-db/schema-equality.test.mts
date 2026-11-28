@@ -29,10 +29,11 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
  * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25), Phase 5.1.1 (0531-0537, plan
- * 05.1.1-22), Phase 6 (0601-0603, plan 06-45), Phase 4.1.1 (0471-0473, plan 04.1.1-14) and Phase 6.1 (0651-0654, plan 06.1-18). 0426, 0427
- * and the 07xx and later blocks are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
+ * 05.1.1-22), Phase 6 (0601-0603, plan 06-45), Phase 4.1.1 (0471-0473, plan 04.1.1-14), Phase 6.1 (0651-0654, plan 06.1-18) and Phase 7
+ * (0701-0707, plan 07-31). 0426, 0427, 0708 onward (0740 and later included) and the 08xx and later blocks are not folded yet, so a fresh install
+ * from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|047[1-3]|050[12]|053[1-7]|060[1-3]|065[1-4])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|047[1-3]|050[12]|053[1-7]|060[1-3]|065[1-4]|070[1-7])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const PHASE5_MIGRATION = /^supabase\/migrations\/050\d_/;
@@ -41,6 +42,7 @@ const PHASE511_MIGRATION = /^supabase\/migrations\/053\d_/;
 const PHASE6_MIGRATION = /^supabase\/migrations\/060\d_/;
 const PHASE61_MIGRATION = /^supabase\/migrations\/065\d_/;
 const PHASE411_MIGRATION = /^supabase\/migrations\/047\d_/;
+const PHASE7_FOLDED_MIGRATION = /^supabase\/migrations\/070[1-7]_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -347,6 +349,14 @@ describe('folded migration set', () => {
         'supabase/migrations/0654_finetune_binding_guard.sql',
       ]);
       assert.deepEqual(phase61.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
+
+    test(`migrations 0701 to 0707 of ${mode} are folded and 0708 onward are not`, () => {
+      const phase7 = migrationFiles(mode).filter((file) => /^supabase\/migrations\/07\d\d_/.test(file));
+      const folded = phase7.filter((file) => FOLDED_MIGRATION.test(file));
+      assert.deepEqual(folded, phase7.filter((file) => PHASE7_FOLDED_MIGRATION.test(file)));
+      assert.equal(folded.length, 7, 'one common file per number from 0701 to 0707, no mode variant');
+      assert.ok(phase7.some((file) => file.startsWith('supabase/migrations/0740_')), '0740 is applied on top of the setup file');
     });
 
     test(`every Phase 4.1.1 migration of ${mode} is folded into the setup file`, () => {
@@ -728,6 +738,93 @@ async function assertTerminologySecured(db: PGlite): Promise<void> {
   assert.deepEqual(functions.rows.filter((row) => row.helper && row.service).map((row) => row.signature), [], 'the rag_term__ helpers have no grant');
 }
 
+/** Every function 0701-0707 create or replace; each one is closed to anon and authenticated (D-01, D-10). */
+const PHASE7_FUNCTIONS = [
+  'rag_vector_sync_enqueue',
+  'rag_vector_sync_chunks_insert',
+  'rag_vector_sync_chunks_update',
+  'rag_vector_sync_chunks_delete',
+  'rag_vector_sync_documents_update',
+  'rag_vector_sync_documents_delete',
+  'rag_vector_sync_embeddings_insert',
+  'rag_vector_sync_embeddings_update',
+  'rag_vector_sync_embeddings_delete',
+  'rag_vector_sync_embedding_profiles',
+  'rag_vector_sync_chunking_profiles',
+  'rag_vector_sync_claim',
+  'rag_vector_sync_complete',
+  'rag_vector_sync_fail',
+  'rag_vector_sync_checkpoint',
+  'rag_vector_sync_expand',
+  'rag_vector_sync_requeue_dead',
+  'rag_vector_sync_set_target',
+  'rag_validate_chunks',
+  'rag_vector_sync_document_rows',
+  'rag_vector_sync_chunk_row',
+  'rag_vector_sync_profiles',
+  'rag_backend_readiness',
+  'rag_activate_embedding_profile',
+  'rag_vector_sync_tenants',
+  'rag_vector_sync_reconcile_summary',
+  'rag_vector_sync_prune',
+  'rag_vector_sync_enqueue_repair',
+  'rag_vector_sync_bucket_rows',
+  'rag_set_backend_index_state',
+] as const;
+const PHASE7_TABLES = ['rag_backend_index_state', 'rag_vector_sync_targets', 'vector_sync_outbox'] as const;
+
+/** The Phase 7 fold (plan 07-31): the outbox, targets and index-state tables with RLS, no policy and no client privilege, both targets seeded
+ * disabled, the servable-chunk view as security_invoker, the statement triggers, and every function closed to the client roles. */
+async function assertPhase7Secured(db: PGlite): Promise<void> {
+  const tables = await db.query<{ name: string; rls: boolean; policies: number; client: boolean; service: boolean }>(
+    `SELECT c.relname AS name, c.relrowsecurity AS rls,
+            (SELECT count(*)::int FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies,
+            (has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+              OR has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) AS client,
+            has_table_privilege('service_role', c.oid, 'SELECT,INSERT,UPDATE,DELETE') AS service
+     FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r' AND c.relname = ANY($1::text[]) ORDER BY 1`,
+    [[...PHASE7_TABLES]],
+  );
+  assert.deepEqual(tables.rows.map((row) => row.name), [...PHASE7_TABLES], 'every Phase 7 table is defined by the setup file');
+  for (const row of tables.rows) {
+    assert.equal(row.rls, true, `${row.name} has RLS on`);
+    assert.equal(row.policies, 0, `${row.name} has no policy`);
+    assert.equal(row.client, false, `anon and authenticated have no privilege on ${row.name}`);
+    assert.equal(row.service, true, `service_role reads and writes ${row.name}`);
+  }
+  const view = await db.query<{ options: string[] | null; client: boolean }>(
+    `SELECT c.reloptions AS options,
+            (has_table_privilege('anon', c.oid, 'SELECT') OR has_table_privilege('authenticated', c.oid, 'SELECT')) AS client
+     FROM pg_class c WHERE c.oid = 'public.rag_servable_chunks'::regclass`,
+  );
+  assert.ok(view.rows[0]?.options?.includes('security_invoker=true'), 'rag_servable_chunks is security_invoker');
+  assert.equal(view.rows[0]?.client, false, 'anon and authenticated cannot read rag_servable_chunks');
+  const targets = await db.query<{ target: string; enabled: boolean }>('SELECT target, enabled FROM public.rag_vector_sync_targets ORDER BY target');
+  assert.deepEqual(targets.rows, [
+    { target: 'qdrant', enabled: false },
+    { target: 'weaviate', enabled: false },
+  ]);
+  const triggers = await db.query<{ name: string }>(
+    "SELECT tgname AS name FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'rag_vector_sync_%' ORDER BY 1",
+  );
+  assert.equal(triggers.rows.length, 10, 'the ten 0702 statement triggers exist');
+  const functions = await db.query<{ proname: string; signature: string; trigger: boolean; client: boolean; service: boolean }>(
+    `SELECT p.proname, p.oid::regprocedure::text AS signature, p.prorettype = 'trigger'::regtype AS trigger,
+            (has_function_privilege('anon', p.oid, 'EXECUTE') OR has_function_privilege('authenticated', p.oid, 'EXECUTE')) AS client,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') AS service
+     FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY($1::text[])`,
+    [[...PHASE7_FUNCTIONS]],
+  );
+  const present = new Set(functions.rows.map((row) => row.proname));
+  assert.deepEqual(PHASE7_FUNCTIONS.filter((name) => !present.has(name)), [], 'every 0701-0707 function is defined by the setup file');
+  assert.deepEqual(functions.rows.filter((row) => row.client).map((row) => row.signature), [], 'anon and authenticated have no EXECUTE on a Phase 7 function');
+  assert.deepEqual(
+    functions.rows.filter((row) => !row.trigger && !row.service).map((row) => row.signature),
+    [],
+    'service_role can execute every callable Phase 7 function, rag_vector_sync_claim included',
+  );
+}
+
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
     test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
@@ -742,6 +839,7 @@ for (const mode of MODES) {
         await assertPhase6Secured(fixture.db);
         await assertFinetuneSecured(fixture.db);
         await assertTerminologySecured(fixture.db);
+        await assertPhase7Secured(fixture.db);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -765,6 +863,9 @@ for (const mode of MODES) {
         const legacyGrants = (dump: CatalogDump) => dump.grants.filter((row) => row.includes('"signature":"match_'));
         assert.ok(legacyGrants(migrated.dump).length > 0, 'the legacy match_* RPCs are part of the comparison');
         assert.deepEqual(legacyGrants(folded.dump), legacyGrants(migrated.dump), 'legacy match_* grants are unchanged');
+        const phase7Grants = (dump: CatalogDump) => dump.grants.filter((row) => row.includes('"signature":"rag_vector_sync_claim('));
+        assert.ok(phase7Grants(migrated.dump).length > 0, 'the 0703 claim grants are part of the comparison');
+        assert.deepEqual(phase7Grants(folded.dump), phase7Grants(migrated.dump), 'rag_vector_sync_claim grants are equal');
       } finally {
         await folded.fixture.db.close();
         await migrated.fixture.db.close();
@@ -810,7 +911,8 @@ const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
 // The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 3.1.1 section
 // (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, then
 // the Phase 5.1.1 section (0531-0537, plan 05.1.1-22), the Phase 6 section (0601-0603, plan 06-45), the Phase 4.1.1 section (0471-0473,
-// plan 04.1.1-14, folded after Phase 6), and the Phase 6.1 section (0651-0654, plan 06.1-18), which reads the 0440 bindings, closes the file.
+// plan 04.1.1-14, folded after Phase 6), the Phase 6.1 section (0651-0654, plan 06.1-18), which reads the 0440 bindings, and the Phase 7
+// section (0701-0707, plan 07-31), which closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
@@ -839,6 +941,10 @@ const PHASE_61_SECTION = {
   header: `${BAR}\n-- Phase 6.1: Embedding fine-tuning registry, slots, export and binding guard (migrations 0651-0654, plan 06.1-18, after 0603 in migration order)\n${BAR}`,
   files: /^supabase\/migrations\/065[1-4]_/,
 } as const;
+const PHASE_7_SECTION = {
+  header: `${BAR}\n-- Phase 7: Vector sync outbox, triggers, claim, reads, servable-chunk validation, activation gate and reconcile (migrations 0701-0707, plan 07-31, after 0654 in migration order; 0708 onward stay migrations)\n${BAR}`,
+  files: /^supabase\/migrations\/070[1-7]_/,
+} as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
 const phase31Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE31_MIGRATION.test(file));
@@ -862,6 +968,7 @@ function foldedSection(mode: DeploymentMode, { header, files }: { header: string
 const searchPathFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => SEARCH_PATH_SECTION.files.test(file));
 const phase311Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE_311_SECTION.files.test(file));
 const phase61Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE_61_SECTION.files.test(file));
+const phase7Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE_7_SECTION.files.test(file));
 
 /** The folded setup file with both Phase 3.1 sections and the later 0425 and 0440-0442 sections cut out: what the setup was before the Phase 3.1
  * fold. */
@@ -877,7 +984,9 @@ function setupWithoutPhase31(mode: DeploymentMode): string {
   assert.ok(text.includes(phase311), `${FOLDED_SETUP[mode]} lacks the 0440-0442 section`);
   const phase61 = foldedSection(mode, PHASE_61_SECTION);
   assert.ok(text.includes(phase61), `${FOLDED_SETUP[mode]} lacks the 0651-0654 section`);
-  return text.replace(searchPath, '').replace(phase311, '').replace(phase61, '');
+  const phase7 = foldedSection(mode, PHASE_7_SECTION);
+  assert.ok(text.includes(phase7), `${FOLDED_SETUP[mode]} lacks the 0701-0707 section`);
+  return text.replace(searchPath, '').replace(phase311, '').replace(phase61, '').replace(phase7, '');
 }
 
 /** Supabase Realtime as far as 0353 needs it: realtime.messages with RLS, realtime.topic() and realtime.send(). */
@@ -930,9 +1039,9 @@ for (const mode of MODES) {
       assert.ok(
         text.endsWith(
           `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}\n${foldedSection(mode, PHASE_6_SECTION)}\n${foldedSection(mode, PHASE_411_SECTION)}\n` +
-            foldedSection(mode, PHASE_61_SECTION),
+            `${foldedSection(mode, PHASE_61_SECTION)}\n${foldedSection(mode, PHASE_7_SECTION)}`,
         ),
-        'after Phase 4 come the 0420-0424, 0425, 0440-0442, Phase 5, Phase 5.1.1, Phase 6 and Phase 4.1.1 sections, then the Phase 6.1 section, which closes the file',
+        'after Phase 4 come the 0420-0424, 0425, 0440-0442, Phase 5, Phase 5.1.1, Phase 6, Phase 4.1.1 and Phase 6.1 sections, then the Phase 7 section, which closes the file',
       );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
@@ -945,6 +1054,7 @@ for (const mode of MODES) {
         ...searchPathFiles(mode).map(readRepo),
         ...phase311Files(mode).map(readRepo),
         ...phase61Files(mode).map(readRepo),
+        ...phase7Files(mode).map(readRepo),
       ]);
       try {
         const foldedDump = await catalogDump(folded);

@@ -298,7 +298,12 @@ test('saving the same valid candidate twice gives the same answer and one line p
   assert.equal(linesFor(content, 'RAG_PRIMARY_LANGUAGE').length, 1);
 });
 
-test('two concurrent saves leave one line per variable and a set and primary from the same request', async () => {
+test('two concurrent saves leave one line per variable and a set and primary from the same request', async (t) => {
+  // LANG-11 (plan 07-52): whichever save lands second adds languages to a saved set, so every language has a baseline here.
+  const baselines = path.join(root, 'eval', 'baselines', 'languages');
+  fs.mkdirSync(baselines, { recursive: true });
+  for (const code of ['zh', 'en', 'it']) fs.writeFileSync(path.join(baselines, `${code}.json`), JSON.stringify({ language: code }));
+  t.after(() => fs.rmSync(path.join(root, 'eval'), { recursive: true, force: true }));
   const [a, b] = await Promise.all([
     call('POST', '/api/config/languages', { body: { languages: ['zh', 'en'], primary: 'zh' } }),
     call('POST', '/api/config/languages', { body: { languages: ['it'], primary: 'it' } }),

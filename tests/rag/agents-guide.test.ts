@@ -433,3 +433,95 @@ describe('AGENTS.md reflects Phase 6.3 (source deletion sync and purge)', () => 
     expect(ENV).toContain("RAG_SOURCE_RECONCILE_MAX_AGE_DAYS: process.env.RAG_SOURCE_RECONCILE_MAX_AGE_DAYS || '7'");
   });
 });
+
+describe('AGENTS.md reflects the Phase 7 RAG pipeline guide', () => {
+  test.each([
+    'README_RAG_PIPELINE.md',
+    'RAG_RETRIEVAL_BACKEND',
+    '[Vector Sync]',
+    'npm run rag:vector-sync',
+    'npm run rag:reconcile',
+    'rag_eval.regression',
+    'rag_eval.failure_report',
+    'external vector stores always filter by tenant',
+  ])('mentions %s', (fragment) => {
+    expect(AGENTS).toContain(fragment);
+  });
+
+  test('links the pipeline guide from the RAG pipeline section and from section 17', () => {
+    const pipeline = AGENTS.slice(AGENTS.indexOf('### RAG pipeline'), AGENTS.indexOf('### Image RAG'));
+    const section17 = AGENTS.slice(AGENTS.indexOf('## 17. Supplementary Documentation'));
+    expect(pipeline).toContain('README_RAG_PIPELINE.md');
+    expect(section17).toContain('README_RAG_PIPELINE.md');
+  });
+});
+
+describe('AGENTS.md reflects the Phase 7 revision-4 workflows', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const pipeline = AGENTS.slice(AGENTS.indexOf('### RAG pipeline'), AGENTS.indexOf('### Image RAG'));
+  const phase44 = AGENTS.slice(AGENTS.indexOf('### True BM25 lexical scoring (Phase 4.4)'), AGENTS.indexOf('### Terminology dictionary (Phase 4.1.1)'));
+  const section16 = AGENTS.slice(AGENTS.indexOf('## 16. Handy Scripts'), AGENTS.indexOf('## 17. Supplementary Documentation'));
+
+  test.each([
+    '`RAG_ROLLOUTS=false`',
+    '`RAG_LANG_CONFIDENCE=mapped`',
+    '`npm run rag:rollout',
+    '`npm run rag:languages',
+    '`npm run rag:red-team',
+    '`rag_vector_sync_purge_status`',
+    'disabled targets are still purged',
+    '`stale_index_drop`',
+    '`access_groups`',
+    '`language_drop`',
+    '`/api/rag/admin/language-quality`',
+    '`config/rag/price-table.json`',
+  ])('§6 mentions %s', (fragment) => {
+    expect(pipeline).toContain(fragment);
+  });
+
+  test('each new switch states that off equals today', () => {
+    const rollouts = pipeline.split('\n').find((line) => line.includes('`RAG_ROLLOUTS=false`'));
+    const confidence = pipeline.split('\n').find((line) => line.includes('`RAG_LANG_CONFIDENCE=mapped`'));
+    expect(rollouts).toMatch(/off (equals|reproduces) today/i);
+    expect(confidence).toMatch(/default.*today/i);
+  });
+
+  test('the red-team corpus domain-neutrality rule is stated once', () => {
+    expect(section6.match(/red-team corpus[^\n]*domain example strings?/gi) ?? []).toHaveLength(1);
+  });
+
+  test('the Phase 4.4 bullets carry the external-backend BM25 parameters (LEX-05)', () => {
+    for (const fragment of ['Weaviate and Qdrant', '`RAG_LEXICAL_BM25_K1`', 'records its pair', 'rebuild-lexical', '--confirm', 'only reports']) {
+      expect(phase44, fragment).toContain(fragment);
+    }
+  });
+
+  test.each(['`npm run rag:rollout`', '`npm run rag:languages`', '`npm run rag:red-team`', 'calibrate-language-confidence.mts'])(
+    '§16 lists %s',
+    (command) => {
+      expect(section16).toContain(command);
+    },
+  );
+
+  test('§16 vector-sync row lists rebuild-lexical', () => {
+    expect(section16.split('\n').find((line) => line.startsWith('| `npm run rag:vector-sync`'))).toContain('rebuild-lexical');
+  });
+
+  test('the documented commands exist in package.json', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')) as { scripts: Record<string, string> };
+    for (const name of ['rag:rollout', 'rag:languages', 'rag:red-team', 'rag:vector-sync']) expect(pkg.scripts[name], name).toBeDefined();
+    expect(fs.existsSync(path.resolve(__dirname, '../../eval/harness/calibrate-language-confidence.mts'))).toBe(true);
+  });
+});
+
+describe('AGENTS.md reflects the Phase 7 setup fold (07-31)', () => {
+  test('the fold sentence names Phase 7 (0701–0707) as the part that closes the setup files', () => {
+    expect(AGENTS).toContain('Phase 6.1 (0651–0654) and Phase 7 (0701–0707), which closes the file');
+    expect(AGENTS).not.toContain('Phase 6.1 (0651–0654), which closes the file');
+  });
+
+  test('the fold sentence keeps the unfolded Phase 7 migrations as migrations', () => {
+    expect(AGENTS).toContain('Phase 7 migrations 0708, 0709, 0720–0728 and 0740–0746 stay migrations and are not folded');
+    expect(AGENTS).not.toContain('the later 07xx–10xx blocks are not folded yet');
+  });
+});

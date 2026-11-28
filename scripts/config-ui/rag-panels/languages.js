@@ -55,6 +55,19 @@ const LANGUAGES_LABELS = {
     'list.loading': 'Loading languages…',
     'list.unavailable':
       'The language list is unavailable right now. Check that the Config UI server is running, then select Reload panel.',
+    'error.language_baseline_missing': "Not saved. No baseline is recorded for {language}. Record it with {command}, then save again.",
+    'blocked.baseline': "No baseline is recorded for this language. Record it with {command} first.",
+    'add.title': "Add {language}?",
+    'add.col.group': "Documents",
+    'add.col.count': "Count",
+    'add.group.und': "Stored without a detected language",
+    'add.group.scanned': "Scanned documents",
+    'add.group.stale': "Processed with earlier settings",
+    'add.total': "Documents to reprocess",
+    'add.note': "Only these documents are reprocessed, and only after you start the rebuild. Every other document stays as it is.",
+    'save.added': "{language} added. Documents to reprocess: {count}. Start the rebuild under RAG administration, Ingestion changes.",
+    'save.addedNone': "{language} added. No stored document needs reprocessing.",
+    'save.removed': "{language} removed from the supported languages. Its documents stay searchable; nothing was deleted or rebuilt.",
   },
   zh: {
     'banner.title': '尚未选择支持的语言',
@@ -98,6 +111,19 @@ const LANGUAGES_LABELS = {
     'warn.notVerified.default_not_active': 'Embedding 声明中的默认配置不是关闭 Embedding 配置时应用实际使用的配置，因此语言未按当前配置核对。',
     'list.loading': '正在加载语言…',
     'list.unavailable': '暂时无法获取语言列表。请确认 Config UI 服务器正在运行，然后选择“重新加载面板”。',
+    'error.language_baseline_missing': "未保存。{language}还没有记录基线。请先运行 {command} 记录基线，再保存。",
+    'blocked.baseline': "此语言还没有记录基线。请先运行 {command}。",
+    'add.title': "要添加{language}吗？",
+    'add.col.group': "文档",
+    'add.col.count': "数量",
+    'add.group.und': "入库时未检测出语言",
+    'add.group.scanned': "扫描件",
+    'add.group.stale': "按旧设置处理的文档",
+    'add.total': "需要重新处理的文档",
+    'add.note': "只有这些文档会重新处理，并且要在你开始重建之后才会进行。其他文档保持不变。",
+    'save.added': "已添加{language}。需要重新处理的文档：{count}。请在“RAG 管理 → 入库设置变更”中开始重建。",
+    'save.addedNone': "已添加{language}。没有已入库的文档需要重新处理。",
+    'save.removed': "已将{language}从支持的语言中移除。它的文档仍可检索，没有删除或重建任何内容。",
   },
   it: {
     'banner.title': 'Lingue supportate non scelte',
@@ -152,6 +178,19 @@ const LANGUAGES_LABELS = {
     'list.loading': 'Caricamento delle lingue…',
     'list.unavailable':
       'L’elenco delle lingue non è disponibile. Verifica che il server della Config UI sia in esecuzione, poi seleziona Ricarica pannello.',
+    'error.language_baseline_missing': "Non salvato. Per {language} non è registrata alcuna baseline. Registrala con {command}, poi salva di nuovo.",
+    'blocked.baseline': "Per questa lingua non è registrata alcuna baseline. Registrala prima con {command}.",
+    'add.title': "Aggiungere {language}?",
+    'add.col.group': "Documenti",
+    'add.col.count': "Numero",
+    'add.group.und': "Archiviati senza una lingua rilevata",
+    'add.group.scanned': "Documenti scansionati",
+    'add.group.stale': "Elaborati con impostazioni precedenti",
+    'add.total': "Documenti da rielaborare",
+    'add.note': "Vengono rielaborati solo questi documenti, e solo dopo che avrai avviato la ricostruzione. Tutti gli altri restano come sono.",
+    'save.added': "{language} aggiunta. Documenti da rielaborare: {count}. Avvia la ricostruzione in Amministrazione RAG, Modifiche all’ingestione.",
+    'save.addedNone': "{language} aggiunta. Nessun documento archiviato deve essere rielaborato.",
+    'save.removed': "{language} rimossa dalle lingue supportate. I suoi documenti restano ricercabili; nulla è stato eliminato o ricostruito.",
   },
 };
 
@@ -161,6 +200,14 @@ const LANGUAGES_PIPELINE_FORCING = [
   ['RAG_PIPELINE', 'v2'],
   ['RAG_INGEST_PIPELINE', 'unified'],
 ];
+/** LANG-11 (plan 07-52): the language_add groups, in the order the dialog lists them. */
+const LANGUAGES_ADD_GROUPS = ['und', 'scanned', 'stale'];
+const LANGUAGES_ADD_GROUP_KEYS = { und: 'add.group.und', scanned: 'add.group.scanned', stale: 'add.group.stale' };
+
+function languagesBaselineCommand(code) {
+  return 'npm run rag:languages -- baseline ' + code;
+}
+
 const LANGUAGES_BLOCK_KEYS = {
   embedding_profile_unsupported: ['blocked.embedding', 'profile'],
   reranker_unsupported: ['blocked.reranker', 'reranker'],
@@ -240,6 +287,7 @@ function languagesBuildView(answer, options) {
     .map((p) => {
       const nativeName = languagesString(p.nativeName) || p.code;
       const reasons = Array.isArray(p.reasons) ? p.reasons : [];
+      const baselineMissing = p.baselineMissing === true;
       const blocked = reasons
         .filter((r) => r && typeof r.code === 'string')
         .map((r) => {
@@ -247,12 +295,14 @@ function languagesBuildView(answer, options) {
           if (known) return { key: known[0], vars: { [known[1]]: languagesString(r.id) } };
           return { key: 'error.invalid', vars: { detail: r.code } };
         });
+      if (baselineMissing) blocked.push({ key: 'blocked.baseline', vars: { command: languagesBaselineCommand(p.code) } });
       return {
         code: p.code,
         nativeName,
         uiName: languagesUiName(p.code, nativeName, p.englishName, locale),
         groundedness: languagesString(p.groundedness),
-        selectable: p.selectable !== false,
+        selectable: p.selectable !== false && !baselineMissing,
+        baselineMissing,
         blocked,
         count: counts ? byLanguage.get(p.code) ?? 0 : null,
       };
@@ -348,7 +398,14 @@ function languagesNotes(view, checked) {
   return notes;
 }
 
-const LANGUAGES_SAVE_ERRORS = new Set(['empty_set', 'primary_not_in_set', 'incomplete_pack', 'embedding_profile_unsupported', 'reranker_unsupported']);
+const LANGUAGES_SAVE_ERRORS = new Set([
+  'empty_set',
+  'primary_not_in_set',
+  'incomplete_pack',
+  'embedding_profile_unsupported',
+  'reranker_unsupported',
+  'language_baseline_missing',
+]);
 
 /** One sentence per D-07 error of a refused save: { key, vars, codeVars } for known codes, { unknown: code } otherwise. */
 function languagesErrorItems(details, rows) {
@@ -360,7 +417,8 @@ function languagesErrorItems(details, rows) {
       if (d.language !== undefined) vars.language = languagesNameOf(rows, d.language);
       if (d.code === 'embedding_profile_unsupported') vars.profile = languagesString(d.id);
       if (d.code === 'reranker_unsupported') vars.reranker = languagesString(d.id);
-      return { key: 'error.' + d.code, vars, codeVars: ['profile', 'reranker'] };
+      if (d.code === 'language_baseline_missing') vars.command = languagesBaselineCommand(languagesString(d.language));
+      return { key: 'error.' + d.code, vars, codeVars: ['profile', 'reranker', 'command'] };
     });
 }
 
@@ -378,6 +436,57 @@ function languagesWarningItems(warnings, rows) {
         ? { key: 'note.groundedness', vars: { language: languagesNameOf(rows, w.language) }, codeVars: [] }
         : { unknown: w.code },
     );
+}
+
+/** The languages a save adds to and removes from a saved set (none on a first choice). */
+function languagesChange(view, languages) {
+  if (!view || !view.configured) return { added: [], removed: [] };
+  const saved = new Set(view.saved.languages);
+  const next = new Set(languages);
+  return {
+    added: languages.filter((code) => !saved.has(code)),
+    removed: view.saved.languages.filter((code) => !next.has(code)),
+  };
+}
+
+/**
+ * The impact dialog's language form (07-UI-SPEC 6.5): the title, one labelled row per group with its count, the total label and the
+ * note, all from LANGUAGES_LABELS. ingest-impact.js renders the caller's title, totalLabel and note; groups and rowLabels are passed as
+ * documented options (a group the dialog has no label for shows its code in font-mono).
+ */
+function languagesAddDialogOptions(rows, added, selection, locale) {
+  const name = added.map((code) => languagesNameOf(rows, code)).join(', ');
+  const groups = selection && selection.groups ? selection.groups : {};
+  const rowLabels = {};
+  for (const group of LANGUAGES_ADD_GROUPS) rowLabels[group] = languagesLabel(LANGUAGES_ADD_GROUP_KEYS[group], locale);
+  return {
+    title: languagesLabel('add.title', locale, { language: name }),
+    columns: { group: languagesLabel('add.col.group', locale), count: languagesLabel('add.col.count', locale) },
+    groups: LANGUAGES_ADD_GROUPS.map((group) => ({ group, label: rowLabels[group], count: Number(groups[group]) || 0 })),
+    rowLabels,
+    totalLabel: languagesLabel('add.total', locale),
+    total: selection && Number.isInteger(selection.total) ? selection.total : null,
+    note: languagesLabel('add.note', locale),
+  };
+}
+
+/**
+ * The sentences after a save that changed a saved set (07-UI-SPEC 6.5): save.added with the count to reprocess (save.addedNone for 0)
+ * per added language, then save.removed per removed language. One sentence per language, never a joined list.
+ */
+function languagesSavedChangeItems(answer, rows, locale) {
+  const items = [];
+  const added = Array.isArray(answer && answer.added) ? answer.added : [];
+  const removed = Array.isArray(answer && answer.removed) ? answer.removed : [];
+  const selection = answer && answer.selection && typeof answer.selection === 'object' ? answer.selection : null;
+  const total = selection && Number.isInteger(selection.total) ? selection.total : null;
+  for (const code of added) {
+    const vars = { language: languagesNameOf(rows, code) };
+    if (total === 0) items.push({ key: 'save.addedNone', vars, codeVars: [] });
+    else items.push({ key: 'save.added', vars: { ...vars, count: total === null ? '—' : languagesUiLib().ragUiFormatNumber(total, locale || 'en') }, codeVars: [] });
+  }
+  for (const code of removed) items.push({ key: 'save.removed', vars: { language: languagesNameOf(rows, code) }, codeVars: [] });
+  return items;
 }
 
 function languagesBannerHost() {
@@ -618,6 +727,10 @@ class LanguagesPanel {
       const text = this.el('span', { className: 'min-w-0 break-words', id });
       if (reason.key === 'error.invalid') text.appendChild(ui.ragUiCodeSentence(this.doc, this.locale, reason.vars.detail));
       else text.append(...this.sentence(reason.key, reason.vars, Object.keys(reason.vars)));
+      // The baseline command sits on its own line and breaks only between words, so a narrow name column never splits a token.
+      if (reason.key === 'blocked.baseline') {
+        for (const code of text.querySelectorAll('code')) code.className = 'block font-mono text-xs break-words my-0.5';
+      }
       nameCell.appendChild(
         this.el('p', { className: 'flex items-start gap-1 text-xs mt-1' }, [ui.ragUiIcon(this.doc, 'exclamation-triangle', 'text-warning shrink-0'), text]),
       );
@@ -738,7 +851,7 @@ class LanguagesPanel {
       const list = this.el('ul', { className: 'list-disc pl-4 text-sm flex flex-col gap-1' }, finding.items.map((item) => this.el('li', {}, [this.itemNode(item)])));
       const alert = ui.ragUiAlert(this.doc, {
         tone: finding.tone,
-        icon: finding.tone === 'error' ? 'exclamation-circle' : 'exclamation-triangle',
+        icon: finding.tone === 'error' ? 'exclamation-circle' : finding.tone === 'info' ? 'info-circle' : 'exclamation-triangle',
         body: [list],
         role: finding.tone === 'error' ? 'alert' : null,
       });
@@ -753,14 +866,26 @@ class LanguagesPanel {
     return nodes;
   }
 
-  async askGuard(body) {
+  /** LANG-11: plans an addition on the server first (no write); a refusal stops here, an accepted one returns its counts. */
+  async previewAddition(body) {
+    const result = await languagesUiLib().ragUiFetchJson(LANGUAGES_ENDPOINT, { method: 'POST', body: JSON.stringify({ ...body, preview: true }) });
+    if (result.ok && result.body && result.body.success === true) return { ok: true, selection: result.body.selection || null };
+    return { ok: false, result };
+  }
+
+  async askGuard(body, selection) {
     const guard = typeof window !== 'undefined' ? window.ragIngestImpactGuard : null;
     if (typeof guard !== 'function' || !this.view.configured) return true;
     if (languagesSameSet(this.view.saved.languages, body.languages)) return true;
+    const change = languagesChange(this.view, body.languages);
+    // A removal only is query-side: no impact dialog and no rebuild offer (07-UI-SPEC 6.5).
+    if (change.added.length === 0) return true;
+    if (selection && selection.total === 0) return true;
+    const options = languagesAddDialogOptions(this.view.rows, change.added, selection, this.locale);
     const next = { RAG_SUPPORTED_LANGUAGES: body.languages.join(','), RAG_PRIMARY_LANGUAGE: body.primary || '' };
     const saved = { RAG_SUPPORTED_LANGUAGES: this.view.saved.languages.join(','), RAG_PRIMARY_LANGUAGE: this.view.saved.primary || '' };
     try {
-      const answer = await guard(next, saved);
+      const answer = await guard(next, saved, options);
       if (answer === true) return true;
       return Boolean(answer && typeof answer === 'object' && answer.RAG_SUPPORTED_LANGUAGES === next.RAG_SUPPORTED_LANGUAGES);
     } catch {
@@ -779,9 +904,20 @@ class LanguagesPanel {
     for (const [input] of inputs) input.disabled = true;
     let result = null;
     let proceed = false;
+    const change = languagesChange(this.view, body.languages);
     try {
-      proceed = await this.askGuard(body);
-      if (proceed) result = await ui.ragUiFetchJson(LANGUAGES_ENDPOINT, { method: 'POST', body: JSON.stringify(body) });
+      let selection = null;
+      if (change.added.length > 0) {
+        const preview = await this.previewAddition(body);
+        if (!preview.ok) result = preview.result;
+        else selection = preview.selection;
+      }
+      if (!result) {
+        proceed = await this.askGuard(body, selection);
+        if (proceed) result = await ui.ragUiFetchJson(LANGUAGES_ENDPOINT, { method: 'POST', body: JSON.stringify(body) });
+      } else {
+        proceed = true;
+      }
     } finally {
       this.saving = false;
       restore();
@@ -802,7 +938,8 @@ class LanguagesPanel {
       this.updateControls();
       const nodes = this.renderFindings();
       if (nodes[0]) nodes[0].focus();
-      this.announce('');
+      const first = items[0];
+      this.announce(first && first.key ? this.t(first.key, first.vars) : '');
       return;
     }
     this.updateControls();
@@ -827,11 +964,14 @@ class LanguagesPanel {
     this.verified = answer.verifiedAgainstActiveProfile === true;
     this.notVerifiedReason = languagesNotVerifiedReason(answer);
     const warnings = languagesWarningItems(answer.warnings, this.view.rows);
-    this.findings = warnings.length ? [{ tone: 'warning', items: warnings }] : [];
+    const changeItems = languagesSavedChangeItems(answer, this.view.rows, this.locale);
+    this.findings = [];
+    if (changeItems.length) this.findings.push({ tone: 'info', items: changeItems });
+    if (warnings.length) this.findings.push({ tone: 'warning', items: warnings });
     languagesClearBanner();
     this.render();
     if (this.restartHost) this.restartHost.textContent = this.t('save.restart');
-    this.announce(this.t('save.done'));
+    this.announce(changeItems.length ? changeItems.map((item) => this.t(item.key, item.vars)).join(' ') : this.t('save.done'));
   }
 }
 
@@ -883,6 +1023,10 @@ if (typeof module !== 'undefined' && module.exports) {
     languagesNotes,
     languagesErrorItems,
     languagesWarningItems,
+    languagesChange,
+    languagesAddDialogOptions,
+    languagesSavedChangeItems,
+    LANGUAGES_ADD_GROUPS,
     LanguagesPanel,
     initLanguagesPanel,
   };

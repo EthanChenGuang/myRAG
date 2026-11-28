@@ -119,6 +119,12 @@ describe('pinned eval env', () => {
     for (const name of Object.keys(pinned)) expect(name).not.toMatch(/^(WEAVIATE|QDRANT)_/);
   });
 
+  test('pins the revision-4 switches at today\'s behaviour (plan 07-45)', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned.RAG_ROLLOUTS).toBe('false');
+    expect(pinned.RAG_LANG_CONFIDENCE).toBe('mapped');
+  });
+
   test('pins the eight Phase 4.2 retrieval tuning switches off (D-04, D-53)', () => {
     const expected = {
       RAG_LEXICAL_DICTIONARY: 'false',

@@ -197,8 +197,10 @@ def test_committed_monitor_alerts_hold_the_d24_and_d44_numbers():
         (REPO_ROOT / "eval/config/monitor-alerts.json").read_text(encoding="utf-8")
     )
     rules = {rule.id: rule for rule in committed.rules}
-    assert len(rules) == 14
-    assert "language_drop" not in rules
+    assert len(rules) == 15
+    drop = rules["language_drop"]
+    assert (drop.kind, drop.min_sample, drop.baseline_min_sample) == ("language_drop", 50, 200)
+    assert drop.params["metrics"] == ["refusal_rate", "not_helpful_rate", "judge_mean"]
     rate = [rule for rule in committed.rules if rule.kind == "rate"]
     assert len(rate) == 8
     assert {(r.ratio, r.min_abs_delta, r.min_z, r.min_sample, r.baseline_min_sample) for r in rate} == {

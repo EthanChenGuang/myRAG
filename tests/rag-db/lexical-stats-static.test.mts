@@ -17,7 +17,9 @@ const BUILTINS = ['unnest', 'ts_rank', 'ts_rank_cd', 'cardinality', 'ln', 'quote
 /**
  * The one function that takes p_tenant_key without the guard: 0902's shared compaction body. Its callers assert (rag_lexstats_compact) or
  * read the key from rag_lexical_stats_state rows that rag_lexstats_enable asserted (rag_lexstats_compact_all), and it is service_role only
- * (tests/rag-db/lexical-stats-grants.test.mts). Plan 04.4-04 made that choice so one stray key cannot stop compact_all.
+ * (tests/rag-db/lexical-stats-grants.test.mts). Plan 04.4-04 made that choice so one stray key cannot stop compact_all. Migration 1014
+ * (outside this block, T-04.4-09) redefines it with the guard first and makes compact_all skip a refused key
+ * (tests/rag-db/lexical-stats-compact-guard.test.mts); this exception covers only the superseded 0902 and 0905 bodies.
  */
 const UNGUARDED_BODIES = new Set(['rag_lexstats_compact_tenant']);
 

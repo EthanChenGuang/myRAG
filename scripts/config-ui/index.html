@@ -108,6 +108,8 @@
     <script src="rag-panels/review-admin.js"></script>
     <script src="rag-panels/query-layer.js"></script>
     <script src="rag-panels/query-additions.js"></script>
+    <script src="rag-panels/red-team.js"></script>
+    <script src="rag-panels/rollouts.js"></script>
     <script src="rag-panels/retrieval-tuning-switches.js"></script>
 
     <style>
@@ -9152,7 +9154,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, source sync and purge records, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, access groups, tags, versions and translation, source sync and purge records, the embedding and chunking profiles, identifier patterns, check settings before they apply, and follow monitoring alerts, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in. Start red-team runs and roll new profiles out to a few workspaces first.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -10132,6 +10134,26 @@
                                             <div data-question-sources-alert class="mb-4 empty:mb-0"></div>
                                             <div data-question-sources-content></div>
                                             <div data-question-sources-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-red-team" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-red-team-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-red-team-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-red-team-title>Red-team runs</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-red-team-description></p>
+                                            <div data-red-team-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-red-team-content></div>
+                                            <div data-red-team-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-rollouts" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-rollouts-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-rollouts-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-rollouts-title>Rollouts</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-rollouts-description></p>
+                                            <div data-rollouts-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-rollouts-content></div>
+                                            <div data-rollouts-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>

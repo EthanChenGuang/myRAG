@@ -1,23 +1,26 @@
 {
   "decisions": [
     {
+      "below_min_n": [
+        "category:duplicate_flood:recall_at_5 below_min_n (n=6 < min_gate_n=10, reported, not gated): 0.9167 vs threshold 0.9800, reference 1.0000, against v2-default",
+        "category:duplicate_flood:recall_at_10 below_min_n (n=6 < min_gate_n=10, reported, not gated): 0.9167 vs threshold 0.9800, reference 1.0000, against v2-default"
+      ],
       "decision": "D-10",
       "name": "stem_it",
       "numbers": {
         "band": 0.02,
-        "dropped_slices": 2,
+        "dropped_slices": 0,
         "gain": -0.0060975609756097615,
         "on": 0.7560975609756098,
         "reference": 0.7621951219512195
       },
       "outcome": "keep_off",
       "reasons": [
-        "category:duplicate_flood:recall_at_5 dropped beyond the noise band (0.9167 < 0.9800, v2-default 1.0000)",
-        "category:duplicate_flood:recall_at_10 dropped beyond the noise band (0.9167 < 0.9800, v2-default 1.0000)",
         "language:it recall_at_10 gain -0.0061 does not exceed the noise band 0.0200"
       ]
     },
     {
+      "below_min_n": [],
       "decision": "D-23, D-24",
       "name": "refusal_mode_cells",
       "numbers": {
@@ -39,6 +42,7 @@
   ],
   "gates": [
     {
+      "below_min_n": [],
       "decision": "D-37",
       "name": "off_identity",
       "numbers": {
@@ -56,9 +60,11 @@
       ]
     },
     {
+      "below_min_n": [],
       "decision": "D-22",
       "name": "diversity",
       "numbers": {
+        "redundancy_measure_version": 2,
         "v2-diversity-collapse.intent_coverage": 1.0,
         "v2-diversity-collapse.items": 6,
         "v2-diversity-collapse.max_redundancy_over_limit": 0.0,
@@ -67,8 +73,7 @@
         "v2-diversity-mmr.max_redundancy_over_limit": 0.0
       },
       "offenders": [
-        "v2-diversity-mmr: category:scanned:recall_at_10 dropped beyond the noise band (0.7500 < 0.9800, v2-default 1.0000)",
-        "v2-diversity-mmr: category:scanned:mrr dropped beyond the noise band (0.7500 < 0.7657, v2-default 0.7857)"
+        "v2-diversity-mmr: category:colloquial:mrr dropped beyond the noise band (0.3344 < 0.3352, v2-default 0.3552)"
       ],
       "passed": false,
       "runs": [
@@ -78,16 +83,17 @@
       ]
     },
     {
+      "below_min_n": [],
       "decision": "D-32",
       "name": "identifier",
       "numbers": {
-        "descriptive.mrr": 0.6250980392156863,
-        "descriptive.mrr.reference": 0.6250980392156863,
-        "descriptive.recall_at_10": 0.7205882352941176,
-        "descriptive.recall_at_10.reference": 0.7205882352941176,
-        "descriptive.recall_at_5": 0.7088235294117647,
-        "descriptive.recall_at_5.reference": 0.7088235294117647,
-        "descriptive_items": 196,
+        "descriptive.mrr": 0.618943533697632,
+        "descriptive.mrr.reference": 0.618943533697632,
+        "descriptive.recall_at_10": 0.7076502732240437,
+        "descriptive.recall_at_10.reference": 0.7076502732240437,
+        "descriptive.recall_at_5": 0.6967213114754098,
+        "descriptive.recall_at_5.reference": 0.6967213114754098,
+        "descriptive_items": 220,
         "identifier_precision": 1.0,
         "identifier_precision_n": 12,
         "items": 12,
@@ -102,7 +108,8 @@
       ]
     },
     {
-      "decision": "ROADMAP-4.2-SC3",
+      "below_min_n": [],
+      "decision": "ROADMAP-4.2-SC5",
       "name": "table",
       "numbers": {
         "items": 3,
@@ -116,7 +123,8 @@
       ]
     },
     {
-      "decision": "ROADMAP-4.2-SC5",
+      "below_min_n": [],
+      "decision": "ROADMAP-4.2-SC3",
       "name": "versions",
       "numbers": {
         "items": 3,
@@ -130,6 +138,7 @@
       ]
     },
     {
+      "below_min_n": [],
       "decision": "D-09",
       "name": "dictionary",
       "numbers": {},
@@ -173,23 +182,31 @@
       "fixture_mode": "prechunked",
       "name": "off-prechunked",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -199,35 +216,43 @@
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6479519774011299
+          "n": 240,
+          "value": 0.6496527777777777
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.656207602514886
+          "n": 240,
+          "value": 0.6577708091396379
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.684322033898305
+          "n": 240,
+          "value": 0.6854166666666667
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.684322033898305
+          "n": 240,
+          "value": 0.6854166666666667
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.5797596153846154
+          "n": 211,
+          "value": 0.5786255924170616
         }
       },
-      "run_config_hash": "3722c7d46e50aeb1af3fa81c305c93646162fb4403c807405471acc8b66945e8"
+      "run_config_hash": "de2f6d652ba629c249ee474d560c50d96cfdc8da49153f3c68aaa70a975267d8"
     },
     {
       "env": {
@@ -243,54 +268,70 @@
       "fixture_mode": "ingest",
       "name": "off-ingest",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 62,
+          "n": 65,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 62,
+          "n": 65,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 328,
-          "value": 0.19207317073170732
+          "n": 332,
+          "value": 0.1927710843373494
         },
-        "false_refusal_upper_95": 0.23140443131567232,
+        "false_refusal_upper_95": 0.23188729271683578,
         "intent_coverage": {
           "n": 9,
           "value": 0.4444444444444444
         },
         "k_zero": {
-          "n": 328,
-          "value": 62.0
+          "n": 332,
+          "value": 63.0
         },
         "mrr": {
-          "n": 328,
-          "value": 0.651155501003062
+          "n": 332,
+          "value": 0.6523463985813384
         },
         "named_document_recall": {
           "n": 18,
           "value": 0.1111111111111111
         },
         "ndcg_at_context_k": {
-          "n": 328,
-          "value": 0.6666166151209697
+          "n": 332,
+          "value": 0.6676212342158977
         },
         "recall_at_10": {
-          "n": 328,
-          "value": 0.725609756097561
+          "n": 332,
+          "value": 0.7259036144578314
         },
         "recall_at_5": {
-          "n": 328,
-          "value": 0.7195121951219512
+          "n": 332,
+          "value": 0.7198795180722891
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 299,
-          "value": 0.4682706089896726
+          "n": 302,
+          "value": 0.468585801615603
         },
         "variant_accuracy": {
           "n": 13,
@@ -301,7 +342,7 @@
           "value": 0.0
         }
       },
-      "run_config_hash": "4ba58c7502f760a649a6d15b2276e63ecada87deeb369581bc9f030595a5135c"
+      "run_config_hash": "51825c3f75a68a3d0ef4a39f4ea6ec8f5bca3c152c1bb0dab78fa834764b5c0d"
     },
     {
       "env": {
@@ -315,23 +356,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-default",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -341,35 +390,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6436844229217111
+          "n": 240,
+          "value": 0.6454563492063492
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6580377361054182
+          "n": 240,
+          "value": 0.6595704405036612
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7266949152542372
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7139830508474576
+          "n": 240,
+          "value": 0.7145833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.1278102106227106
+          "n": 211,
+          "value": 0.12777025502143985
         }
       },
-      "run_config_hash": "8746ef079468c9f2c03c5122c65a6fda3db28b1c172264a7a11c156aa67d1212"
+      "run_config_hash": "97b38e1e65bab3798820bbdfc3a75eaf9f5c5080eb3ea28881878f5268dde66b"
     },
     {
       "env": {
@@ -391,23 +448,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-default-phase42-off",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -417,35 +482,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6436844229217111
+          "n": 240,
+          "value": 0.6454563492063492
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6580377361054182
+          "n": 240,
+          "value": 0.6595704405036612
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7266949152542372
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7139830508474576
+          "n": 240,
+          "value": 0.7145833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.1278102106227106
+          "n": 211,
+          "value": 0.12777025502143985
         }
       },
-      "run_config_hash": "37ef6abd0da7a92055f2f4172064c8b4a45cf07abc675f9b4d95ef4c465517c3"
+      "run_config_hash": "77bc577114c8b6fc1b665eecc5e0e7e379d30702e3162bccb157a1154745d04b"
     },
     {
       "env": {
@@ -461,23 +534,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-diversity-collapse",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -487,35 +568,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6436844229217111
+          "n": 240,
+          "value": 0.6454563492063492
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6580377361054182
+          "n": 240,
+          "value": 0.6595704405036612
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7266949152542372
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7139830508474576
+          "n": 240,
+          "value": 0.7145833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.12854281135531134
+          "n": 211,
+          "value": 0.12849243962988038
         }
       },
-      "run_config_hash": "37f814a6f69b82f97b86f0ce1ff01383b249897be35f4a639eba64c1145e8fb2"
+      "run_config_hash": "430384e34501303ef7f8e4fed6e6a3c453301cbc57e9621c877b97ef61288270"
     },
     {
       "env": {
@@ -531,23 +620,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-diversity-mmr",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -557,35 +654,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6419188861985472
+          "n": 240,
+          "value": 0.6441319444444444
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6557670573215038
+          "n": 240,
+          "value": 0.6585325974054779
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.722457627118644
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7182203389830508
+          "n": 240,
+          "value": 0.71875
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.12809638278388277
+          "n": 211,
+          "value": 0.12805235838411194
         }
       },
-      "run_config_hash": "b68e74e8ddb8caf1285d6dabf4071b6de2c99184d87902c67955b6e4db0b097c"
+      "run_config_hash": "513a0a947a465b8ab71726983a9a28803f025dd2841df2c90b99a045e5f19883"
     },
     {
       "env": {
@@ -601,23 +706,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-identifier-on",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.1652542372881356
+          "n": 240,
+          "value": 0.16666666666666666
         },
-        "false_refusal_upper_95": 0.2102521908765737,
+        "false_refusal_upper_95": 0.2113636568084912,
         "identifier_precision": {
           "n": 12,
           "value": 1.0
@@ -627,35 +740,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 38.0
+          "n": 240,
+          "value": 39.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.7011299435028249
+          "n": 240,
+          "value": 0.7019444444444445
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.7187306346221708
+          "n": 240,
+          "value": 0.7192517907118013
         },
         "near_miss_leakage": {
           "n": 12,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.798728813559322
+          "n": 240,
+          "value": 0.7979166666666667
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7902542372881356
+          "n": 240,
+          "value": 0.7895833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 222,
-          "value": 0.14148434148434147
+          "n": 225,
+          "value": 0.14126455026455026
         }
       },
-      "run_config_hash": "d9900fc015c760c52b6514fcb69b2fbcbab3872612e131e48f0f4f5b90591dd6"
+      "run_config_hash": "91fa083e546e9204766eda649bf6e1afdc5a78b8d4921b9b87a6c1c01100edc2"
     },
     {
       "env": {
@@ -670,23 +791,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-table-lookup-on",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -696,35 +825,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6436844229217111
+          "n": 240,
+          "value": 0.6454563492063492
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6580377361054182
+          "n": 240,
+          "value": 0.6595704405036612
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7266949152542372
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7139830508474576
+          "n": 240,
+          "value": 0.7145833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.1278102106227106
+          "n": 211,
+          "value": 0.12777025502143985
         }
       },
-      "run_config_hash": "c8fddd2498bab50604ed067ed3ff5a0f8eea82d0d81ba5a57bd098ff8bd3b46c"
+      "run_config_hash": "80142403b02b9095863c7a77966149a2f092b91eb2b769c1f0807a3dcaeef3ac"
     },
     {
       "env": {
@@ -739,23 +876,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-version-scope-on",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -765,35 +910,43 @@
           "value": 1.0
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6436844229217111
+          "n": 240,
+          "value": 0.6454563492063492
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6629553565363658
+          "n": 240,
+          "value": 0.664406100594093
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7330508474576272
+          "n": 240,
+          "value": 0.7333333333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7203389830508474
+          "n": 240,
+          "value": 0.7208333333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.12764995421245423
+          "n": 211,
+          "value": 0.1276122771383435
         }
       },
-      "run_config_hash": "e8240f6cf70bc6c29e66f7b198e0f39e769b381be8b3ebda1da9d2e2b0a0d378"
+      "run_config_hash": "6647308da5c6a732dfef31b5a8d3a20bb78a6abc5aadee22c09f05cfd9b18325"
     },
     {
       "env": {
@@ -808,23 +961,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-lexical-dict-on",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -834,35 +995,43 @@
           "value": 0.6666666666666666
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6460149313962873
+          "n": 240,
+          "value": 0.6477480158730159
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.659787286941297
+          "n": 240,
+          "value": 0.661290832158942
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7266949152542372
+          "n": 240,
+          "value": 0.7270833333333333
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.7139830508474576
+          "n": 240,
+          "value": 0.7145833333333333
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.1278102106227106
+          "n": 211,
+          "value": 0.12777025502143985
         }
       },
-      "run_config_hash": "26551114516db8ad2a896bfd6b73c9d793fd1aefc75fe0282df0e26536c28184"
+      "run_config_hash": "64a57e572d052aef2c074d45cda096447ba07ba91d6a931e7861a8b82db72e0a"
     },
     {
       "env": {
@@ -877,23 +1046,31 @@
       "fixture_mode": "prechunked",
       "name": "v2-lexical-stem-it-on",
       "overall": {
+        "all_evidence_recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "all_evidence_recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        },
         "conversational_rate": {
           "n": 3,
           "value": 0.0
         },
         "correct_refusal_rate": {
-          "n": 48,
+          "n": 51,
           "value": 1.0
         },
         "false_answer_rate": {
-          "n": 48,
+          "n": 51,
           "value": 0.0
         },
         "false_refusal_rate": {
-          "n": 236,
-          "value": 0.23728813559322035
+          "n": 240,
+          "value": 0.2375
         },
-        "false_refusal_upper_95": 0.287302096849407,
+        "false_refusal_upper_95": 0.28707067737130093,
         "identifier_precision": {
           "n": 1,
           "value": 0.0
@@ -903,35 +1080,43 @@
           "value": 0.5555555555555556
         },
         "k_zero": {
-          "n": 236,
-          "value": 55.0
+          "n": 240,
+          "value": 56.0
         },
         "mrr": {
-          "n": 236,
-          "value": 0.6458030669895077
+          "n": 240,
+          "value": 0.6475396825396825
         },
         "ndcg_at_context_k": {
-          "n": 236,
-          "value": 0.6578485286028365
+          "n": 240,
+          "value": 0.6593843864594559
         },
         "near_miss_leakage": {
           "n": 1,
           "value": 0.0
         },
         "recall_at_10": {
-          "n": 236,
-          "value": 0.7245762711864406
+          "n": 240,
+          "value": 0.725
         },
         "recall_at_5": {
-          "n": 236,
-          "value": 0.711864406779661
+          "n": 240,
+          "value": 0.7125
+        },
+        "subq_coverage_at_10": {
+          "n": 4,
+          "value": 1.0
+        },
+        "subq_coverage_at_5": {
+          "n": 4,
+          "value": 1.0
         },
         "topk_redundancy": {
-          "n": 208,
-          "value": 0.12789606227106226
+          "n": 211,
+          "value": 0.12785488603024148
         }
       },
-      "run_config_hash": "a24313602d561ecb73168c3f5aa06552e60fcbaeadb1a5dc7680c801756197a0"
+      "run_config_hash": "6a525a3401d961d8ada5ffedf09201e99ff4ffac0f62331721c4d8a8b1ca7693"
     }
   ],
   "schema_version": 1,

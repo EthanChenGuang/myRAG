@@ -1,4 +1,4 @@
-import { BackendNotReadyError, createExternalBackend, type ExternalStoreReader } from '@/lib/rag/backend/external';
+import { BackendNotReadyError, assertExternalAccess, createExternalBackend, type ExternalStoreReader } from '@/lib/rag/backend/external';
 import type { SecurityLogSink } from '@/lib/rag/backend/revalidate';
 import { RetrievalBackendError, type RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { canonicalTenantKey, qdrantCollectionName } from '@/lib/rag/backend/tenant-key';
@@ -156,7 +156,12 @@ export async function searchQdrantLegs(
     });
   }
   if (searches.length === 0) return { dense: [], lexical: [] };
-  const batch = qdrantScopedBatch(scope, { searches: searches.map((s) => s.node) });
+  // SEC-12: mode keys only; without it the batch is byte-identical to the tenant-only one.
+  const batch = qdrantScopedBatch(
+    scope,
+    { searches: searches.map((s) => s.node) },
+    req.access?.mode === 'keys' ? { accessGroups: req.access.keys } : undefined,
+  );
   const collection = qdrantCollectionName(req.profileId);
   let responses: Awaited<ReturnType<QdrantApi['queryBatch']>>;
   try {
@@ -224,8 +229,12 @@ export function createQdrantBackend(deps: QdrantBackendDeps): RetrievalBackend {
   });
   return {
     id: 'qdrant',
+    // SEC-12 (07-39): every query and prefetch carries the caller's access keys in mode keys; re-validation re-checks them.
+    capabilities: { accessFilter: true },
     async search(req: BackendSearchRequest) {
       assertQdrantRequestSupported(req);
+      // req.access must equal scopeAccessFilter(req.scope): the caller's groups come only from the server-resolved scope.
+      await assertExternalAccess(req, RPC_NAME);
       return external.search(req);
     },
     health: () => external.health(),

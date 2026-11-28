@@ -112,9 +112,21 @@ declare const scopedBrand: unique symbol;
 export type Scoped<T> = T & { readonly [scopedBrand]: true };
 
 type TenantClause = { key: 'tenant_key'; match: { value: string } };
+type AccessClause = { key: 'access_groups'; match: { any: string[] } };
 type PlainObject = Record<string, unknown>;
 
+/**
+ * SEC-12 (07-39): the caller's access keys from scopeAccessFilter(scope) in mode keys. When given, every filter location that selects
+ * results (top filter, every prefetch at every depth) also carries `access_groups` matching any of them; the IDF corpus stays
+ * tenant-wide. Absent, every request is byte-identical to the tenant-only one.
+ */
+export interface ScopedRequestOptions {
+  accessGroups?: readonly string[];
+}
+
 const TENANT_FIELD = 'tenant_key';
+const ACCESS_FIELD = 'access_groups';
+const ACCESS_KEY_RE = /^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 /** lookup_from and with_lookup read another collection; shard_key picks a shard outside the tenant filter. */
 const FORBIDDEN_KEYS: readonly string[] = ['lookup_from', 'shard_key', 'with_lookup'];
 const MAX_PREFETCH_DEPTH = 8;
@@ -152,6 +164,21 @@ function tenantClause(key: string): TenantClause {
   return { key: TENANT_FIELD, match: { value: key } };
 }
 
+function accessClause(keys: readonly string[]): AccessClause {
+  return { key: ACCESS_FIELD, match: { any: [...keys] } };
+}
+
+/** null means no access clause; a given list must be non-empty, valid keys only (fail closed). */
+function accessKeysOf(options: ScopedRequestOptions | undefined): string[] | null {
+  const keys = options?.accessGroups;
+  if (keys === undefined) return null;
+  if (!Array.isArray(keys) || keys.length === 0) fail('access groups must be a non-empty key list');
+  for (const key of keys) {
+    if (typeof key !== 'string' || !ACCESS_KEY_RE.test(key)) fail('access groups key malformed');
+  }
+  return [...new Set(keys)];
+}
+
 function checkKeys(value: PlainObject, allowed: ReadonlySet<string>, where: string): void {
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) fail(`${where} key ${key} not allowed`);
@@ -172,6 +199,7 @@ function rejectForbidden(value: unknown, allowTenantClause: boolean, depth = 0):
     if (FORBIDDEN_KEYS.includes(key)) fail(`${key} not allowed`);
     if (key === 'idf' && child === 'global') fail('global idf not allowed');
     if (key === 'key' && child === TENANT_FIELD && !allowTenantClause) fail('tenant_key condition is set only by the wrapper');
+    if (key === 'key' && child === ACCESS_FIELD && !allowTenantClause) fail('access_groups condition is set only by the wrapper');
     if (typeof child === 'object' && child !== null) rejectForbidden(child, allowTenantClause, depth + 1);
   }
 }
@@ -183,11 +211,12 @@ function conditionsOf(list: unknown): QdrantCondition[] {
   return fail('filter conditions must be objects');
 }
 
-function scopeFilter(filter: unknown, key: string): QdrantFilter {
-  if (filter === null || filter === undefined) return { must: [tenantClause(key)] };
+function scopeFilter(filter: unknown, key: string, access: string[] | null = null): QdrantFilter {
+  const own: QdrantCondition[] = access === null ? [tenantClause(key)] : [tenantClause(key), accessClause(access)];
+  if (filter === null || filter === undefined) return { must: own };
   if (!isPlainObject(filter)) fail('filter must be an object');
   checkKeys(filter, FILTER_KEYS, 'filter');
-  return { ...(filter as QdrantFilter), must: [tenantClause(key), ...conditionsOf(filter.must)] };
+  return { ...(filter as QdrantFilter), must: [...own, ...conditionsOf(filter.must)] };
 }
 
 function isNumberArray(value: unknown): value is number[] {
@@ -272,17 +301,17 @@ function scopeParams(params: unknown, key: string, lexical: boolean): QdrantSear
   return { ...(params as QdrantSearchParams), idf: { corpus: scopeFilter(idf.corpus, key) } };
 }
 
-function scopeNode(node: unknown, key: string, depth: number): QdrantQueryNode {
+function scopeNode(node: unknown, key: string, depth: number, access: string[] | null): QdrantQueryNode {
   if (depth > MAX_PREFETCH_DEPTH) fail('prefetch nested too deeply');
   if (!isPlainObject(node)) fail('query must be an object');
   checkKeys(node, NODE_KEYS, 'query');
   validateQuery(node.query);
-  const out: QdrantQueryNode = { ...(node as QdrantQueryNode), filter: scopeFilter(node.filter, key) };
+  const out: QdrantQueryNode = { ...(node as QdrantQueryNode), filter: scopeFilter(node.filter, key, access) };
   const params = scopeParams(node.params, key, isLexical(node.query));
   if (params !== undefined) out.params = params;
   if (node.prefetch !== undefined && node.prefetch !== null) {
     const list: unknown[] = Array.isArray(node.prefetch) ? node.prefetch : [node.prefetch];
-    out.prefetch = list.map((child) => scopeNode(child, key, depth + 1));
+    out.prefetch = list.map((child) => scopeNode(child, key, depth + 1, access));
   }
   return out;
 }
@@ -301,11 +330,38 @@ function requireClause(filter: unknown, key: string, where: string): void {
   }
 }
 
-function assertNode(node: unknown, key: string, depth: number, allowed: ReadonlySet<string>, where: string): void {
+/** The exact access clause: match any of exactly the caller's key set, nothing else in the condition. */
+function isExactAccessClause(condition: unknown, access: readonly string[]): boolean {
+  if (!isPlainObject(condition)) return false;
+  const keys = Object.keys(condition);
+  if (keys.length !== 2 || condition.key !== ACCESS_FIELD || !isPlainObject(condition.match)) return false;
+  const match = condition.match;
+  if (Object.keys(match).length !== 1 || !Array.isArray(match.any)) return false;
+  const got = [...new Set(match.any as unknown[])].map(String).sort();
+  const want = [...new Set(access)].sort();
+  return got.length === want.length && got.every((value, index) => value === want[index]);
+}
+
+function requireAccessClause(filter: unknown, access: readonly string[] | null, where: string): void {
+  if (access === null) return;
+  if (!isPlainObject(filter) || !conditionsOf(filter.must).some((c) => isExactAccessClause(c, access))) {
+    fail(`${where} lacks the access groups clause`);
+  }
+}
+
+function assertNode(
+  node: unknown,
+  key: string,
+  depth: number,
+  allowed: ReadonlySet<string>,
+  where: string,
+  access: string[] | null = null,
+): void {
   if (depth > MAX_PREFETCH_DEPTH) fail('prefetch nested too deeply');
   if (!isPlainObject(node)) fail(`${where} must be an object`);
   checkKeys(node, allowed, where);
   requireClause(node.filter, key, `${where} filter`);
+  requireAccessClause(node.filter, access, `${where} filter`);
   validateQuery(node.query);
   const params = node.params;
   if (params !== undefined && params !== null) {
@@ -322,44 +378,48 @@ function assertNode(node: unknown, key: string, depth: number, allowed: Readonly
   }
   if (node.prefetch !== undefined && node.prefetch !== null) {
     const list: unknown[] = Array.isArray(node.prefetch) ? node.prefetch : [node.prefetch];
-    list.forEach((child, i) => assertNode(child, key, depth + 1, NODE_KEYS, `${where} prefetch[${i}]`));
+    list.forEach((child, i) => assertNode(child, key, depth + 1, NODE_KEYS, `${where} prefetch[${i}]`, access));
   }
 }
 
 /**
  * Throws unless every filter location (top filter, every prefetch at every depth, every idf corpus) carries the
- * exact tenant clause for this scope. Each builder runs it on its own output, so a bug in injection still throws.
+ * exact tenant clause for this scope and, with access groups given, every top filter and prefetch filter also carries the exact access
+ * clause. Each builder runs it on its own output, so a bug in injection still throws.
  */
-export function assertScoped(request: unknown, scope: TenantScope): void {
+export function assertScoped(request: unknown, scope: TenantScope, options?: ScopedRequestOptions): void {
   const key = canonicalTenantKey(scope);
+  const access = accessKeysOf(options);
   rejectForbidden(request, true);
   if (!isPlainObject(request)) fail('request must be an object');
   if ('searches' in request) {
     checkKeys(request, BATCH_KEYS, 'batch');
     const searches = request.searches;
     if (!Array.isArray(searches) || searches.length === 0) fail('batch needs at least one search');
-    searches.forEach((search, i) => assertNode(search, key, 0, NODE_KEYS, `searches[${i}]`));
+    searches.forEach((search, i) => assertNode(search, key, 0, NODE_KEYS, `searches[${i}]`, access));
     return;
   }
-  assertNode(request, key, 0, ANY_REQUEST_KEYS, 'request');
+  assertNode(request, key, 0, ANY_REQUEST_KEYS, 'request', access);
 }
 
-export function qdrantScopedRequest(scope: TenantScope, node: QdrantQueryNode): Scoped<QdrantQueryNode> {
+export function qdrantScopedRequest(scope: TenantScope, node: QdrantQueryNode, options?: ScopedRequestOptions): Scoped<QdrantQueryNode> {
   const key = canonicalTenantKey(scope);
+  const access = accessKeysOf(options);
   rejectForbidden(node, false);
-  const out = scopeNode(node, key, 0);
-  assertScoped(out, scope);
+  const out = scopeNode(node, key, 0, access);
+  assertScoped(out, scope, options);
   return out as Scoped<QdrantQueryNode>;
 }
 
-export function qdrantScopedBatch(scope: TenantScope, batch: QdrantQueryBatch): Scoped<QdrantQueryBatch> {
+export function qdrantScopedBatch(scope: TenantScope, batch: QdrantQueryBatch, options?: ScopedRequestOptions): Scoped<QdrantQueryBatch> {
   const key = canonicalTenantKey(scope);
+  const access = accessKeysOf(options);
   rejectForbidden(batch, false);
   if (!isPlainObject(batch)) fail('batch must be an object');
   checkKeys(batch, BATCH_KEYS, 'batch');
   if (!Array.isArray(batch.searches) || batch.searches.length === 0) fail('batch needs at least one search');
-  const out: QdrantQueryBatch = { ...batch, searches: batch.searches.map((search) => scopeNode(search, key, 0)) };
-  assertScoped(out, scope);
+  const out: QdrantQueryBatch = { ...batch, searches: batch.searches.map((search) => scopeNode(search, key, 0, access)) };
+  assertScoped(out, scope, options);
   return out as Scoped<QdrantQueryBatch>;
 }
 

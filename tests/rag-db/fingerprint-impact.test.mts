@@ -158,16 +158,16 @@ describe('ingestion fingerprint impact (0808 rag_fingerprint_groups, computeFing
     assert.equal(b.total_current, 5);
   });
 
-  test('a language-set change counts LlamaParse documents and not Docling ones (research F-4)', async () => {
+  test('removing a language counts no document, LlamaParse ones included (LANG-11, plan 07-52; was research F-4)', async () => {
     const answer = await impact.computeFingerprintImpact({ RAG_SUPPORTED_LANGUAGES: 'zh,en', RAG_PRIMARY_LANGUAGE: 'zh' }, { db: rpc });
     assert.deepEqual(answer.ingestion_keys, ['RAG_SUPPORTED_LANGUAGES']);
-    assert.deepEqual(affected(answer, 'reparse'), { general: 1, contract_legal: 1, scanned_image: 1 });
+    assert.deepEqual(affected(answer, 'reparse'), {});
   });
 
-  test('exactly one affected document answers 1', async () => {
+  test("a removal inside one tenant answers 0 as well", async () => {
     const answer = await impact.computeFingerprintImpact({ RAG_SUPPORTED_LANGUAGES: 'zh,en' }, { db: rpc, tenantKey: TENANT_B });
-    assert.deepEqual(affected(answer, 'reparse'), { scanned_image: 1 });
-    assert.equal(answer.by_mechanism.reduce((sum, row) => sum + row.affected, 0), 1);
+    assert.equal(answer.by_mechanism.reduce((sum, row) => sum + row.affected, 0), 0);
+    assert.equal(answer.total_current, 5);
   });
 
   test('proposing the saved values counts 0 for every mechanism', async () => {

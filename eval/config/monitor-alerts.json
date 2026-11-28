@@ -1,6 +1,6 @@
 {
   "baseline_days": 30,
-  "config_hash": "920a5165a7d1e516a4fd197639452a5d919e6acbfcf1cda28ab715179dcd22f7",
+  "config_hash": "eaf915f1233798868777543e1d823baa5aba209d9694595116707760ef7351e3",
   "drift": {
     "gap_alert": 0.15,
     "jsd_alert": 0.2,
@@ -155,6 +155,27 @@
       "kind": "offline_online_gap",
       "metric": "judge_gap",
       "min_sample": 50
+    },
+    {
+      "baseline_min_sample": 200,
+      "enabled": true,
+      "id": "language_drop",
+      "kind": "language_drop",
+      "min_sample": 50,
+      "params": {
+        "language_band_judge_mean": 0.1,
+        "language_band_not_helpful_rate": 0.1,
+        "language_band_refusal_rate": 0.05,
+        "metrics": [
+          "refusal_rate",
+          "not_helpful_rate",
+          "judge_mean"
+        ],
+        "overall_band_judge_mean": 0.05,
+        "overall_band_not_helpful_rate": 0.05,
+        "overall_band_refusal_rate": 0.02,
+        "window_days": 1
+      }
     }
   ],
   "sampling": {

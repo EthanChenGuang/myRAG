@@ -45,13 +45,27 @@ export function evalChunkingOverride(
   return map && Object.keys(map).length > 0 ? map : undefined;
 }
 
-/** The chunking profiles a run actually searched, for the retrieval config hash: active pointers with the eval override on top. */
+/**
+ * The server-side chunking override of a request: the eval override, else the candidate chunking profiles of a LANG-11 rollout the
+ * tenant is on (never for eval, whose explicit overrides win). Never read from a request body.
+ */
+export function requestChunkingOverride(
+  profile: Profile,
+  overrides?: StageOverrides['retrievalOverrides'],
+  rolloutOverride?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (profile === 'eval') return evalChunkingOverride(profile, overrides);
+  return rolloutOverride && Object.keys(rolloutOverride).length > 0 ? rolloutOverride : undefined;
+}
+
+/** The chunking profiles a run actually searched, for the retrieval config hash: active pointers with the request override on top. */
 export function hashedChunkingProfiles(
   profile: Profile,
   active: Record<string, string> | null,
   overrides?: StageOverrides['retrievalOverrides'],
+  rolloutOverride?: Record<string, string>,
 ): Record<string, string> | null {
-  const override = evalChunkingOverride(profile, overrides);
+  const override = requestChunkingOverride(profile, overrides, rolloutOverride);
   if (!override) return active;
   return { ...(active ?? {}), ...override };
 }

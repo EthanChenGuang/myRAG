@@ -962,6 +962,52 @@ describe('retrieval backend (D-11, D-24)', () => {
   });
 });
 
+describe('revision 4 defaults (07-45: RAG_ROLLOUTS, RAG_LANG_CONFIDENCE)', () => {
+  test('an empty env input gives rollouts off and mapped confidence with no warning', () => {
+    const config = loadRagConfig({});
+    expect(config.rollouts).toEqual({ enabled: false });
+    expect(config.lang).toEqual({ confidence: 'mapped' });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each([
+    ['TRUE', true],
+    [' true ', true],
+    ['false', false],
+  ])('RAG_ROLLOUTS=%j parses to %s', (value, expected) => {
+    expect(loadRagConfig({ RAG_ROLLOUTS: value }).rollouts.enabled).toBe(expected);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('RAG_LANG_CONFIDENCE accepts calibrated and mapped, case and spaces normalised', () => {
+    expect(loadRagConfig({ RAG_LANG_CONFIDENCE: 'calibrated' }).lang.confidence).toBe('calibrated');
+    expect(loadRagConfig({ RAG_LANG_CONFIDENCE: ' Calibrated ' }).lang.confidence).toBe('calibrated');
+    expect(loadRagConfig({ RAG_LANG_CONFIDENCE: 'mapped' }).lang.confidence).toBe('mapped');
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('RAG_ROLLOUTS=yes falls back to false with one [RAG Config] warning naming the variable', () => {
+    expect(loadRagConfig({ RAG_ROLLOUTS: 'yes' }).rollouts.enabled).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_ROLLOUTS');
+  });
+
+  test('RAG_LANG_CONFIDENCE=fuzzy falls back to mapped with one [RAG Config] warning naming the variable', () => {
+    expect(loadRagConfig({ RAG_LANG_CONFIDENCE: 'fuzzy' }).lang.confidence).toBe('mapped');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LANG_CONFIDENCE');
+  });
+
+  test('both values are part of the memo key', () => {
+    const base = loadRagConfig({});
+    expect(loadRagConfig({})).toBe(base);
+    expect(loadRagConfig({ RAG_ROLLOUTS: 'true' })).not.toBe(base);
+    expect(loadRagConfig({ RAG_LANG_CONFIDENCE: 'calibrated' })).not.toBe(base);
+  });
+});
+
 describe('Phase 4.2 tuning switches (D-04, D-40, D-42, D-53)', () => {
   const BOOLEANS = [
     ['RAG_LEXICAL_DICTIONARY', 'lexicalDictionary'],

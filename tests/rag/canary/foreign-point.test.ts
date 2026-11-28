@@ -143,6 +143,7 @@ for (const backend of RETRIEVAL_BACKEND_IDS as readonly BackendId[]) {
         lexical_text: lexical,
         content_hash: null,
         lexical_version: null,
+        access_groups: ['all'],
       });
       const points: VectorPoint[] = [
         { id: planted.foreign, vector: await chunkVector(env, planted.foreign), payload: payload(b.documentId) },
