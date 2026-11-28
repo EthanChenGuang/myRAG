@@ -77,6 +77,7 @@ import {
   turnCanUseTools,
   observeCalc,
   type CalcObserved,
+  toStageRetrievalOverrides,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -99,8 +100,6 @@ import {
   type EvalConversationTurn,
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
-
-import { toStageRetrievalOverrides } from '@/lib/rag/v2/overrides';
 
 export const runtime = 'nodejs';
 
