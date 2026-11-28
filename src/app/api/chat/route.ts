@@ -4,7 +4,7 @@ import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
 import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { getMaxTokensForModel } from '@/lib/chat/model-output-limit';
-import { defaultModelId, parseModelList, resolveStoredAutoModel } from '@/lib/chat/auto-model';
+import { AUTO_MODEL_ID } from '@/lib/chat/auto-model';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -118,6 +118,13 @@ import {
   type FinalizeResult,
   type PromptBudgetPlan,
   type PromptBudgetTrace,
+  countTokens,
+  currentModelRoutingConfig,
+  effectiveQueryParams,
+  initialModelRoute,
+  resolveRequestedModel,
+  routeModel,
+  type ModelRouteTrace,
 } from '@/lib/rag';
 import type { AnswerChecks } from '@/lib/rag-eval/contracts.generated';
 // Import URL extraction utilities
@@ -2274,13 +2281,17 @@ IMPORTANT:
     ];
 
     // Extract model selection and web search setting
-    const model =
-      resolveStoredAutoModel(data?.settings?.model, defaultModelId(parseModelList(env.NEXT_PUBLIC_OPENROUTER_MODELS), 'openai/gpt-4o-mini'), 'chat') ||
-      'openai/gpt-4o-mini';
+    // Phase 6.2 D-19: an Auto selection is resolved once here, so auto never reaches a provider or a model helper; an explicit
+    // or absent selection takes today's path. A routable Auto turn may be lowered to the fast model after retrieval (D-20).
+    const requestedModel = data?.settings?.model;
+    const modelRouting = requestedModel === AUTO_MODEL_ID ? currentModelRoutingConfig() : null;
+    const modelSelection = modelRouting ? resolveRequestedModel(requestedModel, modelRouting) : null;
+    let modelRoute: ModelRouteTrace | null = modelSelection && modelRouting ? initialModelRoute(modelSelection, modelRouting) : null;
+    let model: string = modelSelection?.modelId ?? (requestedModel || 'openai/gpt-4o-mini');
     const webSearchEnabled = data?.settings?.webSearch === true;
 
     // Detect if we're using a GPT model for model-specific instructions
-    const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
+    let isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
 
     const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
     const citationCapabilities = parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null;
@@ -2307,6 +2318,7 @@ IMPORTANT:
       config: generationConfig,
       facts: citationFacts,
       ...(citationRecheck ? { recheck: citationRecheck } : {}),
+      ...(modelSelection?.routable && modelRouting ? { routingCandidates: [modelRouting.fastModel, modelRouting.qualityModel] } : {}),
     });
     // Phase 5.2.1 D-65, D-66: a turn that may get the calculation labels its blocks, so chunk operands can name an alias
     const calcQuestion = getLastUserText(rawMessages);
@@ -2350,7 +2362,7 @@ IMPORTANT:
       isMcpEnabled;
 
     // Add :online suffix to model if web search is enabled
-    const modelWithWebSearch = model;
+    let modelWithWebSearch = model;
     // Removed legacy :online suffix logic to standardise on Exa tool for web search
     console.log('API ROUTE: Model being used:', modelWithWebSearch);
     console.log('API ROUTE: Will use web search:', webSearchEnabled);
@@ -2473,7 +2485,11 @@ Context:
     const cacheContext =
       !effectiveDisableRAG && !hasAttachedImage && isSemanticCacheActive()
         ? {
-            generatorModel: model || 'openai/gpt-4o-mini',
+            // F-8: a routable Auto turn's key part is the selection and both routing ids; the routed model is unknown at check time
+            generatorModel:
+              modelSelection?.routable && modelRouting
+                ? `auto|${modelRouting.fastModel}|${modelRouting.qualityModel}`
+                : model || 'openai/gpt-4o-mini',
             // The template before {{context}} substitution; the citation strategy changes the answer format, so it is hashed with it
             systemPromptHash: hashSystemPromptTemplate(
               `${(await resolveRagSystemPrompt()).ragSystemPrompt}\u0000citations:${citationSession.strategy ?? 'none'}`,
@@ -2974,6 +2990,28 @@ Context:
     }
 
     const knowledgeContextAttached = !(retrievalFailed || effectiveDisableRAG || smallTalkTurn);
+    // Phase 6.2 D-20: a routable Auto turn is routed after retrieval and before the citation session attaches; every later read
+    // (tools, reasoning, output limits, the provider) uses the routed id. The router never calls retrieval.
+    if (modelSelection?.routable && modelRouting && retrievalResult) {
+      const decision = routeModel({
+        query: userQuery,
+        classification: queryClassification,
+        plan: retrievalResult.queryPlan,
+        contextTokens: knowledgeContextAttached ? countTokens(context) : 0,
+        params: effectiveQueryParams('chat'),
+        ids: modelRouting,
+      });
+      model = decision.modelId;
+      modelWithWebSearch = model;
+      isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
+      modelRoute = { tier: decision.tier, rule: decision.rule, selection: 'auto' };
+      citationSession.setFinalModel(model);
+      console.log('[Model Routing]', { tier: decision.tier, rule: decision.rule });
+    }
+    if (modelRoute && ragTrace) {
+      const routedAt = ragTrace.collector.now();
+      ragTrace.collector.record({ name: 'model_route', status: 'ok', startedAt: routedAt, endedAt: routedAt, attributes: { ...modelRoute } });
+    }
     // Phase 5.2.1 D-70, D-72: offered on a knowledge turn whose question or blocks carry the signal; the mode follows the tool rule
     let calcMode: 'tool' | 'trailing_block' | null = null;
     if (calcMayBeOffered && knowledgeContextAttached && context.length > 0) {
