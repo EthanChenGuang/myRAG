@@ -186,7 +186,7 @@ describe('scope gate calibration (D-27, P-36)', () => {
     setScopeGateCalibrationForTests({
       schema_version: 1,
       recorded_at: '2026-11-27T00:00:00Z',
-      source: 'fixture',
+      source: 'live',
       cells: [
         { embedding_profile_id: 'legacy-1536', rag_mode: 'strict', threshold: 0.4, margin: 0.05, false_refusal_rate: 0, false_refusal_n: 10, correct_refusal_rate: 0.5, correct_refusal_n: 4, status: 'calibrated' },
         { embedding_profile_id: 'legacy-1536', rag_mode: 'balanced', threshold: null, margin: null, false_refusal_rate: null, false_refusal_n: 0, correct_refusal_rate: null, correct_refusal_n: 0, status: 'uncalibrated' },
@@ -195,6 +195,17 @@ describe('scope gate calibration (D-27, P-36)', () => {
     expect(scopeGateCalibrationFor('legacy-1536', 'strict')).toEqual({ threshold: 0.4, margin: 0.05 });
     expect(scopeGateCalibrationFor('legacy-1536', 'balanced')).toBeNull();
     expect(scopeGateCalibrationFor('bge-m3-1024', 'strict')).toBeNull();
+  });
+
+  test('06.2-26: a fixture calibration applies to eval requests only; a live one applies to every request', () => {
+    const cell = { embedding_profile_id: 'legacy-1536', rag_mode: 'strict', threshold: 0.4, margin: 0.05, false_refusal_rate: 0, false_refusal_n: 10, correct_refusal_rate: 0.5, correct_refusal_n: 4, status: 'calibrated' };
+    setScopeGateCalibrationForTests({ schema_version: 1, recorded_at: '2026-11-27T00:00:00Z', source: 'fixture', cells: [cell] });
+    expect(scopeGateCalibrationFor('legacy-1536', 'strict')).toBeNull();
+    expect(scopeGateCalibrationFor('legacy-1536', 'strict', { evalRun: false })).toBeNull();
+    expect(scopeGateCalibrationFor('legacy-1536', 'strict', { evalRun: true })).toEqual({ threshold: 0.4, margin: 0.05 });
+    setScopeGateCalibrationForTests({ schema_version: 1, recorded_at: '2026-11-27T00:00:00Z', source: 'live', cells: [cell] });
+    expect(scopeGateCalibrationFor('legacy-1536', 'strict')).toEqual({ threshold: 0.4, margin: 0.05 });
+    expect(scopeGateCalibrationFor('legacy-1536', 'strict', { evalRun: true })).toEqual({ threshold: 0.4, margin: 0.05 });
   });
 
   test('an invalid file logs once and returns null', () => {
