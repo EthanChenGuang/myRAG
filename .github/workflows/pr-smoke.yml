@@ -316,14 +316,14 @@ jobs:
       - name: v2-default smoke tier, report-only (v2 is opt-in; the step records the gate exit and never fails the job)
         run: |
           set +e
-          npm run test-rag -- --run-config eval/config/runs/v2-default.json --out eval/out/smoke-v2
+          npm run test-rag -- --run-config eval/config/runs/v2-default.json --out eval/out/smoke-v2 --gates-mode enforce
           code=$?
           echo "::notice title=v2-default smoke (report-only)::test-rag exit ${code}; see eval/out/smoke-v2/gate.json"
           exit 0
       - name: v2 negative control, report-only (drop_top_candidate must be rejected by the gate)
         run: |
           set +e
-          npm run test-rag -- --run-config eval/config/runs/v2-default.json --degrade drop_top_candidate --out eval/out/smoke-v2-negative
+          npm run test-rag -- --run-config eval/config/runs/v2-default.json --degrade drop_top_candidate --out eval/out/smoke-v2-negative --gates-mode enforce
           code=$?
           if [ "${code}" -eq 0 ]; then
             echo "::warning title=v2 negative control (report-only)::the degraded v2 run was not rejected (exit 0)"
