@@ -17,6 +17,8 @@ export const harness = {
   env: {} as Record<string, string>,
   outcomes: {} as Record<string, RpcOutcome | ((args: Record<string, unknown>) => RpcOutcome)>,
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
+  /** Rows the service-role client's table reads answer with (any filter), by table. */
+  tables: {} as Record<string, unknown[]>,
   logged: [] as string[],
 };
 
@@ -30,6 +32,7 @@ export function resetHarness(): void {
   harness.env = {};
   harness.outcomes = {};
   harness.rpcCalls = [];
+  harness.tables = {};
   harness.logged = [];
   for (const method of ['warn', 'error', 'log', 'info'] as const) {
     vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -78,6 +81,15 @@ function fakeRpcClient() {
           Promise.resolve(outcome).then(onFulfilled, onRejected),
       };
       return request;
+    },
+    from(table: string) {
+      const result = { data: harness.tables[table] ?? [], error: null };
+      const builder: Record<string, unknown> = {
+        then: (onFulfilled: (value: typeof result) => unknown, onRejected?: (reason: unknown) => unknown) =>
+          Promise.resolve(result).then(onFulfilled, onRejected),
+      };
+      for (const method of ['select', 'eq', 'neq', 'in', 'gte', 'lte', 'order', 'limit', 'abortSignal']) builder[method] = () => builder;
+      return builder;
     },
   };
 }
