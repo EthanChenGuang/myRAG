@@ -1074,3 +1074,24 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
   - D-28 revision applied: ingest false refusal 0.241 -> 0.195. Fixture floors refit: prechunked 0.1761, ingest 0.1818.
   - HOLD FROM TRAINS: tests/rag/p52-corpus.test.ts fails one case. en-off-topic-context-002 was designed to score above the floor, and it now scores 0.1742 against the new floor 0.1761.
   - MORNING (owner): the fix needs a golden item edit after seeing results (D-37), so the owner decides. Options: (a) edit the item, (b) re-label its planned band, (c) keep the old floor.
+- 01:32Z MERGED #136 (comet) -> main 72f118ec.
+  - The medical-eval preview deploy (mcp__Vercel__create_deployment) was tried twice. Both times it stopped at an approval prompt that went unanswered (no one was there to answer, nobody refused), so it did not run. MORNING: the owner approves or deploys.
+- 02:03Z MERGED #139 (t39) -> aceb31f6 and #138 (NF-1) -> main 021b640b. Told t40 to merge main and open its PR.
+- 02:03Z PR #137 round 2 FAIL: ts-db 3/12 and 9/12, the remaining authenticated INSERT tests (semantic-cache-invalidation "legacy path", access-schema).
+  - Dispatched session_01X342sjTPt8wpkUvhGPtp6A. It audits the product legacy writers first, then runs the full rag-db suite in the foreground.
+  - Lesson: a keyword grep sweep misses tests; run the full suite.
+- 02:04Z DONE and archived:
+  - 06.2-26 (af5180eb): the scope calibration tool. RAG_SCOPE_GATE is NOT shippable on fixture evidence.
+  - 06.2-29 (6dcb5eab): the model router in the eval route.
+  - quick-61-gaps (004456c2): G-1 plus 7 gaps; migration 0992.
+  - 04.4-17 (241047f3): migration 0938.
+  - All four are queued for train 42.
+- Dispatched:
+  - 04.4-18: session_01X342smqsoBMiHTVcXrg9Vn
+  - 06.2-35: session_01X342sjzXdo4yXEWTo6ibAh
+  - 06.2-38: session_01X342siEirWsv9GZ5QTE2sw
+  - 06.3-23: session_01X342smr3TZtEhZTXGXTjGC
+- HOLD 06.2-30 until the owner decides D-20. 06.2-29 found that the fast tier needs document_search, but with MCP off classifyQuery always returns conversational, so the fast tier is never chosen.
+- MORNING (owner):
+  - D-20 relax?
+  - 6.1 operator: apply 0992 after 0651-0654, schedule prune, rebuild old probe.json files.
