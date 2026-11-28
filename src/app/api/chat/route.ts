@@ -1544,7 +1544,8 @@ export async function POST(req: Request) {
     }
 
     // 03.3 G4: an explicit attributes key the verified tenant does not define answers a structured 400, never an empty retrieval
-    if (retrievalFilters?.attributes) {
+    // (no scope: runRetrieval fails closed on its own)
+    if (retrievalFilters?.attributes && scope) {
       try {
         await checkExplicitAttributeFilter(scope, retrievalFilters.attributes, { signal: req.signal });
       } catch (error) {
