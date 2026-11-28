@@ -951,3 +951,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - ts-tsx in 3 shards at 15 min;
   - eval-corpus shares its fixture.
   - PR #135 CI is running.
+- 00:18Z Owner asked why so many sessions. Census: 18 working children on page 1 (12 RUNNING, 6 idle waiting on suites or final reports: verify 6/6.1, UF-1, 07-37, ci-timeouts, 3.1.1), plus NF-1, the 3.2 verify, the t38/39/40 builders, the walkthrough desk and the owner desk. term-rpc archived (DONE b8ffdff9 -> train 41).
