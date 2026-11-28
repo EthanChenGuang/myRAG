@@ -987,3 +987,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - about 0936: 04.2-40
   - quick-32-batch: claims after 0936
   - 0986-0991 as before
+- 00:44Z UF-1 hotfix DONE fix/uf1-direct-insert 71dbc442d (mig 0991: BEFORE INSERT guard plus dropped INSERT policies; no app write path uses a user session). prod-apply.sql is in .planning/quick/261128-uf1-*. PLAN: after #135 merges, merge main into fix/uf1 and fix/nf1 (for the CI timeout fix), open the hotfix PRs, merge on green, then the owner desk applies prod SQL. Archived.
