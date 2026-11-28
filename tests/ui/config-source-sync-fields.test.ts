@@ -7,6 +7,7 @@ const RECONCILE_FIELDS = [
   { id: 'RAG_SOURCE_RECONCILE_INTERVAL_DAYS', min: '1', step: '1', max: undefined, placeholder: '7', inputmode: 'numeric' },
   { id: 'RAG_SOURCE_RECONCILE_MAX_AGE_DAYS', min: '1', step: '1', max: undefined, placeholder: '7', inputmode: 'numeric' },
   { id: 'RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE', min: '0.05', step: '0.05', max: '1', placeholder: '0.3', inputmode: 'decimal' },
+  { id: 'RAG_SOURCE_PURGE_DAILY_CAP', min: '0', step: '1', max: undefined, placeholder: '0', inputmode: 'numeric' },
 ];
 const KEY_FIELDS = [
   { id: 'NANGO_SHAREPOINT_INTEGRATION_KEY', placeholder: 'sharepoint-online' },
@@ -90,6 +91,17 @@ describe('Phase 6.3 source sync fields in the Config UI (UI-SPEC 6.4, 6.7)', () 
       expect(attr(tag, 'translate'), field.id).toBe('no');
       expect(describedHelp(field.id).length, field.id).toBeGreaterThan(20);
     }
+  });
+
+  it('the daily purge limit follows the share field with its label and help line (D-49)', () => {
+    const settings = between('<!-- rag-source-sync-settings:start -->', '<!-- rag-source-sync-settings:end -->');
+    expect(settings.indexOf('id="RAG_SOURCE_PURGE_DAILY_CAP"')).toBeGreaterThan(settings.indexOf('id="RAG_SOURCE_RECONCILE_MAX_DELETE_SHARE"'));
+    expect(settings).toMatch(/<label\b[^>]*\bfor="RAG_SOURCE_PURGE_DAILY_CAP"[^>]*>\s*<span[^>]*>Daily purge limit per connection<\/span>/);
+    expect(describedHelp('RAG_SOURCE_PURGE_DAILY_CAP')).toBe(
+      'Files the source reports as deleted that one connection in Purge mode may purge per day (UTC). Above it, the rest wait in a paused run for confirmation. 0 turns the limit off.',
+    );
+    const entry = manifest.vars.find((v) => v.name === 'RAG_SOURCE_PURGE_DAILY_CAP');
+    expect(entry).toMatchObject({ status: 'managed', knownGaps: [], default: '0', type: 'number' });
   });
 
   it('the source sync section sits once before the embedding profiles and holds the settings block, a status region and a content host', () => {
