@@ -4,6 +4,7 @@ import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
 import { computeCacheKeyHash } from '@/lib/rag/cache/keys';
 import type { CacheQuery, SemanticCache } from '@/lib/rag/cache/types';
 import type { AnswerGroundedness } from '@/lib/rag/generation/groundedness';
+import { NO_ANSWER_SENTINEL } from '@/lib/rag/generation/sentinel';
 import type { RunRetrievalInput } from '@/lib/rag/types';
 import { chatRequest, installChatPipeline, readSse, retrievalWith } from '../helpers/chat-route-fakes';
 import { hit } from './fusion/helpers';
@@ -353,6 +354,30 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
     expect(startMetadata(second)).toMatchObject({ cache: 'hit', refusal: true });
     const text = events(second).filter((event) => event.type === 'text-delta').map((event) => event.delta).join('');
     expect(text).toBe(memory.stores[0].answer.answer_text);
+  });
+
+  it('relevance rule on: a model-relevance refusal is stored as a refusal (refusal TTL, no sources, no citations)', async () => {
+    const saved = process.env.RAG_CONTEXT_RELEVANCE_RULE;
+    process.env.RAG_CONTEXT_RELEVANCE_RULE = 'true';
+    try {
+      h.real.on = true;
+      h.real.deltas = [NO_ANSWER_SENTINEL.slice(0, 6), NO_ANSWER_SENTINEL.slice(6)];
+      const route = await loadRoute(CACHE_ON);
+      const first = await readSse(await ask(route));
+      expect(h.real.calls).toBe(1);
+      expect(first).not.toContain(NO_ANSWER_SENTINEL);
+      await stored(1);
+      const answer = memory.stores[0].answer;
+      expect(answer).toMatchObject({ is_refusal: true, citations: [], sources: [], source_versions: [] });
+      expect(answer.groundedness).toMatchObject({ status: 'not_checked', reason: 'refusal' });
+
+      const second = await readSse(await ask(route));
+      expect(h.real.calls).toBe(1);
+      expect(startMetadata(second)).toMatchObject({ cache: 'hit', refusal: true });
+    } finally {
+      if (saved === undefined) delete process.env.RAG_CONTEXT_RELEVANCE_RULE;
+      else process.env.RAG_CONTEXT_RELEVANCE_RULE = saved;
+    }
   });
 
   it('a ghost- chat checks but never stores', async () => {

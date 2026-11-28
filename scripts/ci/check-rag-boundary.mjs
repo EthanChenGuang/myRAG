@@ -433,6 +433,13 @@ const everywhere = () => true;
 const PURGE_CLIENT = 'src/lib/rag/ingest/purge.ts';
 // rag_purge_retrieval_log is the retrieval-log retention job (src/lib/rag/feedback-loop/purge.ts), not a lineage purge.
 const PURGE_RPC_RE = /\.rpc\s*\(\s*(['"`])rag_purge_(?!retrieval_log\1)/g;
+const EVAL_HARNESS_DIR = 'eval/harness';
+// A relative spec is resolved against the importing file; any other spec names the directory as written.
+function reachesEvalHarness(rel, spec) {
+  const target = spec.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec)) : spec.replace(/^\/+/, '');
+  if (spec.startsWith('.')) return target === EVAL_HARNESS_DIR || target.startsWith(`${EVAL_HARNESS_DIR}/`);
+  return new RegExp(`(?:^|/)${EVAL_HARNESS_DIR}(?:/|$)`).test(target);
+}
 
 export const RULES = [
   {
@@ -693,6 +700,12 @@ export const RULES = [
     description: 'query-LLM client imported outside src/lib/rag/query/ and deps.ts, or an ai generate/stream call in src/lib/rag/query/ outside llm.ts (D-13)',
     appliesTo: everywhere,
     find: findQueryLlmCall,
+  },
+  {
+    id: 'eval-harness-import',
+    description: 'src/ must not import eval/harness (the eval harness and its fakes stay out of the app bundle)',
+    appliesTo: inSrc,
+    find: (text, rel) => importMatches(text, ({ spec }) => (reachesEvalHarness(rel, spec) ? spec : null)),
   },
   {
     id: 'zod-v4',
