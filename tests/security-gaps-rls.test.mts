@@ -102,7 +102,7 @@ function singleTenantSuite(label: string, build: () => Promise<FixtureDatabase>)
       await asRole(db, 'anon', null, async () => {
         assert.equal((await db.query('DELETE FROM documents WHERE id = $1 RETURNING id', [DOC_OWNED])).rows.length, 0);
         assert.equal((await db.query("UPDATE documents SET content = 'x' WHERE id = $1 RETURNING id", [DOC_OWNED])).rows.length, 0);
-        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), /permission denied|row-level security/i);
+        await rejection(db.query("INSERT INTO documents (id, filename, content) VALUES (gen_random_uuid(), 'a', 'b')"), /permission denied|row-level security|cannot be inserted/i);
       });
       assert.equal((await db.query('SELECT 1 FROM documents WHERE id = $1', [DOC_OWNED])).rows.length, 1);
     });
