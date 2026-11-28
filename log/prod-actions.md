@@ -102,3 +102,12 @@
   - Cleanup: all four entries deleted (two by the script, two by the owner by hand, with the owner's approval). Workspace layer back to 0 entries.
   - Audit/history rows for these writes remain, by design.
 - Languages saved from the Config UI: RAG_SUPPORTED_LANGUAGES=zh,en,it, RAG_PRIMARY_LANGUAGE=en. This went to the owner's local .env.local. The save may also record a config-change row on EVAL. No rebuild was started ("Saving rebuilds nothing").
+
+## 2026-11-28 ~00:10 UTC: Config UI walkthrough item 3 (04.2-26), EVAL fsgaeysipkukqoocgzbx only
+- EVAL writes by tools/walkthrough/walkthrough-sources.mjs, all under the test admin's own u: tenant. 4 runs (wtngra, wtvajj, wtxsnz and the first, failed one that uploaded nothing). Each run:
+  - 5 placeholder .txt uploads via the unified pipeline (documents and versions rows, chunks, rag-originals storage objects, duplicate-cluster bands);
+  - one `npm run rag:dup-clusters -- --tenant u:<id>` (hashed 0, clustered 0);
+  - incognito chats (not persisted);
+  - every uploaded document deleted through DELETE /api/documents/<id>, all versions included (200, plus an expected 404 for the second id of the same lineage).
+- Result: version tags PASS. "Also in" not verifiable in the UI: empty model reply bug, reported to the orchestrator.
+- Local only: .env.local switches set by the script's setup (backup .env.local.walkthrough-backup), restored with `node walkthrough-sources.mjs restore`.
