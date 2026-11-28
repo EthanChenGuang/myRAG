@@ -95,7 +95,10 @@ async function seedDocument(
   });
 }
 
-/** The reference: chunk count, total length and df per asked term over the tenant's current chunks of the effective profile and language. */
+/**
+ * The reference: chunk count, total length and df per asked term over the tenant's current chunks of the effective profile and language.
+ * Statistics are keyed by (chunking profile, language), so every doc type served by the same profile shares one bucket.
+ */
 function recompute(seeded: Seeded[], tenant: string, docType: string, profile: string, language: string, terms: string[]) {
   const members = seeded.filter((c) => c.tenant === tenant && c.current && c.tokens.length > 0 && c.profile === profile && c.language === language);
   return {
@@ -215,6 +218,13 @@ for (const mode of MODES) {
       assert.equal(rows[0]?.n, 1);
     });
 
+    test('a doc type served by the same profile reads the same bucket (statistics are per profile and language)', async () => {
+      const rows = await readStats(db, tenantA.key, ['w1', 'w2'], ['general', 'invoice_receipt', 'product_technical'], ['en', 'en', 'en']);
+      const byType = Object.fromEntries(rows.map((r) => [r.doc_type, { p: r.chunking_profile_id, n: r.chunk_count, len: r.total_len, dfs: r.dfs }]));
+      assert.deepEqual(byType.invoice_receipt, byType.general);
+      assert.notDeepEqual(byType.product_technical, byType.general);
+    });
+
     test('counts per (doc type, language) equal a full recompute; terms come back in the asked order, an unknown term has df 0', async () => {
       const terms = ['w3', 'w1', 'w0', 'w149', 'w99999'];
       const pairs: Array<[string, string]> = [
@@ -240,9 +250,9 @@ for (const mode of MODES) {
     });
 
     test('a pair without statistics answers chunk_count 0; duplicate terms and pairs are answered once; rejected term forms are left out', async () => {
-      const rows = await readStats(db, tenantA.key, ['w1', 'w1', "w'1", 'w 1', ''], ['general', 'general', 'invoice_receipt'], ['en', 'en', 'en']);
+      const rows = await readStats(db, tenantA.key, ['w1', 'w1', "w'1", 'w 1', ''], ['general', 'general', 'general'], ['en', 'en', 'zh']);
       assert.equal(rows.length, 2);
-      const missing = rows.find((r) => r.doc_type === 'invoice_receipt');
+      const missing = rows.find((r) => r.language === 'zh');
       assert.deepEqual({ chunk_count: missing?.chunk_count, total_len: missing?.total_len, dfs: missing?.dfs }, { chunk_count: 0, total_len: 0, dfs: [0] });
       for (const row of rows) assert.deepEqual(row.terms, ['w1']);
     });
