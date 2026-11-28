@@ -34,6 +34,7 @@ import { effectiveRetrievalParams } from '../retrieval-params';
 import { effectiveTuningParams } from '../tuning-params';
 import { guardNearMisses } from '../../retrieval/identifiers';
 import { extractChunkIdentifiers } from '../../identifiers/extract';
+import { EXACT_ID_LIMIT, mergeExactCandidates, type ExactIdRow } from '../../retrieval/exact-id';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -123,6 +124,8 @@ interface RefusalOutcome {
   gate: RefusalRecord;
   /** legacy_rule only: how many fused hits the legacy pool rule admitted. */
   poolSize?: number;
+  /** legacy_rule only: how many of them came from the exact_id list. */
+  exactMembers?: number;
 }
 
 function denseLegIndex(variants: QueryVariant[] | undefined): number {
@@ -130,12 +133,38 @@ function denseLegIndex(variants: QueryVariant[] | undefined): number {
   return original >= 0 ? original : 0;
 }
 
+const EXACT_ID_LEG = 'exact_id';
+
+/** The rows of the exact_id list in lookup order, as many as the legacy lookup asks for (its default limit). */
+function legacyExactRows(hits: FusedHit[]): ExactIdRow[] {
+  const seen = new Set<string>();
+  const rows: ExactIdRow[] = [];
+  const listed = hits
+    .filter((row) => row.ranks[EXACT_ID_LEG] !== undefined)
+    .sort((a, b) => (a.ranks[EXACT_ID_LEG] as number) - (b.ranks[EXACT_ID_LEG] as number));
+  for (const row of listed) {
+    if (seen.has(row.hit.chunkId)) continue;
+    seen.add(row.hit.chunkId);
+    rows.push({ chunk_id: row.hit.chunkId, document_id: row.hit.documentId, content: row.hit.content, metadata: row.hit.metadata, matched_field: '' });
+    if (rows.length >= EXACT_ID_LIMIT) break;
+  }
+  return rows;
+}
+
+interface LegacyPoolMember {
+  row: FusedHit;
+  /** D-28 revision: set for a row of the exact_id list, with the similarity legacy's merge gives it. */
+  exactSimilarity?: number;
+}
+
 /**
- * The fused hits legacy would have judged: rows the original query's dense leg returned (never a lexical-only or a
- * synthetic-similarity row), replayed through the legacy search rule of the entry point (chat and embed: thresholds,
- * match counts, fallback, eval override; voice: the legacy voice search).
+ * The fused hits legacy would have judged: rows the original query's dense leg returned (never a lexical-only row), replayed through
+ * the legacy search rule of the entry point (chat and embed: thresholds, match counts, fallback, eval override; voice: the legacy voice
+ * search). D-28 revision: for chat and embed the rows of the exact_id list join that pool through mergeExactCandidates, as the legacy
+ * pipeline merges its exact-identifier rows, and carry the similarity it gives them; a synthetic similarity from any other list admits
+ * nothing, and the legacy voice search has no exact lookup.
  */
-function legacyPoolMembers(ctx: RankStagesInput, hits: FusedHit[]): FusedHit[] {
+function legacyPoolMembers(ctx: RankStagesInput, hits: FusedHit[]): LegacyPoolMember[] {
   const leg = `dense:${denseLegIndex(ctx.variants)}`;
   const byChunk = new Map<string, FusedHit>();
   const rows: RawChunk[] = [];
@@ -156,18 +185,37 @@ function legacyPoolMembers(ctx: RankStagesInput, hits: FusedHit[]): FusedHit[] {
   const evalProfileId = ctx.profile === 'eval' ? options?.embeddingProfile : undefined;
   const queryContext = ctx.queryContext ?? defaultQueryContext();
   const thresholds = searchThresholdsFor(ctx.embedding.profile);
+  const maxResults = resolveFinalResultCount(options?.maxResults, env.RAG_FINAL_RESULT_COUNT);
   const rule: LegacyPoolRule =
     ctx.profile === 'voice'
       ? legacyVoicePoolRule(thresholds, validResultCount(options?.maxResults) ?? LEGACY_VOICE_DEFAULT_MATCH_COUNT)
       : legacyPoolRule({
           queryContext,
           thresholds,
-          maxResults: resolveFinalResultCount(options?.maxResults, env.RAG_FINAL_RESULT_COUNT),
+          maxResults,
           fallbackToLowerThreshold: options?.fallbackToLowerThreshold ?? true,
           profileRequireActive: !evalProfileId,
         });
-  const pool = new Set(legacyPoolFromRows(rule, queryContext, rows).map((candidate) => candidate.chunk_id));
-  return hits.filter((row) => pool.has(row.hit.chunkId) && byChunk.get(row.hit.chunkId) === row);
+  const replayed = legacyPoolFromRows(rule, queryContext, rows);
+  const exactRows = ctx.profile === 'voice' ? [] : legacyExactRows(hits);
+  if (exactRows.length === 0) {
+    const pool = new Set(replayed.map((candidate) => candidate.chunk_id));
+    return hits.filter((row) => pool.has(row.hit.chunkId) && byChunk.get(row.hit.chunkId) === row).map((row) => ({ row }));
+  }
+  const merged = mergeExactCandidates(replayed, exactRows, maxResults);
+  const exactIds = new Set(exactRows.map((row) => row.chunk_id));
+  const members: LegacyPoolMember[] = [];
+  const taken = new Set<string>();
+  for (const candidate of merged) {
+    const exact = exactIds.has(candidate.chunk_id);
+    const row = exact
+      ? hits.find((entry) => entry.hit.chunkId === candidate.chunk_id && entry.ranks[EXACT_ID_LEG] !== undefined)
+      : byChunk.get(candidate.chunk_id);
+    if (!row || taken.has(candidate.chunk_id)) continue;
+    taken.add(candidate.chunk_id);
+    members.push(exact ? { row, exactSimilarity: candidate.similarity } : { row });
+  }
+  return members;
 }
 
 function bestDenseSimilarity(hits: FusedHit[]): number | null {
@@ -248,14 +296,15 @@ function applyRefusal(
         : legacyRuleFloor({
             floors: LEGACY_KEEP_FLOORS,
             terms: legacyQueryTerms(query),
-            candidates: members.map((row) => ({
-              similarity: floorSimilarity(row, standalone),
+            candidates: members.map(({ row, exactSimilarity }) => ({
+              similarity: exactSimilarity ?? floorSimilarity(row, standalone),
               hasImage: hitHasImage(row.hit),
               filename: row.hit.document.filename,
               text: `${row.hit.content} ${row.hit.document.contentPreview}`,
             })),
           });
-    return { record, gate, poolSize: members.length };
+    const exactMembers = members.filter((member) => member.exactSimilarity !== undefined).length;
+    return { record, gate, poolSize: members.length, ...(exactMembers > 0 ? { exactMembers } : {}) };
   }
 
   const calibration =
@@ -494,14 +543,14 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
         if (record.decision === 'answer') return { answered: 1, ...extra };
         return { not_applied: 1, ...extra };
       },
-      detail: ({ record, gate, poolSize }) => {
+      detail: ({ record, gate, poolSize, exactMembers }) => {
         const base = record.basis !== 'none' ? record.basis : record.reason;
         const described =
           record === gate || config.v2.refusalFloor === 'similarity'
             ? base
             : poolSize === undefined
               ? `${base} floor=${config.v2.refusalFloor}`
-              : `${base} floor=${config.v2.refusalFloor} pool=${poolSize}`;
+              : `${base} floor=${config.v2.refusalFloor} pool=${poolSize}${exactMembers ? ` exact=${exactMembers}` : ''}`;
         return degrade ? `${described} degrade=drop_top_candidate` : described;
       },
     },
