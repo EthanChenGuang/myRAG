@@ -192,3 +192,29 @@ export async function runSourceReconcile(options: SourceReconcileOptions): Promi
     logger.info(SOURCE_RECONCILE, 'Run finished', { ...result });
     return result;
 }
+
+export type ReconcileState = 'in_step' | 'overdue' | 'paused' | 'failed' | 'incomplete' | 'not_run';
+
+export interface ReconcileRunSummary {
+    origin: string;
+    status: string;
+    error_code?: string | null;
+    created_at?: string | null;
+    expires_at?: string | null;
+}
+
+export interface ConnectionReconcileState {
+    states: ReconcileState[];
+    daysWithoutReconcile: number | null;
+    reason: string | null;
+}
+
+export function connectionReconcileState(
+    _row: ReconcileConnectionRow,
+    _newestRun: ReconcileRunSummary | null,
+    _hasScheduledAttempt: boolean,
+    _now: number,
+    _limits: { maxAgeDays: number }
+): ConnectionReconcileState {
+    return { states: [], daysWithoutReconcile: null, reason: null };
+}
