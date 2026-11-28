@@ -405,3 +405,61 @@ describe('AGENTS.md reflects the Phase 7 RAG pipeline guide', () => {
     expect(section17).toContain('README_RAG_PIPELINE.md');
   });
 });
+
+describe('AGENTS.md reflects the Phase 7 revision-4 workflows', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const pipeline = AGENTS.slice(AGENTS.indexOf('### RAG pipeline'), AGENTS.indexOf('### Image RAG'));
+  const phase44 = AGENTS.slice(AGENTS.indexOf('### True BM25 lexical scoring (Phase 4.4)'), AGENTS.indexOf('### Terminology dictionary (Phase 4.1.1)'));
+  const section16 = AGENTS.slice(AGENTS.indexOf('## 16. Handy Scripts'), AGENTS.indexOf('## 17. Supplementary Documentation'));
+
+  test.each([
+    '`RAG_ROLLOUTS=false`',
+    '`RAG_LANG_CONFIDENCE=mapped`',
+    '`npm run rag:rollout',
+    '`npm run rag:languages',
+    '`npm run rag:red-team',
+    '`rag_vector_sync_purge_status`',
+    'disabled targets are still purged',
+    '`stale_index_drop`',
+    '`access_groups`',
+    '`language_drop`',
+    '`/api/rag/admin/language-quality`',
+    '`config/rag/price-table.json`',
+  ])('§6 mentions %s', (fragment) => {
+    expect(pipeline).toContain(fragment);
+  });
+
+  test('each new switch states that off equals today', () => {
+    const rollouts = pipeline.split('\n').find((line) => line.includes('`RAG_ROLLOUTS=false`'));
+    const confidence = pipeline.split('\n').find((line) => line.includes('`RAG_LANG_CONFIDENCE=mapped`'));
+    expect(rollouts).toMatch(/off (equals|reproduces) today/i);
+    expect(confidence).toMatch(/default.*today/i);
+  });
+
+  test('the red-team corpus domain-neutrality rule is stated once', () => {
+    expect(section6.match(/red-team corpus[^\n]*domain example strings?/gi) ?? []).toHaveLength(1);
+  });
+
+  test('the Phase 4.4 bullets carry the external-backend BM25 parameters (LEX-05)', () => {
+    for (const fragment of ['Weaviate and Qdrant', '`RAG_LEXICAL_BM25_K1`', 'records its pair', 'rebuild-lexical', '--confirm', 'only reports']) {
+      expect(phase44, fragment).toContain(fragment);
+    }
+  });
+
+  test.each(['`npm run rag:rollout`', '`npm run rag:languages`', '`npm run rag:red-team`', 'calibrate-language-confidence.mts'])(
+    '§16 lists %s',
+    (command) => {
+      expect(section16).toContain(command);
+    },
+  );
+
+  test('§16 vector-sync row lists rebuild-lexical', () => {
+    expect(section16.split('\n').find((line) => line.startsWith('| `npm run rag:vector-sync`'))).toContain('rebuild-lexical');
+  });
+
+  test('the documented commands exist in package.json', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8')) as { scripts: Record<string, string> };
+    for (const name of ['rag:rollout', 'rag:languages', 'rag:red-team', 'rag:vector-sync']) expect(pkg.scripts[name], name).toBeDefined();
+    expect(fs.existsSync(path.resolve(__dirname, '../../eval/harness/calibrate-language-confidence.mts'))).toBe(true);
+  });
+});
