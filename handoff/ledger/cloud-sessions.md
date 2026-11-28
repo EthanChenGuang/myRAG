@@ -1190,3 +1190,4 @@ Loop trigger trig_018dnQZhAw1nceEeLLn4qEXT fires 01:09Z.
 13 RAG_SOURCE_PURGE_DAILY_CAP=200 when purge mode is turned on.
 14 Drain scheduler pg_cron + pg_net; backend-canary becomes a required check on main (repo setting, owner); vendor/region choice still open.
 Signatures were NOT covered by this; they are asked for separately.
+- 07:10Z Dispatched from owner decisions: quick-5221-mustkeep (1a) session_01X342smNRnY8Ga7xMx4SPuB; quick-41-p52-band (2b) session_01X342shsrjz7JjTcQukpzjW; planner exec/plan-d20-and-44c (5a + plan C; it also records 3A, 4b, 6a, 7a, 8, 9, 10, 11b, 13, 14) session_01X342smz7Q1AuTBMihDowtN. Added 12a and 13 to quick-63-gaps.
