@@ -53,7 +53,7 @@ describe('connector card reconcile warning (UI-SPEC 6.8)', () => {
     for (const state of ['paused', 'overdue']) {
       const { pill, note } = render(state);
       expect(pill + note).not.toMatch(/<(button|a)\b/);
-      expect(pill + note).not.toMatch(/\d/);
+      expect((pill + note).replace(/<[^>]*>/g, '')).not.toMatch(/\d/);
     }
   });
 

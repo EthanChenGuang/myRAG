@@ -15,6 +15,7 @@ import {
   Folder,
   FolderOpen,
   FileText,
+  PauseCircle,
 } from 'lucide-react';
 import { useNango } from '@/lib/hooks/use-nango';
 import { useConnectorConfig } from '@/lib/hooks/use-connector-config';
@@ -65,18 +66,39 @@ export function connectorGridProviders(): SupportedProvider[] {
 
 interface NangoConnectionWithValidity extends NangoConnectionRecord {
   is_valid: boolean;
+  reconcile_state?: 'ok' | 'overdue' | 'paused';
 }
 
-export function ConnectorReconcilePill(_props: { state: unknown; t: (key: TranslationKeys) => string }) {
-  return null;
+/** D-26: read-only reconcile warning on a connected card; any value but paused or overdue shows nothing. */
+export function connectorReconcileKind(state: unknown): 'paused' | 'overdue' | null {
+  return state === 'paused' || state === 'overdue' ? state : null;
 }
 
-export function ConnectorReconcileNote(_props: { state: unknown; t: (key: TranslationKeys) => string }) {
-  return null;
+interface ConnectorReconcileProps {
+  state: unknown;
+  t: (key: TranslationKeys) => string;
 }
 
-export function connectorReconcileKind(_state: unknown): 'paused' | 'overdue' | null {
-  return null;
+export function ConnectorReconcilePill({ state, t }: ConnectorReconcileProps) {
+  const kind = connectorReconcileKind(state);
+  if (!kind) return null;
+  const Icon = kind === 'paused' ? PauseCircle : AlertTriangle;
+  return (
+    <span className="inline-flex items-center h-5 px-2 py-0 text-xs rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300">
+      <Icon className="w-3 h-3 mr-1" aria-hidden="true" />
+      {t(kind === 'paused' ? 'connectorReconcilePausedBadge' : 'connectorReconcileOverdueBadge')}
+    </span>
+  );
+}
+
+export function ConnectorReconcileNote({ state, t }: ConnectorReconcileProps) {
+  const kind = connectorReconcileKind(state);
+  if (!kind) return null;
+  return (
+    <p className="text-xs text-amber-700 dark:text-amber-300 mb-4">
+      {t(kind === 'paused' ? 'connectorReconcilePausedNote' : 'connectorReconcileOverdueNote')}
+    </p>
+  );
 }
 
 interface ConnectorGridProps {
@@ -467,6 +489,7 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
                           {t('connectorStatusConnected')}
                         </span>
                       )}
+                      {isConnected && <ConnectorReconcilePill state={connection.reconcile_state} t={t} />}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                       {config.description}
@@ -613,6 +636,8 @@ export function ConnectorGrid({ onConnectionChange }: ConnectorGridProps) {
                     {t('connectorLastSyncedLabel')} {new Date(connection.last_sync_at).toLocaleDateString()}
                   </p>
                 )}
+
+                {isConnected && <ConnectorReconcileNote state={connection.reconcile_state} t={t} />}
 
                 <div className="flex gap-2 mt-auto">
                   {isConnected ? (
